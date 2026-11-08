@@ -180,13 +180,24 @@ import WorkbenchCore
         tasks.entries[at].summary.approval = .never
         let model = InboxModel.derive(listing: ThreadListing(rows: [thread("a", .needsYou), thread("c", .working)]), tasks: tasks)
         let names = tasks.entries.map(\.id)
+        let asking = tasks.entries.map(RailRow.task).filter { $0.mark == .needsYou }.map(\.key)
         let order = model.navigation(scheduled: names)
         let drawn = model.listed.map { ($0.isAutomation ? "k:" : "t:") + $0.key }
         #expect(Array(order.prefix(drawn.count)) == drawn, "the inbox's rows as drawn, automations among them")
-        #expect(Array(order.suffix(names.count)) == names.map { "s:" + $0 }, "then Scheduled, each its own stop")
+        let others = names.filter { $0 != "bump-contract-details" && !asking.contains($0) }.map { "s:" + $0 }
+        #expect(Array(order.dropFirst(drawn.count)) == others, "then the Scheduled tasks the inbox does not show")
+        #expect(Set(order).count == order.count && !order.contains("s:bump-contract-details"), "a task is one stop")
         let first = try #require(drawn.first)
         let below = InboxModel.neighbour(of: first, in: order, up: false)
         #expect(first == "t:a" && below == drawn[1], "down from A is the next row")
+        // Pressing Down from where each press lands visits every stop once and then stops: it cannot loop.
+        var visited = [first]
+        while let step = InboxModel.neighbour(of: visited.last, in: order, up: false), visited.count <= order.count {
+            let key = String(step.dropFirst(2))
+            let isTask = !step.hasPrefix("t:")
+            visited.append(model.navigationID(thread: isTask ? nil : key, task: isTask ? key : nil) ?? step)
+        }
+        #expect(visited == order, "each press lands on the next stop, through to the last")
         let auto = try #require(drawn.first { $0.hasPrefix("k:") })
         #expect(InboxModel.neighbour(of: auto, in: order, up: true) != nil, "an automation row can be stepped from")
         // The task's page, reached from either row, is the stop in the inbox when there is one.

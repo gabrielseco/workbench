@@ -110,9 +110,11 @@ struct InboxModel: Equatable {
     }
 
     /// What the arrow keys walk, in the order it is drawn: the inbox's rows (an automation among them is a task), then the Scheduled
-    /// tasks. A task is in two places, so its two rows have two ids and each is a stop of its own.
+    /// tasks the inbox does not already show. A task is one stop wherever it is drawn, so a press never lands where it started.
     func navigation(scheduled: [String]) -> [String] {
-        listed.map { ($0.isAutomation ? "k:" : "t:") + $0.key } + scheduled.map { "s:" + $0.self }
+        let inInbox = Set(listed.filter(\.isAutomation).map(\.key))
+        let drawn = listed.map { ($0.isAutomation ? "k:" : "t:") + $0.key }
+        return drawn + scheduled.filter { !inInbox.contains($0) }.map { "s:" + $0 }
     }
 
     /// The stop the window's screen is on: the thread's, or the task's (at its row in the inbox when it has one, else in Scheduled).
