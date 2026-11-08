@@ -15,6 +15,9 @@ struct LaunchOptions: Equatable {
     /// `WORKBENCH_APP_OPEN` set to a modal's name: it is open once the project has loaded, so `scripts/verify-app.sh` can shoot the ones
     /// a button does not reach (they open from a menu, or from a round that needs Codex). Unset or an unknown name opens nothing.
     var opens: LaunchModal?
+    /// `WORKBENCH_APP_RAIL`: the projects of the rail, in order, as paths joined by `:`, for a fixture launch (`scripts/verify-app.sh` makes
+    /// several projects and one that is gone). Unset: the rail is the open project's alone.
+    var rail: [String] = []
 
     enum Appearance: Equatable {
         case light, dark
@@ -34,18 +37,21 @@ struct LaunchOptions: Equatable {
         let skips = environment["WORKBENCH_SKIP_LOGIN_PATH"].map { !$0.isEmpty } ?? false
         let appearance = Appearance(environment["WORKBENCH_APPEARANCE"])
         let opens = environment["WORKBENCH_APP_OPEN"].flatMap(LaunchModal.init(rawValue:))
+        let rail = (environment["WORKBENCH_APP_RAIL"] ?? "").split(separator: ":").map(String.init)
         guard let path = environment["WORKBENCH_APP_PROJECT"], !path.isEmpty else {
             return LaunchOptions(project: nil, skipsLoginPath: skips, appearance: appearance, opens: opens)
         }
         return LaunchOptions(
-            project: URL(fileURLWithPath: path), skipsLoginPath: skips, appearance: appearance, opens: opens)
+            project: URL(fileURLWithPath: path), skipsLoginPath: skips, appearance: appearance, opens: opens, rail: rail)
     }
 
     /// The store for these options: the real preferences normally, a throwaway set when a project was named.
     @MainActor func makeStore(preferences: Preferences, notifier: Notifier = NullNotifier()) -> ProjectStore {
         // A fixture launch (a project named) posts nothing and asks for no permission.
         if project == nil { return ProjectStore(preferences: preferences, notifier: notifier) }
-        return ProjectStore(preferences: MemoryPreferences())
+        let throwaway = MemoryPreferences()
+        throwaway.railProjects = rail.isEmpty ? nil : rail
+        return ProjectStore(preferences: throwaway)
     }
 
     /// What the window does when it appears: open the named project, else restore the remembered one. The `PATH` comes first, so
