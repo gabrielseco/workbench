@@ -30,12 +30,32 @@ jobs:
         run: scripts/check-ui-tokens.sh
       - name: The UI-tokens check refuses what it must
         run: scripts/test-ui-tokens.sh
-      - name: SwiftLint
-        # Pinned to the version developers run locally; the static Linux binary needs no Swift toolchain.
+      - name: SwiftLint binary (cached)
+        # Pinned to the version developers run locally; the static Linux binary needs no Swift toolchain. It is restored from the cache,
+        # so a run does not depend on GitHub's release host being up (a 504 there failed the job twice). A new version is a new key.
+        id: swiftlint
+        uses: actions/cache@v4
+        with:
+          path: ~/swiftlint-0.65.1
+          key: swiftlint-0.65.1-linux-amd64
+      - name: Download SwiftLint (only when it is not cached)
+        if: steps.swiftlint.outputs.cache-hit != 'true'
+        # A failure here is not the job's: the next step falls back to the same version as a container image, from another host.
+        continue-on-error: true
         run: |
-          curl -fsSL -o swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip
-          unzip -q swiftlint.zip -d "$RUNNER_TEMP/swiftlint"
-          "$RUNNER_TEMP/swiftlint/swiftlint" lint --quiet
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o swiftlint.zip \
+            https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip
+          unzip -q swiftlint.zip -d ~/swiftlint-0.65.1
+      - name: SwiftLint
+        run: |
+          if [ -x ~/swiftlint-0.65.1/swiftlint ]; then
+            ~/swiftlint-0.65.1/swiftlint lint --quiet
+          else
+            echo "No SwiftLint binary (the release host did not answer): running the 0.65.1 image from ghcr.io instead"
+            # Not --quiet: SwiftLint's own last line ("Done linting! Found 0 violations ... in N files") is what shows it read the repository.
+            docker run --rm -v "$PWD:/work" -w /work ghcr.io/realm/swiftlint:0.65.1 swiftlint lint 2>&1 | tee swiftlint.log | tail -n 3
+            test "${PIPESTATUS[0]}" -eq 0
+          fi
       - name: Timing script check
         run: scripts/test-timings-check.sh
       - name: App bundle script refuses off macOS
