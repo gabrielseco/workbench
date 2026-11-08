@@ -15,40 +15,18 @@ struct PreviewRail: View {
         let model = RailModel.derive(tasks: snapshot)
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xxs) {
-                inboxHeader
-                if store.threads.syncing {
-                    BusyLine("Syncing with GitHub…").padding(.horizontal, Space.s).padding(.vertical, Space.xs)
-                }
-                if inbox.listed.isEmpty && inbox.composing == nil && inbox.finishedCount == 0 {
-                    EmptyNote(store.project == nil ? "Choose a project to see its threads." : "No threads yet.", size: .small)
+                if store.allProjects {
+                    allProjectsContent
                 } else {
-                    InboxView(store: store, model: inbox)
+                    projectContent(inbox: inbox, model: model)
                 }
-                header(model.scheduledHeader).padding(.top, Space.m)
-                if let note = model.scheduledNote {
-                    Text(note).role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
-                    if model.tasksRead {
-                        // No row to choose: this is the way to the Tasks page, which says where tasks are made and what the timer is doing.
-                        Button("Open the Tasks page") { store.showTasks() }
-                            .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s)
-                            .accessibilityLabel("Open the Tasks page").help("Where tasks are made, and what the timer is doing")
-                    }
-                }
-                let shownTask = shownTaskName
-                ForEach(model.tasks) { row in
-                    RailRowView(row: row, selected: row.key == shownTask) { store.selectTask(row.key) }
-                }
-                // The one way in from the rail, besides File ▸ New Task… (⇧⌘N): the `+` above is for threads, so there is one of it.
-                Button("New task…") { store.beginNewTask() }
-                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                    .disabled(store.project == nil).accessibilityLabel("New task").help("Make a scheduled task (⇧⌘N)")
             }
             .padding(.horizontal, Space.m).padding(.vertical, Space.m)
             // One focus stop for the whole rail, so the arrows walk the threads and on into the tasks instead of stopping at the section edge.
             .focusable()
             .focusEffectDisabled()
             .onMoveCommand { direction in
-                guard direction == .up || direction == .down else { return }
+                guard direction == .up || direction == .down, !store.allProjects else { return }
                 move(up: direction == .up, inbox: inbox, model: model)
             }
         }
@@ -88,6 +66,48 @@ struct PreviewRail: View {
     private var shownTaskName: String? {
         guard store.mode == .tasks, !store.newThread, let snapshot = store.tasks.snapshot(for: store.project) else { return nil }
         return store.tasks.selected(in: snapshot)?.id
+    }
+
+    /// The open project's own inbox, then its Scheduled tasks.
+    @ViewBuilder private func projectContent(inbox: InboxModel, model: RailModel) -> some View {
+        inboxHeader
+        if store.threads.syncing {
+            BusyLine("Syncing with GitHub…").padding(.horizontal, Space.s).padding(.vertical, Space.xs)
+        }
+        if inbox.listed.isEmpty && inbox.composing == nil && inbox.finishedCount == 0 {
+            EmptyNote(store.project == nil ? "Choose a project to see its threads." : "No threads yet.", size: .small)
+        } else {
+            InboxView(store: store, model: inbox)
+        }
+        header(model.scheduledHeader).padding(.top, Space.m)
+        if let note = model.scheduledNote {
+            Text(note).role(.caption).padding(.horizontal, Space.s).padding(.vertical, Space.xs)
+            if model.tasksRead {
+                // No row to choose: this is the way to the Tasks page, which says where tasks are made and what the timer is doing.
+                Button("Open the Tasks page") { store.showTasks() }
+                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s)
+                    .accessibilityLabel("Open the Tasks page").help("Where tasks are made, and what the timer is doing")
+            }
+        }
+        let shownTask = shownTaskName
+        ForEach(model.tasks) { row in
+            RailRowView(row: row, selected: row.key == shownTask) { store.selectTask(row.key) }
+        }
+        // The one way in from the rail, besides File ▸ New Task… (⇧⌘N): the `+` above is for threads, so there is one of it.
+        Button("New task…") { store.beginNewTask() }
+            .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
+            .disabled(store.project == nil).accessibilityLabel("New task").help("Make a scheduled task (⇧⌘N)")
+    }
+
+    /// The list the top tile shows: every project's inbox, under a header that says whose it is.
+    @ViewBuilder private var allProjectsContent: some View {
+        let model = store.allInboxModel()
+        header("INBOX · ALL PROJECTS")
+        if model.isEmpty {
+            EmptyNote("Nothing in any project yet.", size: .small)
+        } else {
+            AllInboxView(store: store, model: model)
+        }
     }
 
     /// `INBOX · PROJECT` with the way to a new goal and to the project's agents (the run role's name is its tooltip).

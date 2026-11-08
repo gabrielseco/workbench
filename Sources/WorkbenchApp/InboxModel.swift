@@ -12,6 +12,8 @@ struct InboxRow: Equatable, Identifiable {
     var mark: ThreadMark
     var line: String
     var spend: String?
+    /// Over, as the Done section means it; an automation never is.
+    var finished = false
 
     var id: String { "\(kind.rawValue)-\(key)" }
     var isAutomation: Bool { kind == .automation }
@@ -19,7 +21,8 @@ struct InboxRow: Equatable, Identifiable {
     var accessibility: String { "\(title), \(mark.word), \(line)" + (isAutomation ? ", automation" : "") }
 
     init(thread row: ThreadRow) {
-        (kind, key, title, mark, line, spend) = (.thread, row.id, row.title, row.mark, row.line, row.spend)
+        (kind, key, title, mark, line) = (.thread, row.id, row.title, row.mark, row.line)
+        (spend, finished) = (row.spend, row.finished)
     }
 
     init(automation row: RailRow) {
@@ -41,9 +44,13 @@ enum InboxSection: String, CaseIterable, Equatable {
 
     /// The section a thread's row belongs to, and only one: a thread that asks for something (or is broken) needs you; one that is over is
     /// done; the rest, working or drafting or with a pull request open, waits.
-    static func of(_ row: ThreadRow) -> InboxSection {
-        if row.mark == .needsYou || row.mark == .broken { return .needsYou }
-        return row.finished ? .done : .waiting
+    static func of(_ row: ThreadRow) -> InboxSection { of(mark: row.mark, finished: row.finished) }
+
+    static func of(_ row: InboxRow) -> InboxSection { of(mark: row.mark, finished: row.finished) }
+
+    private static func of(mark: ThreadMark, finished: Bool) -> InboxSection {
+        if mark == .needsYou || mark == .broken { return .needsYou }
+        return finished ? .done : .waiting
     }
 }
 
@@ -87,11 +94,23 @@ struct InboxModel: Equatable {
     /// task's when a task's run log names it, so threads from before this existed qualify too. One that is working, needs you or is broken
     /// stays where it is seen, and so does the one on screen. Until the tasks are read nothing is left out.
     static func split(_ rows: [ThreadRow], tasks: TasksSnapshot?, shown: String? = nil) -> [ThreadRow] {
-        guard let tasks else { return rows }
-        let owned = Set(tasks.entries.flatMap { $0.runs.compactMap(\.thread) })
+        split(rows, entries: tasks?.entries, shown: shown)
+    }
+
+    static func split(_ rows: [ThreadRow], entries: [TaskEntry]?, shown: String? = nil) -> [ThreadRow] {
+        guard let entries else { return rows }
+        let owned = Set(entries.flatMap { $0.runs.compactMap(\.thread) })
         return rows.filter { row in
             !(owned.contains(row.id) && (row.mark == .done || row.mark == .idle) && row.id != shown)
         }
+    }
+
+    /// Every row of a project that is not the open one, read from its folders: its threads (the finished ones too) and the tasks that
+    /// need approval, for the inbox of all projects. Pure.
+    static func rows(listing: ThreadListing, entries: [TaskEntry]?) -> [InboxRow] {
+        let threads = split(listing.rows, entries: entries).map(InboxRow.init(thread:))
+        let automations = (entries?.map(RailRow.task) ?? []).filter { $0.mark == .needsYou }.map(InboxRow.init(automation:))
+        return threads + automations
     }
 
     /// Every row listed, in the order they are drawn.

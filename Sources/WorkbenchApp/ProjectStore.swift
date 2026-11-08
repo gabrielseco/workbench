@@ -38,6 +38,9 @@ struct RecentProject: Equatable, Identifiable {
     /// How many of a project's threads the rail lists, by project: `Show more` adds a page. Kept for the session, not on disk.
     /// The projects whose Done section is open in the inbox (by path); closed unless the person opened it.
     var inboxDoneOpen: Set<String> = []
+    /// The rail lists the inbox of every project (the top tile), not the open project's own; and whether its Done section is open.
+    var allProjects = false
+    var allInboxDoneOpen = false
     /// What needs a person (a thread to review, a task that broke), the count and the notification each new one gets.
     let attention: AttentionCenter
     private(set) var doctor: DoctorChip = .notRun
