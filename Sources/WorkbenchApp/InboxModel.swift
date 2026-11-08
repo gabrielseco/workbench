@@ -109,6 +109,18 @@ struct InboxModel: Equatable {
         return "\(subject) past the 50 the app loads. `workbench status --all` lists them, `workbench log <id>` shows one."
     }
 
+    /// What the arrow keys walk, in the order it is drawn: the inbox's rows (an automation among them is a task), then the Scheduled
+    /// tasks. A task is in two places, so its two rows have two ids and each is a stop of its own.
+    func navigation(scheduled: [String]) -> [String] {
+        listed.map { ($0.isAutomation ? "k:" : "t:") + $0.key } + scheduled.map { "s:" + $0.self }
+    }
+
+    /// The stop the window's screen is on: the thread's, or the task's (at its row in the inbox when it has one, else in Scheduled).
+    func navigationID(thread: String?, task: String?) -> String? {
+        if let task { return listed.contains { $0.isAutomation && $0.key == task } ? "k:" + task : "s:" + task }
+        return thread.map { "t:" + $0 }
+    }
+
     /// The row above or below the one shown, for the arrow keys; nil at either end or when none is shown.
     static func neighbour(of shown: String?, in ids: [String], up: Bool) -> String? {
         guard let at = shown.flatMap({ ids.firstIndex(of: $0) }) else { return nil }

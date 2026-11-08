@@ -174,6 +174,28 @@ import WorkbenchCore
         #expect(quiet.listed.isEmpty)
     }
 
+    @Test func arrowKeysWalkWhatIsDrawnIncludingAutomationRows() async throws {
+        var tasks = try await snapshot(naming: [])
+        let at = try #require(tasks.entries.firstIndex { $0.id == "bump-contract-details" })
+        tasks.entries[at].summary.approval = .never
+        let model = InboxModel.derive(listing: ThreadListing(rows: [thread("a", .needsYou), thread("c", .working)]), tasks: tasks)
+        let names = tasks.entries.map(\.id)
+        let order = model.navigation(scheduled: names)
+        let drawn = model.listed.map { ($0.isAutomation ? "k:" : "t:") + $0.key }
+        #expect(Array(order.prefix(drawn.count)) == drawn, "the inbox's rows as drawn, automations among them")
+        #expect(Array(order.suffix(names.count)) == names.map { "s:" + $0 }, "then Scheduled, each its own stop")
+        let first = try #require(drawn.first)
+        let below = InboxModel.neighbour(of: first, in: order, up: false)
+        #expect(first == "t:a" && below == drawn[1], "down from A is the next row")
+        let auto = try #require(drawn.first { $0.hasPrefix("k:") })
+        #expect(InboxModel.neighbour(of: auto, in: order, up: true) != nil, "an automation row can be stepped from")
+        // The task's page, reached from either row, is the stop in the inbox when there is one.
+        #expect(model.navigationID(thread: nil, task: "bump-contract-details") == "k:bump-contract-details")
+        let quiet = InboxModel.derive(listing: ThreadListing(rows: [thread("a", .needsYou)]), tasks: nil)
+        #expect(quiet.navigationID(thread: nil, task: "bump-contract-details") == "s:bump-contract-details")
+        #expect(quiet.navigationID(thread: "a", task: nil) == "t:a")
+    }
+
     @Test func theStoreRemembersWhichProjectsHaveDoneOpen() async throws {
         let fixture = try await AppFixture()
         keptRailFixtures.append(fixture)

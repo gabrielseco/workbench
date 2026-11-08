@@ -64,16 +64,13 @@ struct PreviewRail: View {
         }
     }
 
-    /// The row above or below the one shown, threads first and then tasks; nil at either end or when none is shown.
+    /// The row above or below the one shown, in the order the rail draws them; nil at either end or when none is shown.
     private func move(up: Bool, inbox: InboxModel, model: RailModel) {
-        let ids = inbox.threadRows.map { "t:" + $0.key } + model.tasks.map { "k:" + $0.key }
-        var shown: String?
-        if let task = shownTaskName {
-            shown = "k:" + task
-        } else if store.mode == .thread, !store.newThread, let thread = shownThreadID {
-            shown = "t:" + thread
-        }
-        guard let next = InboxModel.neighbour(of: shown, in: ids, up: up) else { return }
+        let ids = inbox.navigation(scheduled: model.tasks.map(\.key))
+        let thread = store.mode == .thread && !store.newThread ? shownThreadID : nil
+        guard let shown = inbox.navigationID(thread: thread, task: shownTaskName),
+            let next = InboxModel.neighbour(of: shown, in: ids, up: up)
+        else { return }
         let key = String(next.dropFirst(2))
         if next.hasPrefix("t:") {
             Task { await store.select(thread: key) }

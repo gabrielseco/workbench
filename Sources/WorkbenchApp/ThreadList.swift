@@ -209,11 +209,13 @@ enum ThreadListLoader {
             finished: isFinished(state: state, outcome: outcome))
     }
 
-    /// `$1.88`, `unknown` when a cost could not be told, nil for a thread that has not run.
+    /// `$1.88`, `unknown` when a cost could not be told, nil for a thread that has not run (coding turn or chat reply).
     static func spendText(_ state: ThreadState) -> String? {
-        guard state.lastTurn > 0 else { return nil }
-        guard let cost = state.knownCostUSD else { return "unknown" }
-        return String(format: "$%.2f", cost)
+        // A chat's replies are `chat.*` records and leave the coding turn counter at zero: their turns and cost count too.
+        let chat = state.chat
+        guard state.lastTurn + (chat?.turns ?? 0) > 0 else { return nil }
+        guard let coding = state.knownCostUSD, chat?.costUnknown != true else { return "unknown" }
+        return String(format: "$%.2f", coding + (chat?.costUSD ?? 0))
     }
 
     /// Over, as the inbox's Done section means it: not waiting on a person, a run or GitHub.
