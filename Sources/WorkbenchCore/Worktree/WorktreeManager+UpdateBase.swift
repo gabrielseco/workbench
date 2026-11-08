@@ -84,14 +84,22 @@ extension WorktreeManager {
         if let checkout = await checkout(of: localRef) {
             let merged = try await git.run([
                 // Never stash the checkout's changes or overwrite its ignored files: either way git can "succeed" and
-                // leave the person's checkout changed. Refusing is what stops the goal.
-                "merge", "--ff-only", "--no-autostash", "--no-overwrite-ignore", "--quiet", remote,
+                // leave the person's checkout changed. Refusing is what stops the goal. Never squash either
+                // (`branch.<base>.mergeOptions=--squash`): git would stage origin's changes and leave the branch where it was.
+                "merge", "--ff-only", "--no-squash", "--no-autostash", "--no-overwrite-ignore", "--quiet", remote,
             ], in: checkout)
             guard merged.succeeded else {
                 throw WorktreeError.baseUpdateFailed(
                     base: base,
                     reason: "it is checked out at \(checkout.path) and git would not move it forward there "
                         + "(\(Self.firstLine(merged))). Commit or set aside the changes git names, then start the goal again")
+            }
+            // Whatever the person's merge configuration does, the goal starts only from a branch that is at origin's tip.
+            guard await sha(of: localRef) == remote else {
+                throw WorktreeError.baseUpdateFailed(
+                    base: base,
+                    reason: "git reported moving it forward at \(checkout.path), but it is not at origin/\(base). "
+                        + "Check that checkout, then start the goal again")
             }
         } else {
             let moved = try await git.run(["update-ref", localRef, remote, local], in: repoRoot)

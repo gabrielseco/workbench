@@ -222,6 +222,24 @@ import Testing
         #expect(stashes.isEmpty, "nothing was stashed: \(stashes)")
     }
 
+    @Test func fastForwardsEvenWhenMergesAreConfiguredToSquash() async throws {
+        // With `branch.main.mergeOptions=--squash`, git could stage origin's changes and leave main where it was.
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let origin = try await Origin(for: fx)
+        try await Origin.must(fx.git, ["config", "branch.main.mergeOptions", "--squash"], in: fx.repo)
+        let tip = try await origin.advance()
+
+        _ = try await fx.runner(id).run(fx.options())
+
+        #expect(try baseCommit(fx, id) == tip)
+        #expect(try await origin.head("refs/heads/main", in: fx.repo) == tip, "the local main was brought forward")
+        let status = try await fx.git.run(["status", "--porcelain"], in: fx.repo).stdout
+        #expect(status.isEmpty, "nothing was left staged or changed in the checkout: \(status)")
+        let squashMessage = fx.repo.appendingPathComponent(".git/SQUASH_MSG").path
+        #expect(!FileManager.default.fileExists(atPath: squashMessage))
+    }
+
     @Test func asksOriginWhenNothingCachedSaysItHasTheBase() async throws {
         // Origin was added to an existing repository and never fetched: its main may already be ahead.
         let fx = try await RunnerFixture()
