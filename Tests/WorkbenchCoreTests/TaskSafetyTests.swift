@@ -152,11 +152,11 @@ private struct Safe {
         let heads = try await safe.putOriginAhead()
         let result = try await safe.run("write=a.txt")
         #expect(try safe.baseCommit(of: try #require(result.thread)) == heads.new)
-        // Without the key the thread starts from the local main, which is behind.
+        // Without the key the local main is fast-forwarded to origin first, so it starts from the fresh tip too.
         let stale = try await Safe(extraConfig: failing)
-        let behind = try await stale.putOriginAhead()
+        let ahead = try await stale.putOriginAhead()
         let other = try await stale.run("write=a.txt")
-        #expect(try stale.baseCommit(of: try #require(other.thread)) == behind.old)
+        #expect(try stale.baseCommit(of: try #require(other.thread)) == ahead.new)
     }
 
     @Test func aRestrictedFetchMappingDoesNotLeaveTheBaseStale() async throws {
