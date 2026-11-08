@@ -15,6 +15,8 @@ extension ProjectStore {
     func remember(_ path: String) {
         recentPaths = Array(([path] + recentPaths.filter { $0 != path }).prefix(Self.recentLimit))
         preferences.recentProjects = recentPaths
+        // A project that is opened is kept on the rail.
+        pin(path)
     }
 
     func forget(_ path: String) {

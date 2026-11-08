@@ -27,7 +27,7 @@ struct RecentProject: Equatable, Identifiable {
 /// The one store of a window: the project, the screen derived from its newest thread's log, and the Doctor chip. It holds
 /// no thread state outside the log and the chosen repo path, and it reads the log off the main actor, only when `stat`
 /// says it changed.
-@MainActor @Observable final class ProjectStore {
+@MainActor @Observable final class ProjectStore {  // swiftlint:disable:this type_body_length
     /// Set by the store and its extensions only (`applyPullRequestCI` adds what GitHub said to the thread on screen).
     var screen: ProjectScreen
     private(set) var project: Project? { didSet { rebindSession() } }
@@ -123,6 +123,8 @@ struct RecentProject: Equatable, Identifiable {
     var runSettingsFits = false
     /// The project paths the menu lists, most recent first; the app's own preference, never a file in a project.
     var recentPaths: [String] = []
+    /// The projects on the rail, in order (`ProjectStore+Rail.swift`).
+    var railPaths: [String] = []
     /// Projects git refused when one was chosen, with why: shown unavailable so they can be removed.
     var refusedPaths: [String: String] = [:]
     /// What the last refusal to open a project said, so the next try clears that and not what the thread said otherwise.
@@ -170,7 +172,8 @@ struct RecentProject: Equatable, Identifiable {
         self.goalLoader = goalLoader
         self.actions = actions
         self.preferences = preferences
-        self.recentPaths = Self.merged(preferences.recentProjects, preferences.projectPath)
+        let recents = Self.merged(preferences.recentProjects, preferences.projectPath)
+        (self.recentPaths, self.railPaths) = (recents, preferences.railProjects ?? RailProjects.seed(fromRecents: recents))
         self.screen = screen
         self.project = project
         self.current = ThreadSession(key: ThreadSession.Key(project: project, thread: nil))

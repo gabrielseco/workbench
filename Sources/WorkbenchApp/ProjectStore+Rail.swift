@@ -1,0 +1,57 @@
+import AppKit
+import Foundation
+import WorkbenchCore
+
+/// The project rail: the projects the person keeps at hand, one tile each. An app preference, never a file in a project.
+extension ProjectStore {
+    /// The tiles, in order, each saying why it cannot be opened when it cannot.
+    func railTiles() -> [RailProject] {
+        RailProjects.tiles(railPaths) { Self.unavailableReason($0) ?? self.refusedPaths[$0] }
+    }
+
+    /// Puts a project on the rail (a project that is opened is kept there). One already on it keeps its place.
+    func pin(_ path: String) {
+        let next = RailProjects.adding(path, to: railPaths)
+        guard next != railPaths else { return }
+        railPaths = next
+        preferences.railProjects = next
+    }
+
+    /// Takes a tile off the rail and only that: the project stays in the recents, its folder and its threads are as they were, and a run it
+    /// has goes on. When it is the open one, the window moves to its neighbour, or stays on it when the rail has no other.
+    func removeFromRail(_ path: String) async {
+        let neighbour = railPaths.firstIndex(of: path).flatMap { index -> String? in
+            let rest = RailProjects.removing(path, from: railPaths)
+            return rest.isEmpty ? nil : rest[min(index, rest.count - 1)]
+        }
+        railPaths = RailProjects.removing(path, from: railPaths)
+        preferences.railProjects = railPaths
+        if path == project?.root.path, let neighbour { await pickRecent(neighbour) }
+    }
+
+    func moveOnRail(_ path: String, by step: Int) {
+        railPaths = RailProjects.moving(path, by: step, in: railPaths)
+        preferences.railProjects = railPaths
+    }
+
+    /// What a project's tile shows. The open project's comes from what the window reads of it (its threads and tasks, as the list beside
+    /// shows them); the others have none until their summaries are read (P26 slice 3).
+    func railBadge(for path: String) -> RailBadge {
+        guard path == project?.root.path else { return .none }
+        let marks = threads.listing.rows.map(\.mark) + (tasks.snapshot(for: project)?.entries.map { RailRow.task($0).mark } ?? [])
+        return RailBadge.from(
+            needsYou: marks.filter { $0 == .needsYou }.count, failed: marks.filter { $0 == .broken }.count,
+            running: marks.contains(.working))
+    }
+
+    /// `Doctor` from a tile: the project is opened first, since Doctor reads and shows the open project's config.
+    func runDoctor(at path: String) async {
+        if path != project?.root.path { await pickRecent(path) }
+        guard path == project?.root.path else { return }
+        await runDoctor()
+    }
+
+    func revealInFinder(_ path: String) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+}

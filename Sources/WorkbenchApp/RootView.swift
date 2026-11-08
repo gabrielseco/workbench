@@ -10,6 +10,8 @@ struct RootView: View {
             ToolbarBar(store: store)
             Divider()
             HStack(spacing: 0) {
+                ProjectRail(store: store).background(Theme.rail)
+                Divider()
                 PreviewRail(store: store).frame(width: PreviewRail.width).background(Theme.rail)
                 Divider()
                 Centre(store: store).frame(maxWidth: .infinity, maxHeight: .infinity).background { Theme.canvas }
@@ -23,19 +25,14 @@ struct RootView: View {
     }
 }
 
-/// The project pill, the base, the state pill and the spend meter. The agents are not here: the project card's row menu and ⌘, open them.
+/// The project's name, the base, the state pill and the spend meter. Projects are the rail's, and so are their agents (its tile menu, ⌘,).
 struct ToolbarBar: View {
     var store: ProjectStore
 
-    /// What the project pill is called to assistive technology, and so to scripts/verify-app.sh: it opens the project card, not a
-    /// panel, so the script may press it; the card's "Choose folder…" is the one it refuses.
-    static func projectButtonLabel(_ project: Project?) -> String {
-        "Projects" + (project.map { ", now \($0.root.lastPathComponent)" } ?? "")
-    }
-
     var body: some View {
         HStack(spacing: Space.m) {
-            ProjectPill(store: store)
+            // The project is named here, as the design has it; switching and adding are the rail's.
+            Text(store.project?.root.lastPathComponent ?? "No project").textStyle(.bodyStrong)
             // The base, the spend and the state are the thread's: not shown over the Tasks screen, where amber means something else.
             if store.newThread {
                 // Nothing is running and no thread is on screen: the design's `$0.00` and `No run`.
@@ -52,25 +49,6 @@ struct ToolbarBar: View {
             }
         }
         .padding(.horizontal, Spacing.inset).padding(.vertical, Space.m)
-    }
-}
-
-/// The open project's name with a folder and a chevron; it opens the project card.
-struct ProjectPill: View {
-    var store: ProjectStore
-
-    var body: some View {
-        ToolbarPillButton(selected: store.pickingProject) {
-            store.pickingProject.toggle()
-        } label: {
-            HStack(spacing: Space.s) {
-                Image(systemName: "folder.fill").foregroundStyle(Theme.blue)
-                Text(store.project?.root.lastPathComponent ?? "Choose project").textStyle(.bodyStrong)
-                Image(systemName: "chevron.down").textStyle(.captionStrong, .secondary)
-            }
-        }
-        .accessibilityLabel(ToolbarBar.projectButtonLabel(store.project))
-        .help(store.project?.root.path ?? "Choose a project")
     }
 }
 

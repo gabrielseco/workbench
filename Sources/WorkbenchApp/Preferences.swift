@@ -6,6 +6,8 @@ protocol Preferences: AnyObject, Sendable {
     var projectPath: String? { get set }
     /// Every project opened, most recent first.
     var recentProjects: [String] { get set }
+    /// The projects on the rail, in the order the person keeps them. Nil until they have arranged it: the rail then starts from the recents.
+    var railProjects: [String]? { get set }
     /// Notifications are paused: nothing is posted, and the count still shows. An app preference, never workbench state.
     var notificationsPaused: Bool { get set }
     /// The identities of attention items the person has seen (a failed task they looked at); the latest 200.
@@ -25,6 +27,7 @@ final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
     private let defaults: UserDefaults
     private let key = "projectPath"
     private let recentKey = "recentProjects"
+    private let railKey = "railProjects"
     private let pausedKey = "notificationsPaused"
     private let seenKey = "seenAttention"
     private let announcedKey = "announcedAttention"
@@ -40,6 +43,11 @@ final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
     var recentProjects: [String] {
         get { defaults.stringArray(forKey: recentKey) ?? [] }
         set { defaults.set(newValue, forKey: recentKey) }
+    }
+
+    var railProjects: [String]? {
+        get { defaults.object(forKey: railKey) == nil ? nil : defaults.stringArray(forKey: railKey) }
+        set { newValue.map { defaults.set($0, forKey: railKey) } ?? defaults.removeObject(forKey: railKey) }
     }
 
     var notificationsPaused: Bool {
@@ -68,6 +76,7 @@ final class UserDefaultsPreferences: Preferences, @unchecked Sendable {
 final class MemoryPreferences: Preferences, @unchecked Sendable {
     var projectPath: String?
     var recentProjects: [String]
+    var railProjects: [String]?
     var notificationsPaused = false
     var runSettings = true { didSet { runSettingsChosen = true } }
     private(set) var runSettingsChosen = false

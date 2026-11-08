@@ -1,6 +1,6 @@
 # P26: Project rail and inbox
 
-Status: in progress, slice 1 built. Design: [`../design/project-inbox/`](../design/project-inbox/) (`Main.dc.html` the inbox, `Automations.dc.html`
+Status: in progress, slices 1 and 2 built. Design: [`../design/project-inbox/`](../design/project-inbox/) (`Main.dc.html` the inbox, `Automations.dc.html`
 the automations view; copied from the Design canvas, 2026-11-08).
 
 Threads can now run side by side (P23), so the window stops being "one project, one thread, and a list". The design makes **projects visible**
@@ -64,13 +64,22 @@ open project also refreshes the copy chats and the New goal card read. The card'
 an `Actions for <name>` menu with `Agents…` (it closes the project card first, so the Agents card is not under it). `VERIFY_OPEN=agents`
 shows the open project's card for a scenario.
 
-### 2. Project rail
+### 2. Project rail (built)
 
 `ProjectRail` (72 pt), `ProjectTile` (props: `initials`, `selected`, `badge: .needsYou(n) | .failed(n) | .running | none`), `CountBadge`. Replaces
 `ProjectPill`; `+` runs the existing folder chooser; the tile menu from the section above. Preferences gain the ordered `railProjects`.
 Selecting a tile calls the existing `open(_:)`. The top tile is a placeholder until slice 4.
 Tests: `RailProjects` (pure) seeds from recents, orders, removes, drops a project whose folder is gone and says so on the tile; badge precedence
 (failed over needs you over running). A removed project's live runs are not stopped.
+
+As built: `RailProjects` (pure: seeding, adding, removing, moving, initials, names) and `RailBadge`; `ProjectRail` (72 pt), `ProjectTile`, `CountBadge`
+in their own files. `Preferences.railProjects` is nil until the person arranges the rail (then it starts from the recents, oldest first, so a tile
+never jumps), and an empty list is kept as empty. A project that is opened is pinned at the end; reopening does not move it. The tile menu
+(right click) has `Agents…`, `Doctor` (opens the project first), `Reveal in Finder`, `Move up`, `Move down` and `Remove from rail`; removing only
+hides the tile (the project stays in the recents), and removing the open project moves to its neighbour. Two deviations from the sketch above:
+`+` opens the project card (the recents and `Choose folder…`) instead of the folder panel, so a recent project can be added and the harness can
+press it; the top bar names the project as text, and its pill is gone. The top tile is disabled until slice 4. The open project's tile counts what
+the window reads of it; the others show no badge until slice 3.
 
 ### 3. Project summaries (counts for projects not open)
 
