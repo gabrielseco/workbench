@@ -23,8 +23,9 @@ import Testing
     }
 
     @Test func aConflictListsEveryConflictedFileAndTheOverlapSeparately() throws {
-        let note = try #require(
-            SyncPrompt.note(for: .conflicts(moved(overlapping: ["shared.swift"]), files: ["Sources/A.swift", "b.txt"], savedWork: "x")))
+        let result = BaseSyncResult.conflicts(
+            moved(overlapping: ["shared.swift"]), files: ["Sources/A.swift", "b.txt"], savedWork: "x")
+        let note = try #require(SyncPrompt.note(for: result))
         #expect(note.contains("Sources/A.swift") && note.contains("b.txt") && note.contains("shared.swift"))
         let conflictOnly = try #require(SyncPrompt.note(for: .conflicts(moved(), files: ["Sources/A.swift"], savedWork: nil)))
         #expect(!conflictOnly.contains("shared.swift"))
