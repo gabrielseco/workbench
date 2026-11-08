@@ -87,6 +87,9 @@ wbp "$SCRATCH/x6.out" review-stage --thread no-such-thread design
 check "review-stage --thread <id> <stage>: the flag is read first (not found, exit 7)" "exit $RC: $(head -c 200 "$SCRATCH/x6.out")" \
     test "$RC" = 7
 
+wbp "$SCRATCH/x7.out" send-back --thread "$A" "fix it" --thread "$B"
+check "--thread given twice for different threads: usage error (exit 2)" "exit $RC: $(head -c 200 "$SCRATCH/x7.out")" test "$RC" = 2
+
 # --- 4. ending one frees a slot and the other needs no id --------------------------------------------------
 
 wbp "$SCRATCH/e1.out" abandon --thread "$A"

@@ -95,7 +95,12 @@ struct Arguments {
     /// Takes `--thread <id>` out now. A command whose other positional arguments come first (a note, a stage name) calls it
     /// before reading them, so the flag may stand anywhere; `thread()` then finds it already taken.
     mutating func takeThreadFlag() throws {
-        if let flagged = try value("--thread") { threadFlagValue = flagged }
+        while let flagged = try value("--thread") {
+            if let known = threadFlagValue, known != flagged {
+                throw CLIError.usage("--thread \(known) and --thread \(flagged) name different threads")
+            }
+            threadFlagValue = flagged
+        }
     }
 
     /// The thread a command means: `--thread <id>`, or the id as the first plain argument. Both may be given when they agree.

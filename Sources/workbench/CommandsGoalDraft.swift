@@ -12,7 +12,8 @@ extension Commands {
         let base = try a.value("--base")
         let replace = a.flag("--replace")
         let fromChat = a.flag("--from-chat")
-        let named = a.positional()
+        // With --replace the argument is an existing thread, so it may be given as --thread; otherwise it is a name.
+        let named = replace ? try a.thread() : a.positional()
         try a.requireEmpty()
         let usage =
             "usage: workbench goal draft <name> (--request \"<text>\" | --request-file <path>) [--base <branch>] [--replace]"
