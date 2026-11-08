@@ -26,10 +26,17 @@ extension ProjectStore {
         // Listed from the logs alone and as far as the counts reach: a thread GitHub said closed is asked about again (it may be reopened),
         // and none that the tile counts is left out. Bounded like the rail's own reads, so a folder that hangs holds this pass for
         // `RailSummaries.timeout`, not for good.
-        let listed = await RailSummaries.raced(seconds: RailSummaries.timeout) { () -> ThreadListing? in
+        // Released when the read has really finished, not when this pass gave up on it: a folder that hangs holds one worker.
+        let key = "github:" + path
+        guard summaries.begin(key) else { return }
+        let work: @Sendable () -> ThreadListing? = {
             guard ProjectStore.unavailableReason(path) == nil else { return nil }
             return ThreadListLoader.load(project: other, cache: cache, limit: ProjectSummaryLoader.maxThreads)
         }
+        let listed = await RailSummaries.raced(
+            seconds: RailSummaries.timeout, finished: { Task { @MainActor in summaries.end(key) } }, work)
+        // An answer in time ends the hold now; one that did not come keeps it until `finished` runs.
+        if listed != nil { summaries.end(key) }
         guard let listed, let listing = listed else { return }
         var changed = false
         // A merge that could not be written the last time (the log was held) is written now.
