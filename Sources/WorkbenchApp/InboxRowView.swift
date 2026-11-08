@@ -36,7 +36,7 @@ struct InboxRowView: View {
                 Spacer(minLength: Space.s)
                 if let spend = row.spend { Text(spend).role(.monoDetail) }
             }
-            .padding(.horizontal, Space.s).padding(.vertical, Space.s)
+            .padding(.horizontal, Space.m).padding(.vertical, Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(selected ? Theme.raised : .clear, in: RoundedRectangle(cornerRadius: Radius.box))
             .contentShape(Rectangle())

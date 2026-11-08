@@ -21,8 +21,9 @@ struct TaskPageView: View {
                         VStack(alignment: .leading, spacing: Space.xs) {
                             Text(entry.summary.name).textStyle(.section).lineLimit(1).truncationMode(.middle)
                             Text(header.line).role(.detail).lineLimit(2)
-                            Text("Defined in \(header.path). Edit that file, or use Edit with AI.")
-                                .textStyle(.mono, .subtle).textSelection(.enabled)
+                            // The path alone, as the design has it; what to do with it is the tooltip and the button beside.
+                            Text(header.path).textStyle(.mono, .subtle).textSelection(.enabled)
+                                .help("Edit this file, or use Edit with AI")
                         }
                         Spacer(minLength: Space.s)
                         TaskButtons(store: store, entry: entry)
