@@ -1,0 +1,185 @@
+import Foundation
+import Testing
+
+@testable import WorkbenchCore
+
+/// A new goal brings the local base up to date with origin before its worktree is cut, and does not start when that cannot
+/// be done without losing work or without reaching origin.
+@Suite(.processGate) struct GoalStartTests {
+    /// An origin that has the fixture's `main`, and a second clone of it to move origin's `main` with.
+    private struct Origin {
+        let bare: URL
+        let clone: URL
+        let git: GitRunner
+
+        init(for fx: RunnerFixture) async throws {
+            git = fx.git
+            let dir = fx.repo.deletingLastPathComponent()
+            bare = dir.appendingPathComponent("origin-\(UUID().uuidString).git")
+            clone = dir.appendingPathComponent("clone-\(UUID().uuidString)")
+            try await Self.must(git, ["init", "-q", "--bare", bare.path], in: fx.repo)
+            try await Self.must(git, ["remote", "add", "origin", bare.path], in: fx.repo)
+            try await Self.must(git, ["push", "-q", "origin", "main"], in: fx.repo)
+            try await Self.must(git, ["clone", "-q", "-b", "main", bare.path, clone.path], in: fx.repo)
+        }
+
+        /// Commits `text` to `file` on origin's `main` and returns the new tip.
+        @discardableResult
+        func advance(_ file: String = "x.txt", _ text: String = "x\n") async throws -> String {
+            try text.write(to: clone.appendingPathComponent(file), atomically: true, encoding: .utf8)
+            try await Self.must(git, ["add", "-A"], in: clone)
+            try await Self.must(git, ["commit", "-q", "-m", "origin moves"], in: clone)
+            try await Self.must(git, ["push", "-q", "origin", "HEAD:main"], in: clone)
+            return try await head("HEAD", in: clone)
+        }
+
+        func head(_ ref: String, in dir: URL) async throws -> String {
+            try await git.run(["rev-parse", ref], in: dir).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        static func must(_ git: GitRunner, _ args: [String], in dir: URL) async throws {
+            let result = try await git.run(args, in: dir)
+            #expect(result.succeeded, "git \(args.joined(separator: " ")): \(result.stderr)")
+        }
+    }
+
+    private func baseCommit(_ fx: RunnerFixture, _ id: String) throws -> String? {
+        try fx.events(id).first { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
+    }
+
+    /// The run is refused with `baseUpdateFailed`, and nothing started: no worktree, no turn.
+    private func expectRefused(_ fx: RunnerFixture, _ id: String) async throws -> String {
+        var message = ""
+        do {
+            _ = try await fx.runner(id).run(fx.options())
+            Issue.record("the goal started")
+        } catch let error as WorktreeError {
+            guard case .baseUpdateFailed = error else { throw error }
+            message = error.description
+        }
+        #expect(!FileManager.default.fileExists(atPath: fx.project.worktreesDirectory.appendingPathComponent(id).path))
+        #expect(try !fx.kinds(id).contains(EventKind.turnStarted.rawValue))
+        #expect(try baseCommit(fx, id) == nil)
+        return message
+    }
+
+    @Test func startsWorktreeFromUpdatedMain() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let origin = try await Origin(for: fx)
+        let tip = try await origin.advance()
+
+        let notices = NoticeBox()
+        _ = try await fx.runner(id, notices: notices).run(fx.options())
+
+        #expect(try baseCommit(fx, id) == tip)
+        #expect(try await origin.head("refs/heads/main", in: fx.repo) == tip, "the local main was brought forward")
+        // `main` is checked out in the project's checkout, so its files moved with it.
+        #expect(FileManager.default.fileExists(atPath: fx.repo.appendingPathComponent("x.txt").path))
+        let worktree = fx.project.worktreesDirectory.appendingPathComponent(id)
+        #expect(FileManager.default.fileExists(atPath: worktree.appendingPathComponent("x.txt").path))
+        let behind = notices.all.contains { if case .advisory(let text) = $0 { text.contains("behind") } else { false } }
+        #expect(!behind, "an up-to-date base is not reported as behind")
+    }
+
+    @Test func startsWhenMainIsCurrent() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let origin = try await Origin(for: fx)
+        let local = try await origin.head("refs/heads/main", in: fx.repo)
+
+        let report = try await fx.runner(id).run(fx.options())
+
+        #expect(report.result == .succeeded)
+        #expect(try baseCommit(fx, id) == local)
+        #expect(try await origin.head("refs/heads/main", in: fx.repo) == local)
+    }
+
+    @Test func startsWhenTheRepositoryHasNoOrigin() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let report = try await fx.runner(id).run(fx.options())
+        #expect(report.result == .succeeded)
+    }
+
+    @Test func stopsWhenMainUpdateFails() async throws {
+        // Origin cannot be reached.
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let origin = try await Origin(for: fx)
+        let gone = fx.repo.deletingLastPathComponent().appendingPathComponent("gone-\(UUID().uuidString).git")
+        try await Origin.must(fx.git, ["remote", "set-url", "origin", gone.path], in: fx.repo)
+        let unreachable = try await expectRefused(fx, id)
+        #expect(unreachable.contains("main"), "\(unreachable)")
+        _ = origin
+
+        // A run after origin is back starts.
+        try await Origin.must(fx.git, ["remote", "set-url", "origin", origin.bare.path], in: fx.repo)
+        let tip = try await origin.advance()
+        _ = try await fx.runner(id).run(fx.options())
+        #expect(try baseCommit(fx, id) == tip)
+    }
+
+    @Test func stopsWhenMainHasDivergedFromOrigin() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let origin = try await Origin(for: fx)
+        let remoteTip = try await origin.advance()
+        try "mine\n".write(to: fx.repo.appendingPathComponent("mine.txt"), atomically: true, encoding: .utf8)
+        try await Origin.must(fx.git, ["add", "mine.txt"], in: fx.repo)
+        try await Origin.must(fx.git, ["commit", "-q", "-m", "local work"], in: fx.repo)
+        let localTip = try await origin.head("refs/heads/main", in: fx.repo)
+
+        _ = try await expectRefused(fx, id)
+
+        #expect(try await origin.head("refs/heads/main", in: fx.repo) == localTip, "the local commit is kept")
+        #expect(try await origin.head("refs/remotes/origin/main", in: fx.repo) == remoteTip)
+    }
+
+    @Test func preservesLocalWorkWhenUpdatingMain() async throws {
+        // An uncommitted edit the update does not touch is kept, and the goal starts from origin's tip.
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let origin = try await Origin(for: fx)
+        let tip = try await origin.advance()
+        try "local edit\n".write(to: fx.repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.runner(id).run(fx.options())
+        #expect(try baseCommit(fx, id) == tip)
+        #expect(try String(contentsOf: fx.repo.appendingPathComponent("a.txt"), encoding: .utf8) == "local edit\n")
+
+        // An uncommitted edit the update would overwrite stops the goal, and stays as it was.
+        let other = try await RunnerFixture()
+        let otherID = try await other.approvedThread()
+        let otherOrigin = try await Origin(for: other)
+        let before = try await otherOrigin.head("refs/heads/main", in: other.repo)
+        try await otherOrigin.advance("a.txt", "theirs\n")
+        try "mine\n".write(to: other.repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await expectRefused(other, otherID)
+        #expect(try String(contentsOf: other.repo.appendingPathComponent("a.txt"), encoding: .utf8) == "mine\n")
+        #expect(try await otherOrigin.head("refs/heads/main", in: other.repo) == before)
+
+        // Local commits origin does not have, with nothing new on origin: kept, and the goal starts from them.
+        let ahead = try await RunnerFixture()
+        let aheadID = try await ahead.approvedThread()
+        let aheadOrigin = try await Origin(for: ahead)
+        try "mine\n".write(to: ahead.repo.appendingPathComponent("mine.txt"), atomically: true, encoding: .utf8)
+        try await Origin.must(ahead.git, ["add", "mine.txt"], in: ahead.repo)
+        try await Origin.must(ahead.git, ["commit", "-q", "-m", "local work"], in: ahead.repo)
+        let localTip = try await aheadOrigin.head("refs/heads/main", in: ahead.repo)
+        _ = try await ahead.runner(aheadID).run(ahead.options())
+        #expect(try baseCommit(ahead, aheadID) == localTip)
+        #expect(try await aheadOrigin.head("refs/heads/main", in: ahead.repo) == localTip)
+    }
+
+    @Test func movesMainByRefWhenNoCheckoutHasIt() async throws {
+        let fx = try await RunnerFixture()
+        let id = try await fx.approvedThread()
+        let origin = try await Origin(for: fx)
+        try await Origin.must(fx.git, ["checkout", "-q", "-b", "elsewhere"], in: fx.repo)
+        let tip = try await origin.advance()
+        _ = try await fx.runner(id).run(fx.options())
+        #expect(try baseCommit(fx, id) == tip)
+        #expect(try await origin.head("refs/heads/main", in: fx.repo) == tip)
+        #expect(try await origin.head("HEAD", in: fx.repo) != tip, "the checkout on another branch was left alone")
+    }
+}

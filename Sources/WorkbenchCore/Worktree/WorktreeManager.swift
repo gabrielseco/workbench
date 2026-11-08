@@ -29,6 +29,8 @@ public enum WorktreeError: Error, Equatable, Sendable, CustomStringConvertible {
     case worktreeNotFound(String)
     case gitFailed(command: String, status: Int32, stderr: String)
     case remoteBranchUnavailable(branch: String, reason: String)
+    /// The local base could not be brought up to date with origin, so no worktree was cut from it.
+    case baseUpdateFailed(base: String, reason: String)
 
     public var description: String {
         switch self {
@@ -41,6 +43,8 @@ public enum WorktreeError: Error, Equatable, Sendable, CustomStringConvertible {
         case .worktreeNotFound(let path): "no worktree at \(path)"
         case .remoteBranchUnavailable(let branch, let reason):
             "cannot read origin/\(branch): \(reason)"
+        case .baseUpdateFailed(let base, let reason):
+            "the goal was not started: \(base) could not be updated from origin/\(base), because \(reason)."
         case .gitFailed(let command, let status, let stderr):
             "git \(command) failed (exit \(status)): \(stderr.trimmingCharacters(in: .whitespacesAndNewlines))"
         }
