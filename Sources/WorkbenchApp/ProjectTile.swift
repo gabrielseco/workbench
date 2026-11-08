@@ -17,45 +17,47 @@ struct ProjectTile: View {
     private var available: Bool { project.unavailable == nil }
 
     var body: some View {
-        VStack(spacing: Space.xs) {
-            tile
-            // The name under a project's picture, always: a tooltip waits and a person scanning the rail does not hover.
-            if symbol == nil {
-                Text(project.name).textStyle(.caption, selected ? .primary : .secondary).lineLimit(1).truncationMode(.tail)
-                    .frame(width: Self.side + Space.s).accessibilityHidden(true)
-                    .contentShape(Rectangle()).onTapGesture(perform: action)
-            }
-        }
-    }
-
-    private var tile: some View {
+        // One button, so a click on the name is a click on the tile and the keyboard has one stop for both.
         Button(action: action) {
-            face
-                .frame(width: Self.side, height: Self.side)
-                .background(selected ? Theme.blue.opacity(0.18) : Theme.panel, in: shape)
-                .overlay(shape.strokeBorder(selected ? Theme.blue : Theme.line))
-                .selectedFocusRing(selected, radius: Radius.card)
-                .opacity(available ? 1 : 0.55)
+            VStack(spacing: Space.xs) {
+                square
+                // The name under a project's picture, always: a tooltip waits and a person scanning the rail does not hover.
+                if symbol == nil {
+                    Text(project.name).textStyle(.caption, selected ? .primary : .secondary).lineLimit(1).truncationMode(.tail)
+                        .frame(width: Self.side + Space.s)
+                }
+            }
         }
         .buttonStyle(.plain)
-        .overlay(alignment: .topTrailing) {
-            if let kind = CountBadge.Kind(badge) { CountBadge(kind: kind).offset(x: Space.s, y: -Space.s) }
-        }
-        // A folder that is gone is said by a mark as well as by dimming: colour is never the only signal.
-        .overlay(alignment: .bottomTrailing) {
-            if !available {
-                StatusMark(.failed).textStyle(.captionBold).background(Theme.rail, in: Circle()).offset(x: Space.xs, y: Space.xs)
-            }
-        }
-        .overlay(alignment: .leading) {
-            if selected {
-                UnevenRoundedRectangle(bottomTrailingRadius: Radius.thumbnail, topTrailingRadius: Radius.thumbnail)
-                    .fill(Theme.blue).frame(width: Self.bar.width, height: Self.bar.height).offset(x: -Space.xxxl / 2 + Space.xxs)
-            }
-        }
         .accessibilityLabel(badge.label(for: project.name) + (project.unavailable.map { ", unavailable: \($0)" } ?? ""))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .help(tooltip ?? project.unavailable ?? project.name + " · " + (project.path as NSString).abbreviatingWithTildeInPath)
+    }
+
+    private var square: some View {
+        face
+            .frame(width: Self.side, height: Self.side)
+            .background(selected ? Theme.blue.opacity(0.18) : Theme.panel, in: shape)
+            .overlay(shape.strokeBorder(selected ? Theme.blue : Theme.line))
+            .selectedFocusRing(selected, radius: Radius.card)
+            .opacity(available ? 1 : 0.55)
+            .overlay(alignment: .topTrailing) {
+                if let kind = CountBadge.Kind(badge) { CountBadge(kind: kind).offset(x: Space.s, y: -Space.s) }
+            }
+            // A folder that is gone is said by a mark as well as by dimming: colour is never the only signal.
+            .overlay(alignment: .bottomTrailing) {
+                if !available {
+                    StatusMark(.failed).textStyle(.captionBold).background(Theme.rail, in: Circle())
+                        .offset(x: Space.xs, y: Space.xs)
+                }
+            }
+            .overlay(alignment: .leading) {
+                if selected {
+                    UnevenRoundedRectangle(bottomTrailingRadius: Radius.thumbnail, topTrailingRadius: Radius.thumbnail)
+                        .fill(Theme.blue).frame(width: Self.bar.width, height: Self.bar.height)
+                        .offset(x: -Space.xxxl / 2 + Space.xxs)
+                }
+            }
     }
 
     @ViewBuilder private var face: some View {
