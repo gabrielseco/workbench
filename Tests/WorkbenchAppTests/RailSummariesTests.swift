@@ -158,6 +158,24 @@ private func waitUntil(timeout: TimeInterval, _ condition: @Sendable () -> Bool)
         #expect(store.allProjectsBadge() == .needsYou(3), "the open project's own reading and the others' summaries, added")
     }
 
+    @Test func aFailureDoesNotHideWhatNeedsYouOnTheTopTile() async throws {
+        let open = try await fixture(needsYou: 4)
+        let broken = try await fixture()
+        let url = broken.project.eventsURL("g-2026-11-08-bad")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "not an event\nnor this\n".write(to: url, atomically: true, encoding: .utf8)
+        let store = await store(open: open, others: [broken])
+        await store.reload()
+        await store.readRailSummaries()
+        #expect(store.allProjectsBadge() == .needsYou(4), "four need you; the one that failed is on its own tile")
+        #expect(store.railBadge(for: broken.project.root.path) == .failed(1))
+
+        let quiet = try await fixture()
+        let onlyFailed = await self.store(open: quiet, others: [broken])
+        await onlyFailed.readRailSummaries()
+        #expect(onlyFailed.allProjectsBadge() == .failed(1), "with nothing to decide, the failure shows")
+    }
+
     @Test func aReadThatHangsHoldsOneWorkerHoweverManyPollsPassAndIsReleasedWhenItReallyEnds() async {
         let summaries = RailSummaries()
         let latch = DispatchSemaphore(value: 0)

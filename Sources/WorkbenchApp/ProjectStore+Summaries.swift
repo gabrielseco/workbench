@@ -40,8 +40,14 @@ extension ProjectStore {
 
     func railBadge(for path: String) -> RailBadge { Self.badge(railCounts(for: path)) }
 
-    /// The top tile: every project of the rail together.
-    func allProjectsBadge() -> RailBadge { Self.badge(railPaths.reduce(ProjectSummary()) { $0 + railCounts(for: $1) }) }
+    /// The top tile: every project of the rail together, as the artboard has it, the number of things that need you in amber. A failure is
+    /// on its own project's tile; it takes the top tile only when nothing asks for a decision, so four that need you are never hidden by one
+    /// that failed.
+    func allProjectsBadge() -> RailBadge {
+        let total = railPaths.reduce(ProjectSummary()) { $0 + railCounts(for: $1) }
+        if total.needsYou > 0 { return .needsYou(total.needsYou) }
+        return Self.badge(total)
+    }
 
     private static func badge(_ counts: ProjectSummary) -> RailBadge {
         RailBadge.from(needsYou: counts.needsYou, failed: counts.failed, running: counts.running > 0)
