@@ -40,7 +40,8 @@ struct RecentProject: Equatable, Identifiable {
     var inboxDoneOpen: Set<String> = []
     /// The rail lists the inbox of every project (the top tile), not the open project's own; and whether its Done section is open.
     var allProjects = false
-    var railFocused = false, listFocused = false  // the project rail / the thread or automations list has the keys
+    var railFocused = false
+    var listFocused = false  // a list has the keys, like the rail (`listHasKeys`)
     var allInboxDoneOpen = false
     /// What needs a person (a thread to review, a task that broke), the count and the notification each new one gets.
     let attention: AttentionCenter
@@ -201,7 +202,6 @@ struct RecentProject: Equatable, Identifiable {
         default: nil
         }
     }
-
     // MARK: Choosing the project
 
     /// Opens what the preferences remember, if it is still a git repository. A path that went away is "no project", not
