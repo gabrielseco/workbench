@@ -261,7 +261,7 @@ import WorkbenchCore
         let at = try #require(snapshot.entries.firstIndex { $0.id == "bump-contract-details" })
         snapshot.entries[at].runs = [run]
         let listing = ThreadListing(rows: [ThreadRow(id: "t-done", title: "t-done", mark: .done, line: "Accepted")])
-        let rail = RailModel.derive(listing: listing, tasks: snapshot)
-        #expect(rail.threads.isEmpty, "not in the rail")
+        let inbox = InboxModel.derive(listing: listing, tasks: snapshot)
+        #expect(inbox.threadRows.isEmpty && inbox.finishedCount == 0, "not in the inbox")
     }
 }

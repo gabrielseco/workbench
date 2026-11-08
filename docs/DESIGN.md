@@ -57,12 +57,14 @@ ships, and the mockup gets fixed.
   draws the step in: filled when done or current, hollow while pending) and its title (`.callout`: `Theme.fg2` when done, primary when current,
   `Theme.fg3` while pending, the artboards' two text greys, so a step still to come stays readable in light), 14 apart and no chevrons. A thread that began as a chat has a **Chat** step first (current while it is a
   chat, done once it has a goal); a thread that began as a goal has none. A chat shows the row too, with Chat the only step reached. The toolbar above it keeps the project pill, the agents pill (hugs its label, right after the project pill at the same gap; a long model name is cut with an ellipsis at 220 pt, the full text in its help), the base, the spend and the state pill, which says only the head of the state (`Needs you`; the reason is in the thread's row and the decision card). The footer carries `Event log N`, then Doctor and its result, and at the right the thread's per-turn limit. The rail
-  has no Thread/Tasks switch and no Doctor: it is one list, 288 wide, **Threads** with a `+` (the New goal card, until the
-  new-thread screen) and then **Scheduled · N** with the project's tasks. The rail lists the newest **ten** threads, newest first, plus every thread that
-  needs you, is working or is broken (whatever its age) and the one on screen; a `Show 10 more` link adds ten at a time (the loader still stops at 50, then
-  "N older threads"). A task row follows each section's own list. Each row is **one line**: a mark at the left (working a spinner, needs you an amber dot with
-  a halo, done a check, idle a hollow ring, broken a cross) and the title (`.callout`, semibold); the words of its state (a thread's `Accepted`, a task's
-  `weekdays 04:00 · pr-opened`, `needs a fix`, `approval stale`, `not approved`) are its hover text and accessibility label, and the selected row sits on
+  has no Thread/Tasks switch and no Doctor: it is one list, 288 wide, the project's **inbox** (`INBOX · PROJECT`, with the project's Agents button and a `+` that opens the New goal card, until the
+  new-thread screen) and then **Scheduled · N** with the project's tasks. The inbox has three sections in this order, each with its caps label and count: **Needs you** (amber: a thread
+  that asks for something or is broken, then the tasks that need approval, tagged `auto`), **Waiting** (everything not over: a turn going, a draft, accepted and not shipped, a pull request
+  still open) and **Done** (what is over: thrown away, abandoned, cleaned, its pull request merged or closed), which is one link, `Show N finished threads`, until it is opened (per project,
+  for the session), then `Hide finished threads`; the thread on screen is listed in its section whichever it is (the loader still stops at 50, then "N older threads"). Each row is **two
+  lines** with the spend at the right (`$0.50`, `unknown` when the core cannot tell, none before a first turn): a mark at the left (working a spinner, needs you an amber dot with
+  a halo, done a check, idle a hollow ring, broken a cross), the title (`.callout`, semibold, cut in the middle) and under it the words of its state in the mark's tone (a thread's `Accepted`, a
+  task's `not approved`, `approval stale`); a Scheduled row is one line, the title, its words being its hover text and accessibility label, and the selected row sits on
   `Theme.raised`. A click shows that thread, with its feed and settings, or that task's page; it starts and stops nothing. The spine is not drawn twice.
   A thread a task started (its run log names it) is not in the rail once it is over (done or idle): it is one click from the task's page (each run's
   `Open thread`), and listed while it is on screen so the selection can be seen; one that is working, needs you or is broken stays in Threads.

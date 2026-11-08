@@ -52,68 +52,15 @@ struct RailRow: Equatable, Identifiable {
     }
 }
 
-/// What the rail lists: the project's threads, then its scheduled tasks. Pure, so the sections are tested
+/// What the rail lists below the inbox: the project's scheduled tasks (until the Automations view takes them). Pure, so the section is tested
 /// without a window.
 struct RailModel: Equatable {
-    /// The thread being started on the new-thread screen: a row of its own at the top, selected, until something is chosen.
-    var composing: RailRow?
-    /// The threads listed, at most the limit: the one on screen, then the ones that need you, are working or are broken, then the newest of
-    /// the rest; newest first, as the listing is.
-    var threads: [RailRow]
-    /// How many threads the limit left out: what `Show more` would add.
-    var hidden: Int
-    /// How many older threads the listing itself left out (past the loader's cap).
-    var older: Int
     var tasks: [RailRow]
     /// The tasks have been read; until then the section says so rather than claiming there are none.
     var tasksRead: Bool
 
-    /// What the "N older threads" line says when it is hovered: they are past what the app loads, and the command that lists them.
-    static func olderHelp(_ older: Int) -> String {
-        let subject = older == 1 ? "1 older thread is" : "\(older) older threads are"
-        return "\(subject) past the 50 the app loads. `workbench status --all` lists them, `workbench log <id>` shows one."
-    }
-
-    /// How many threads are listed, and how many each `Show more` adds.
-    static let pageSize = 10
-
-    static let composingRow = RailRow(
-        kind: .thread, key: "new-thread", title: "New thread", mark: .idle, line: "Type to start · free")
-
-    /// - Parameters:
-    ///   - limit: how many of the threads that do not ask for anything are listed.
-    ///   - shown: the thread on screen, which is always listed, so what is selected can be seen.
-    static func derive(
-        listing: ThreadListing, tasks: TasksSnapshot?, composing: Bool = false, limit: Int = pageSize, shown: String? = nil
-    ) -> RailModel {
-        let own = split(listing.rows, tasks: tasks, shown: shown)
-        let (visible, hidden) = limited(own, limit: limit, shown: shown)
-        return RailModel(
-            composing: composing ? composingRow : nil, threads: visible.map(RailRow.thread), hidden: hidden, older: listing.older,
-            tasks: tasks?.entries.map(RailRow.task) ?? [], tasksRead: tasks != nil)
-    }
-
-    /// A thread that asks for something of the person, or is working, or is broken: listed whatever its age.
-    static func isPinned(_ row: ThreadRow) -> Bool { row.mark == .needsYou || row.mark == .working || row.mark == .broken }
-
-    /// At most `limit` rows: the one on screen first, then the pinned ones, then the newest of the rest; listed newest first.
-    static func limited(_ rows: [ThreadRow], limit: Int, shown: String?) -> (rows: [ThreadRow], hidden: Int) {
-        let order = rows.filter { $0.id == shown } + rows.filter { $0.id != shown && isPinned($0) }
-            + rows.filter { $0.id != shown && !isPinned($0) }
-        let kept = Set(order.prefix(max(0, limit)).map(\.id))
-        let visible = rows.filter { kept.contains($0.id) }
-        return (visible, rows.count - visible.count)
-    }
-
-    /// The thread's rows the rail may list: not the finished ones a task's runs made, which are reached from the task's page. A thread is
-    /// a task's when a task's run log names it, so threads from before this existed qualify too. One that is working, needs you or is
-    /// broken stays where it is seen, and so does the one on screen. Until the tasks are read nothing is left out.
-    static func split(_ rows: [ThreadRow], tasks: TasksSnapshot?, shown: String? = nil) -> [ThreadRow] {
-        guard let tasks else { return rows }
-        let owned = Set(tasks.entries.flatMap { $0.runs.compactMap(\.thread) })
-        return rows.filter { row in
-            !(owned.contains(row.id) && (row.mark == .done || row.mark == .idle) && row.id != shown)
-        }
+    static func derive(tasks: TasksSnapshot?) -> RailModel {
+        RailModel(tasks: tasks?.entries.map(RailRow.task) ?? [], tasksRead: tasks != nil)
     }
 
     var scheduledHeader: String { "SCHEDULED · \(tasks.count)" }

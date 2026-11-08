@@ -98,7 +98,7 @@ cannot be read. A tile for a folder that is gone is not read (the tile says so);
 tile is the window's own reading (`railBadge`), the others are the last summary, and the project the window just left keeps the count it
 had while open. A log that cannot be read is failed (red), not zero.
 
-### 4. Inbox
+### 4. Inbox (4a, the project's own, built; 4b, all projects, next)
 
 `InboxModel` replaces `RailModel`'s thread section: **Needs you**, **Waiting** (shipped, CI running or waiting on review), **Done** (collapsed, count),
 in that order, the selected thread kept visible. Row = `ThreadMark`, title, reason line, spend (the rows already carry all four). Automations
@@ -106,6 +106,17 @@ needing approval appear in Needs you with the `auto` tag. The `+` stays `beginNe
 sections across projects, each row with its project's tile mark, a click selects the project and the thread.
 Tests: sectioning (every `ThreadMark` lands in exactly one section; order stable; Done hidden count), cross-project merge order, selection survives
 a section change.
+
+As built (4a): `InboxModel` (pure) sorts the thread rows by what they ask of the person: **Needs you** is a thread that asks for something or is
+broken, then the automations that need approval (`auto`, told in words to VoiceOver as well); **Waiting** is everything that is not over (a turn
+going, a draft, accepted and not shipped, a pull request still open); **Done** is what is over (thrown away, abandoned, cleaned, its pull request
+merged or closed) and is a `Show N finished threads` link until opened, per project, for the session; the thread on screen is listed whatever
+its section. `ThreadRow` gains `spend` (`$1.88`, `unknown` when the core cannot tell, nothing before a first turn) and `finished`, both from the
+state the list already read. The row is `InboxRowView` (the mark, the title, the reason in the mark's tone, the spend at the right); the three
+sections have `InboxSectionHeader`. The rail's header is `INBOX · <PROJECT>` with the project's Agents button (hover: the run role's agent) and
+`+`. `RailModel` keeps only the Scheduled section until slice 5 moves it; `ThreadListView` and the ten-at-a-time paging (`Show more`, `Show less`,
+`railLimits`) are gone, replaced by Done's fold. The rail's tile for the open project and the top tile are unchanged: 4b gives the top tile its
+inbox.
 
 ### 5. Top bar and Automations view
 
