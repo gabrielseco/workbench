@@ -41,6 +41,16 @@ import Testing
             "a skip has no start and so no screenshots")
     }
 
+    @Test func aSkipAfterARoundThatReadScreenshotsHasNone() {
+        let all = items([
+            created,
+            ev(2, .reviewStageStarted, ["stage": "design", "round": 1, "proof": ["list.png"]]),
+            ev(3, .reviewStageFinished, ["stage": "design", "round": 1, "verdict": "clean", "ok": true]),
+            ev(4, .reviewStageFinished, ["stage": "design", "round": 2, "verdict": "skipped", "ok": false]),
+        ])
+        #expect(all.contains { $0.kind == .stage(name: "design", round: 2, verdict: "skipped", ok: false, proof: []) })
+    }
+
     @Test func aReviewStageIsRunningFromItsStartToItsFinish() {
         let started = ev(2, .reviewStageStarted, ["stage": "design", "round": 1])
         #expect(ThreadState.derive(from: [created, started], id: "t").review.runningStages == ["design"])

@@ -128,12 +128,15 @@ extension Feed {
             }
         }
 
-        /// The screenshots the round was given, from the `started` it closes: the latest start of that stage before the finish.
+        /// The screenshots the round was given, from the `started` it closes: the latest start of that stage before the finish, and
+        /// only when no other finish of the stage came between (that start was already closed, so this finish is a skip).
         private func stageProof(of finish: Event, named name: String) -> [String] {
-            let start = contents.events.last {
-                $0.kind == .reviewStageStarted && $0.seq < finish.seq && $0.data["stage"]?.stringValue == name
+            let ofStage = contents.events.filter {
+                $0.seq < finish.seq && $0.data["stage"]?.stringValue == name
+                    && ($0.kind == .reviewStageStarted || $0.kind == .reviewStageFinished)
             }
-            guard case .array(let files)? = start?.data["proof"] else { return [] }
+            guard let start = ofStage.last, start.kind == .reviewStageStarted, case .array(let files)? = start.data["proof"]
+            else { return [] }
             return files.compactMap { $0.stringValue.map(short) }
         }
 
