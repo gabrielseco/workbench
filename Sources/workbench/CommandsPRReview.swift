@@ -84,6 +84,7 @@ extension Commands {
     static func reviewStage(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let again = a.flag("--again")
+        try a.takeThreadFlag()
         guard let name = a.positional() else { throw CLIError.usage("review-stage needs the name of a stage") }
         let named = try a.thread()
         try a.requireEmpty()

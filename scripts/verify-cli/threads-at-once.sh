@@ -5,7 +5,7 @@
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/threads-at-once.sh   (the same, on a branch that contains origin/main)
 # With `max_active_threads = 2`: two threads can be started and a third is refused (exit 6) naming both; `abandon` with no id
 # refuses (exit 6) and lists both, `abandon --thread <a>` ends a, `status --thread <b> --json` is b, a thread named twice
-# differently is a usage error (exit 2); with one thread left `abandon` needs no id again; at the default (1) a second thread is
+# differently is a usage error (exit 2); `--thread` may come before a note or a stage name; with one thread left `abandon` needs no id again; at the default (1) a second thread is
 # refused as before. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 gives the "no id" refusals a --thread, so those steps must FAIL. The frame and the other switches are in
 # lib.sh. Run by hand, not by CI.
@@ -79,6 +79,13 @@ wbp "$SCRATCH/x3.out" status "$A" --thread "$B"
 check "two different threads named: usage error (exit 2)" "exit $RC: $(head -c 200 "$SCRATCH/x3.out")" test "$RC" = 2
 wbp "$SCRATCH/x4.out" status --thread no-such-thread
 check "a thread that does not exist: not found (exit 7)" "exit $RC" test "$RC" = 7
+
+# The flag may stand before an argument that is not the thread: with the old order these were usage errors (exit 2).
+wbp "$SCRATCH/x5.out" send-back --thread no-such-thread "fix it"
+check "send-back --thread <id> \"note\": the flag is read first (not found, exit 7)" "exit $RC: $(head -c 200 "$SCRATCH/x5.out")" test "$RC" = 7
+wbp "$SCRATCH/x6.out" review-stage --thread no-such-thread design
+check "review-stage --thread <id> <stage>: the flag is read first (not found, exit 7)" "exit $RC: $(head -c 200 "$SCRATCH/x6.out")" \
+    test "$RC" = 7
 
 # --- 4. ending one frees a slot and the other needs no id --------------------------------------------------
 

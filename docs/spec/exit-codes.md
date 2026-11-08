@@ -369,3 +369,5 @@ Without a name, one active thread is used. With several active, a command that s
 `stop`, `accept`, `discard`, `abandon`, `ship`, `judge`, `plan`, `verifier`, `pr-review`, `review-stage`, `goal approve`, `open`)
 exits 6 and lists them (`thread … are active (a, b): name one with --thread.`). A command that only reads (`status`, `log`,
 `review`, `next`, `plan show`) shows the newest active thread. A name that is not a thread is 7, as before.
+`ship` without a name takes the one accepted thread that has no pull request yet; with several waiting it exits 6 and lists them.
+`chat` and `goal new` / `goal draft` take a name for a thread that may not exist yet, so they have no `--thread`.

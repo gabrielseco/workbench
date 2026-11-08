@@ -9,6 +9,10 @@ instead and treats a missing `verify` as null.
 
 Nothing else is printed on stdout, and the command never asks a question.
 
+These commands take `--thread <id>` like every other (see "Naming the thread" in exit-codes.md); the output has the same keys for it.
+With several active threads, `status`, `review` and `log` without a name describe the newest active one, and `grant` takes the id
+as an argument only. No key changed.
+
 ## status
 
 One object. `workbench status [id] --json`.

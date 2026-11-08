@@ -74,6 +74,7 @@ func err(_ text: String) {
 /// Pulls `--flag value` and `--flag` out of the arguments; what is left is positional.
 struct Arguments {
     private(set) var rest: [String]
+    private var threadFlagValue: String?
 
     init(_ arguments: [String]) { rest = arguments }
 
@@ -91,9 +92,16 @@ struct Arguments {
         return value
     }
 
+    /// Takes `--thread <id>` out now. A command whose other positional arguments come first (a note, a stage name) calls it
+    /// before reading them, so the flag may stand anywhere; `thread()` then finds it already taken.
+    mutating func takeThreadFlag() throws {
+        if let flagged = try value("--thread") { threadFlagValue = flagged }
+    }
+
     /// The thread a command means: `--thread <id>`, or the id as the first plain argument. Both may be given when they agree.
     mutating func thread() throws -> String? {
-        let flagged = try value("--thread")
+        try takeThreadFlag()
+        let flagged = threadFlagValue
         let plain = positional()
         if let flagged, let plain, flagged != plain {
             throw CLIError.usage("--thread \(flagged) and the argument \(plain) name different threads")
@@ -347,6 +355,7 @@ enum Commands {
         var a = Arguments(args)
         let budgetText = try a.value("--budget")
         let allowUnrunnable = a.flag("--allow-unrunnable-proofs")
+        try a.takeThreadFlag()
         let note = a.positional()
         let named = try a.thread()
         try a.requireEmpty()

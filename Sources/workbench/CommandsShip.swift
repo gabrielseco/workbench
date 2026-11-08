@@ -293,6 +293,11 @@ extension Commands {
         guard let latest = candidates.max(by: { ($0.createdAt ?? "") < ($1.createdAt ?? "") }) else {
             throw ShipError.notAccepted("there is no accepted thread waiting to be shipped; `workbench accept` one first")
         }
+        // With a few threads in flight several can wait; pushing the wrong one is not undone, so none is guessed.
+        if candidates.count > 1 {
+            let ids = candidates.map(\.id).sorted().joined(separator: ", ")
+            throw CLIError.refused("\(candidates.count) accepted threads wait to be shipped (\(ids)): name one with --thread")
+        }
         return latest.id
     }
 
