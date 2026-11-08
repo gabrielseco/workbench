@@ -104,6 +104,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// What a quit would end (a thread's run, a task's run), as a line, and a way to end it and wait.
     var liveWork: @MainActor () -> String? = { nil }
     var stopWork: (@MainActor () async -> Void)?
+    /// Keeps the Mac from idle sleep from launch to quit, in the background too.
+    @MainActor let sleepPrevention: SleepPrevention
+
+    @MainActor override init() {
+        sleepPrevention = SleepPrevention()
+        super.init()
+    }
+
+    @MainActor init(sleepPrevention: SleepPrevention) {
+        self.sleepPrevention = sleepPrevention
+        super.init()
+    }
 
     /// A closed window does not end the app: a run goes on, and the status item keeps watching.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -130,5 +142,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
+        MainActor.assumeIsolated { sleepPrevention.start() }
+    }
+
+    /// The quit has been decided (any run was stopped first): let the Mac sleep again.
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { sleepPrevention.stop() }
     }
 }
