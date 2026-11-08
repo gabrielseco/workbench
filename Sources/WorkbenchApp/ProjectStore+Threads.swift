@@ -60,10 +60,10 @@ extension ProjectStore {
         if listing != threads.listing { threads.listing = listing }
     }
 
-    /// What was read for the project before: its rows and what GitHub said of its pull requests.
-    func forgetThreadList() {
+    /// Moves the list to another project: its rows are read again, and what GitHub said of each project's pull requests stays with it.
+    func forgetThreadList(switchingTo path: String?) {
         (threadRowCache, threads.signature) = (ThreadListLoader.Cache(), nil)
-        threads.forgetPullRequests()
+        threads.switchProject(to: path)
     }
 
     /// The poll's reads of GitHub, each on its own task: a slow `gh` must not hold up following the log.
@@ -71,6 +71,7 @@ extension ProjectStore {
         if pullRequestCIIsDue { Task { await refreshPullRequestCI() } }
         if pullRequestsAreDue { Task { await refreshPullRequests() } }
         if !threads.unwrittenMerges.isEmpty { Task { await retryMergeWrites() } }
+        if !threads.readingOthers { Task { await readOtherProjectsPullRequests() } }
     }
 
     /// The listed threads whose shipped pull request GitHub has not been asked about for `pullRequestInterval`.

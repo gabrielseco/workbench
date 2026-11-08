@@ -229,6 +229,7 @@ struct RecentProject: Equatable, Identifiable {
             clearGuidance()
             (project, currentThread, lastWatch, doctor, selectedThread) = (nil, nil, nil, .notRun, nil)
             (current.goal, current.review, current.pendingDiscard) = (nil, nil, nil)
+            threads.switchProject(to: nil)
             screen = .notAGitRepository(path: url.path)
             return false
         }
@@ -247,7 +248,7 @@ struct RecentProject: Equatable, Identifiable {
         // The thread goes first: the project alone would pair the new project with the old project's thread id.
         (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
         // A thread id means another thread in another project: what was read for the old project is not the new one's.
-        forgetThreadList()
+        forgetThreadList(switchingTo: located.root.path)
         project = located
         herdrFound = actions.herdrFound(located)
         doctor = .notRun

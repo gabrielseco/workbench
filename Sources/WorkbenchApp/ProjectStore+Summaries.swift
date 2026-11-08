@@ -7,6 +7,7 @@ extension ProjectStore {
     /// is the tile's to say, and a read that fails or takes too long leaves the last count.
     func readRailSummaries() async {
         railSummaries.keep(Set(railPaths))
+        threads.keepProjects(Set(railPaths))
         let summaries = railSummaries
         let wantRows = allProjects
         for path in railPaths where summaries.begin(path) {
@@ -14,11 +15,12 @@ extension ProjectStore {
             let cache = summaries.cache(for: path)
             let listCache = wantRows ? summaries.listCache(for: path) : nil
             let now = Date()
+            let pullRequests = threads.pullRequests(for: path)
             // The read is released when it has really finished, not when the poll gave up on it: a read that hangs holds one worker, however
             // many polls pass.
             let read = await RailSummaries.raced(
                 seconds: RailSummaries.timeout, finished: { Task { @MainActor in summaries.end(path) } },
-                { RailSummaries.read(project, cache: cache, listCache: listCache, now: now) })
+                { RailSummaries.read(project, cache: cache, listCache: listCache, now: now, pullRequests: pullRequests) })
             // A read that did not come back, or could not list the folder, keeps the last count.
             guard let read, railPaths.contains(path) else { continue }
             if read.unavailable {

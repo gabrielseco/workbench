@@ -29,8 +29,9 @@ public enum ThreadActivity: String, Sendable, Equatable {
 }
 
 /// What a project holds that a person may want to know without opening it: how many of its threads need a decision, how many are broken and
-/// whether any is working. Read from the logs alone (never GitHub), so a pull request that was merged after the last time the project was
-/// open still shows as it was left.
+/// whether any is working. Read from the logs, plus what GitHub last said of each thread's pull request when the caller has it (the app
+/// keeps that per project and reads it in the background), so a pull request merged after the last time the project was open counts as it
+/// is, not as it was left.
 public struct ProjectSummary: Sendable, Equatable {
     public var needsYou = 0
     public var failed = 0
@@ -100,7 +101,11 @@ public enum ProjectSummaryLoader {
 
     /// The project's summary, or nil when its threads folder could not be listed (a folder that is there but cannot be read, such as a volume
     /// that went away): that is not "no threads", and the caller keeps the last count. No threads folder at all is a project with none.
-    public static func read(project: Project, cache: Cache = Cache()) -> ProjectSummary? {
+    /// - Parameter pullRequests: what GitHub last said of each thread's pull request, by thread id; a thread missing here is read from its
+    ///   log alone, which never says merged without a recorded merge.
+    public static func read(
+        project: Project, cache: Cache = Cache(), pullRequests: [String: PRStatus] = [:]
+    ) -> ProjectSummary? {
         let store = ThreadStore(project: project)
         let names: [String]
         do { names = try FileManager.default.contentsOfDirectory(atPath: project.threadsDirectory.path) } catch {
@@ -119,8 +124,11 @@ public enum ProjectSummaryLoader {
         for id in ids {
             let key = project.threadDirectory(id).path
             keys.insert(key)
-            let print = fingerprint(project.eventsURL(id)) + "|" + fingerprint(project.goalURL(id))
-            summary.add(cache.activity(key, print: print) { activity(project: project, store: store, id: id) })
+            let status = pullRequests[id]
+            let files = fingerprint(project.eventsURL(id)) + "|" + fingerprint(project.goalURL(id))
+            let print = files + "|" + (status.map { "\($0)" } ?? "")
+            summary.add(
+                cache.activity(key, print: print) { activity(project: project, store: store, id: id, pullRequest: status) })
         }
         cache.forget(except: keys)
         return summary
@@ -138,7 +146,9 @@ public enum ProjectSummaryLoader {
     }
 
     /// One thread's mark, from its log and goal file alone.
-    static func activity(project: Project, store: ThreadStore, id: String) -> ThreadActivity {
+    static func activity(
+        project: Project, store: ThreadStore, id: String, pullRequest status: PRStatus? = nil
+    ) -> ThreadActivity {
         let contents: EventLogContents
         do { contents = try EventLogReader.read(at: project.eventsURL(id)) } catch { return .broken }
         if contents.events.isEmpty && !contents.problems.isEmpty { return .broken }
@@ -157,9 +167,19 @@ public enum ProjectSummaryLoader {
                 approval = state.approvedGoalHash != nil ? .approved : .draft
             }
         }
-        let spine = ThreadSpine.derive(state: state, approval: approval)
-        let attention = Attention.derive(spine: spine, state: state)
-        return .classify(attention: attention, state: state, damaged: !contents.problems.isEmpty)
+        // As the thread list reads it: only a status for the pull request the log names counts, and a merge the log recorded needs no read.
+        let status = status.flatMap { $0.number == state.pullRequest?.number ? $0 : nil }
+        var outcome = PullRequestOutcome.open
+        if state.isMerged || status?.state == .merged {
+            outcome = .merged
+        } else if status?.state == .closed {
+            outcome = .closed
+        }
+        let checks = status?.checksError == nil ? status?.checks : nil
+        let spine = ThreadSpine.derive(
+            state: state, approval: approval, outcome: outcome, checks: checks, currentHead: status?.head)
+        let attention = Attention.derive(spine: spine, state: state, checks: checks, outcome: outcome, currentHead: status?.head)
+        return .classify(attention: attention, state: state, damaged: !contents.problems.isEmpty, outcome: outcome)
     }
 
     private static func fingerprint(_ url: URL) -> String {

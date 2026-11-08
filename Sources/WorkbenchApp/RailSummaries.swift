@@ -110,16 +110,19 @@ import WorkbenchCore
 
     /// The availability check is part of the read: it touches the same folder, so it is under the same limit.
     /// - Parameter listCache: given when the rows are wanted (the inbox of all projects is up): the threads are then listed as the window
-    ///   lists them, from their logs alone (a pull request is never seen merged here), and the tasks that need approval are rows.
+    ///   lists them, and the tasks that need approval are rows.
+    /// - Parameter pullRequests: what GitHub last said of the project's threads (read in the background); a thread missing here is read
+    ///   from its log alone.
     nonisolated static func read(
-        _ project: Project, cache: ProjectSummaryLoader.Cache, listCache: ThreadListLoader.Cache? = nil, now: Date
+        _ project: Project, cache: ProjectSummaryLoader.Cache, listCache: ThreadListLoader.Cache? = nil, now: Date,
+        pullRequests: [String: PRStatus] = [:]
     ) -> Read {
         if ProjectStore.unavailableReason(project.root.path) != nil { return Read(unavailable: true) }
         let entries = try? TasksReader.entries(project, now: now)
-        let threads = ProjectSummaryLoader.read(project: project, cache: cache)
+        let threads = ProjectSummaryLoader.read(project: project, cache: cache, pullRequests: pullRequests)
         var read = Read(threads: threads, tasks: entries.map(tasks))
         if let listCache, threads != nil {
-            let listing = ThreadListLoader.load(project: project, cache: listCache)
+            let listing = ThreadListLoader.load(project: project, cache: listCache, pullRequests: pullRequests)
             read.rows = InboxModel.rows(listing: listing, entries: entries)
             read.older = listing.older
             read.rowsWithoutTasks = entries == nil
