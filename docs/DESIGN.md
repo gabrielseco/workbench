@@ -262,6 +262,16 @@ Every screen answers four questions without a click, and a change that touches a
 - **A modal is centred in the window**, horizontally and vertically, whatever opened it: a card is never placed beside, under or over the
   control it came from, and the project card is no exception. `.modal` has no placement to choose (it was removed so that it cannot be
   re-added by accident); a card that seems to need one is a design question for DESIGN.md first, not a new case in `Modal.swift`.
+- **A list has a cap, and says what it left out.** Any list that can grow (an inbox section, the rail, a menu, a picker) shows at most
+  **10** rows, then a line with the count that is hidden ("Show 14 more"); the one on screen and anything that needs the person stays
+  listed whatever the cap. Every section is capped, not only the last one: Needs you and Waiting grew past ten because only Done had a
+  limit. A list with no cap is a design question for this file first. A scenario with more than ten rows (`AppScenarioManyThreads`) is
+  captured in the PR.
+- **Everything you can click can be reached from the keyboard.** A new screen or component names, in its PR, how a person gets to it,
+  moves over it and acts on it without the mouse: it takes focus (`.focusable()` and `.focused`, or a real `Button`), arrow keys move
+  over a list or a row of tiles, Return opens, Esc leaves, and changing project, thread or tab leaves focus somewhere usable (the new
+  screen's first control), never nowhere. A tile or row that is a shape with `onTapGesture` fails this by construction. Show it in
+  the PR the way the screenshots are shown: the keys pressed and what the window did.
 - Keyboard shortcuts where the siblings have them: a card cancels with Esc and confirms with ⌘Return.
 - A multi-line text box is `PlaceholderTextEditor` (the placeholder sits where the text view starts its text, measured by
   `scripts/check-text-alignment.py`; a box that grows with its text hides its scroll bar). Never a bare `TextEditor`: CI refuses it.
