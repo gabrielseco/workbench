@@ -96,6 +96,9 @@ public struct Review: Sendable, Equatable {
     public var deniedTools: [DeniedTool]
     /// The latest pull request review round, nil when none has run.
     public var prReview: PRReview?
+    /// The review stages (not the pull request review) that have started and not finished, in start order: what an auto run is
+    /// doing after the judge. Empty when none is open.
+    public var runningStages: [String] = []
 }
 
 /// A plan event as `status` and `review` show it: the plan that was made or edited, or why there is none.
@@ -346,6 +349,13 @@ public struct ThreadState: Sendable, Equatable {
             state.plan = record
             if record.ok { state.currentPlan = record }
             if event.kind == .planEnded { state.planCostUSD += record.costUSD ?? 0 }
+        case .reviewStageStarted:
+            if let name = event.data["stage"]?.stringValue { state.review.runningStages.append(name) }
+        case .reviewStageFinished:
+            // A skip writes a finish with no start, so a finish closes the latest start of its stage, if there is one.
+            if let name = event.data["stage"]?.stringValue, let at = state.review.runningStages.lastIndex(of: name) {
+                state.review.runningStages.remove(at: at)
+            }
         case .goalApproved:
             (state.approvedGoalHash, state.approvedAgent) = (event.data["hash"]?.stringValue, ApprovedAgent(event))
         default:
@@ -413,7 +423,7 @@ public struct ThreadState: Sendable, Equatable {
                 chat.apply(event)
                 state.chat = chat
             case .judgeStarted, .judgeRan, .planStarted, .planEnded, .planEdited, .goalApproved, .prReviewStarted,
-                .prReviewFinished:
+                .prReviewFinished, .reviewStageStarted, .reviewStageFinished:
                 Self.applyAdvisory(event, to: &state)
             case .verifierStarted, .verifierEnded, .verifierSkipped, .proofAdded:
                 Self.applyVerifier(event, to: &state, pending: &verifierProof)

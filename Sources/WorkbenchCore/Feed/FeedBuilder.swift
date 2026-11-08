@@ -116,9 +116,25 @@ extension Feed {
                     .prReview(
                         round: event.data["round"]?.intValue, verdict: event.data["verdict"]?.stringValue.map(short),
                         ok: event.data["ok"] == true))
+            case .reviewStageFinished:
+                guard let name = event.data["stage"]?.stringValue.map(short) else { break }
+                push(
+                    event,
+                    .stage(
+                        name: name, round: event.data["round"]?.intValue, verdict: event.data["verdict"]?.stringValue.map(short),
+                        ok: event.data["ok"] == true, proof: stageProof(of: event, named: name)))
             default:
                 break
             }
+        }
+
+        /// The screenshots the round was given, from the `started` it closes: the latest start of that stage before the finish.
+        private func stageProof(of finish: Event, named name: String) -> [String] {
+            let start = contents.events.last {
+                $0.kind == .reviewStageStarted && $0.seq < finish.seq && $0.data["stage"]?.stringValue == name
+            }
+            guard case .array(let files)? = start?.data["proof"] else { return [] }
+            return files.compactMap { $0.stringValue.map(short) }
         }
 
         private func short(_ text: String) -> String { ThreadState.safeLine(text, limit: Feed.summaryLimit) }

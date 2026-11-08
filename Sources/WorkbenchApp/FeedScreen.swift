@@ -47,6 +47,11 @@ struct FeedScreen: View {
 
     private func shots(for item: FeedItem) -> [ProofShot] {
         let proof = snapshot.state.review.verifier?.proof
+        // A review stage shows the screenshots it was given, which are the verifier's, named on its `started`.
+        if case .stage(_, _, _, _, let given) = item.kind, let project = store.project, let proof {
+            let given = proof.filter { given.contains($0.name) }
+            return ProofShot.shots(from: given, threadDirectory: project.threadDirectory(snapshot.id))
+        }
         guard item.id == latestVerifyID, let project = store.project, let proof else { return [] }
         return ProofShot.shots(from: proof, threadDirectory: project.threadDirectory(snapshot.id))
     }
@@ -92,7 +97,8 @@ struct FeedScreen: View {
             let pending = PendingStep.shown(
                 goal: store.goal, criteria: store.goal?.rows.count ?? 0, working: card != nil,
                 judgeRunning: snapshot.state.review.judge?.isOpen == true,
-                verifyRunning: snapshot.state.review.verifier?.open == true)
+                verifyRunning: snapshot.state.review.verifier?.open == true,
+                stagesRunning: snapshot.state.review.runningStages)
             ForEach(pending) { PendingStepRow(step: $0) }
             foot
         }

@@ -82,12 +82,14 @@ struct PendingStep: Equatable, Identifiable {
     /// The steps to show under the feed: all that are on while the turn works; after it, only the ones that have started and not
     /// ended (a step that has not started may never, when it does not run by itself), each saying it is running.
     static func shown(
-        goal: GoalModel?, criteria: Int, working: Bool, judgeRunning: Bool, verifyRunning: Bool
+        goal: GoalModel?, criteria: Int, working: Bool, judgeRunning: Bool, verifyRunning: Bool, stagesRunning: [String] = []
     ) -> [PendingStep] {
         if working { return pending(goal: goal, criteria: criteria, have: []) }
         let running: Set<String> = Set([judgeRunning ? "Judge" : nil, verifyRunning ? "Verify" : nil].compactMap { $0 })
+        // A review stage is not one of the goal's steps: it runs after the judge when `[review] auto` lists it, so it says so.
+        let stages = stagesRunning.map { PendingStep(name: StageRow.title(name: $0), detail: "running now") }
         return pending(goal: goal, criteria: criteria, have: []).filter { running.contains($0.name) }
-            .map { PendingStep(name: $0.name, detail: "running now") }
+            .map { PendingStep(name: $0.name, detail: "running now") } + stages
     }
 
     static func pending(goal: GoalModel?, criteria: Int, have: Set<String>) -> [PendingStep] {

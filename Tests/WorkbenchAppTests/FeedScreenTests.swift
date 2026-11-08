@@ -94,6 +94,9 @@ import WorkbenchCore
         ("decision", .decision("accepted")),
         ("pull-request", .pullRequest(number: 482, url: "https://github.com/example/repo/pull/482")),
         ("pr-review", .prReview(round: 1, verdict: "findings", ok: true)),
+        ("stage-clean", .stage(name: "design", round: 1, verdict: "clean", ok: true, proof: [])),
+        ("stage-findings", .stage(name: "design", round: 2, verdict: "fix", ok: true, proof: ["list.png"])),
+        ("stage-skipped", .stage(name: "design", round: 1, verdict: "skipped", ok: false, proof: [])),
         ("next", .next(step: .review, why: "Needs you · Review · turn 1 done")),
         ("next-done", .next(step: nil, why: "Nothing is left to do.")),
         ("notice-folded", .notice(.activityFolded(count: 950, refusals: 3))),
@@ -124,7 +127,7 @@ import WorkbenchCore
         #expect(
             seen == [
                 "userNote", "goalCard", "turn", "plan", "agentText", "toolGroup", "edit", "denied", "check", "judge", "verify",
-                "decision", "pullRequest", "prReview", "next", "notice",
+                "decision", "pullRequest", "prReview", "stage", "next", "notice",
             ])
     }
 
