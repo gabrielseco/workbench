@@ -244,6 +244,24 @@ SWIFT
     git -C "$dir/project" update-ref refs/remotes/origin/main "$(git -C "$dir/project" rev-parse HEAD)"
     git -C "$dir/project" reset -q --hard "$base"
   fi
+  # A scenario with a `rail` file (one name a line) has a rail of several projects: `@PROJECT@` is the scenario's own, `!name` a folder that
+  # is gone, any other a repository made beside it. The app is told the order (`WORKBENCH_APP_RAIL`); its preferences stay untouched.
+  local rail_env=()
+  if [[ -f "$fixture/rail" ]]; then
+    local listed="" entry place
+    while IFS= read -r entry; do
+      case "$entry" in
+        "") continue ;;
+        @PROJECT@) place="$dir/project" ;;
+        !*) place="$dir/gone/${entry#!}" ;;
+        *)
+          place="$dir/rail/$entry"
+          mkdir -p "$place/.workbench/threads" && git -C "$place" init -q -b main ;;
+      esac
+      listed="${listed:+$listed:}$place"
+    done <"$fixture/rail"
+    rail_env=(WORKBENCH_APP_RAIL="$listed")
+  fi
   # A scenario that shows how proofs are judged ships the project's config too. `@EDITOR_STUB@` is an editor that only writes down
   # what it was asked to open, so a button that starts the editor can be pressed without one.
   if [[ -f "$fixture/config.toml" ]]; then
@@ -289,7 +307,7 @@ STUB
   env -i HOME="$HOME" USER="${USER:-}" LOGNAME="${LOGNAME:-${USER:-}}" SHELL="${SHELL:-/bin/zsh}" TMPDIR="${TMPDIR:-/tmp}" \
     LANG="${LANG:-en_US.UTF-8}" PATH="/usr/bin:/bin:/usr/sbin:/sbin" WORKBENCH_APP_PROJECT="$dir/project" \
     WORKBENCH_APP_GH="$dir/bin/gh-stub" \
-    ${timer_env[@]+"${timer_env[@]}"} \
+    ${timer_env[@]+"${timer_env[@]}"} ${rail_env[@]+"${rail_env[@]}"} \
     ${WORKBENCH_SKIP_LOGIN_PATH:+WORKBENCH_SKIP_LOGIN_PATH="$WORKBENCH_SKIP_LOGIN_PATH"} \
     ${VERIFY_APPEARANCE:+WORKBENCH_APPEARANCE="$VERIFY_APPEARANCE"} \
     ${VERIFY_OPEN:+WORKBENCH_APP_OPEN="$VERIFY_OPEN"} \

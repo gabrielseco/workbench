@@ -62,6 +62,7 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `pr-clean` | `pr-open` with a clean PR review at the head the stand-in reports: the primary button is `Merge`, disabled, then enabled when the stand-in's CI turns green (about 40 s) |
 | `many-threads` | the rail's limit: the oldest thread needs you (listed whatever its age), then fourteen finished ones (accepted, abandoned, discarded): the rail lists the newest ten and `Show 10 more` adds more |
 | `threads-at-once` | `max_active_threads = 3` and three active threads (P23): one that needs you (a turn ended, check passed), one with a turn going, and a draft. The rail lists all three with their own marks (draft ring, working spinner, needs-you amber); the newest, the draft, is selected |
+| `project-rail` | `needs-you` with a rail of five projects (P26): `api`, the open one, `mobile`, `docs` (its folder is gone: a dimmed tile) and `web`. The open project's tile carries its needs-you count; the others show none until their summaries are read. `Add project` opens the project card; a tile's right-click menu cannot be pressed by the harness |
 | `chat` | a chat before a goal (P22): the person's question and the agent's answer as message rows, a composer at the foot, `Make this a goal` enabled, `Send` disabled until something is typed. `Send` and `Discuss first` may be pressed: a chat turn is a real but small agent run on the fixture, and checking what a send does needs it. `Make this a goal` and `Draft the goal` start the goal agent (Codex usage): press them only when the change is about them |
 | `chat-replying` | the same chat with a second message whose turn has not ended: a `Replying…` row with `Stop`, the composer dimmed and disabled, `Make this a goal` disabled |
 | `chat-goal` | a chat that was made into a goal: an ordinary goal thread now (title from the goal, `Draft · not approved`), not the chat screen |
@@ -117,7 +118,7 @@ scripts/verify-app.sh stop <pid>          # always, also after a failure
   removes the build, the fixture copy and the settings. So if `start` printed no `pid=`, nothing is running and there is nothing to `stop`.
 - Every command refuses a pid that `start` did not print. `press` refuses `Choose project…` (the empty screen's button),
   `Choose folder…` (in the project card), `Event log` and `Open the event log`: they open a file panel or another app. A claim about those
-  buttons is checked by seeing that they are listed. The project pill (`Projects, now …`) can be pressed: it opens the project card.
+  buttons is checked by seeing that they are listed. The rail's `Add project` tile can be pressed: it opens the project card.
   `Doctor` can be pressed: it runs in the fixture project and reads `Problem` there (no config), which is the expected answer.
 - If a screenshot shows only a wallpaper, Screen Recording is missing for this terminal; `start` says so before it builds.
 - The app is launched with the Dock's environment (a bare `PATH`, nothing of the terminal's profile), and like a person's launch it asks the

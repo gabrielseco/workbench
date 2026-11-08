@@ -71,12 +71,14 @@ extension ProjectStore {
             refuse("\(URL(fileURLWithPath: path).lastPathComponent): it is not a usable git repository.")
             return
         }
-        await open(URL(fileURLWithPath: path))
+        if await open(URL(fileURLWithPath: path)) { pin(path) }
     }
 
     /// A row of the project card: the open project only closes the card, another is switched to; a refusal keeps the card up to say why.
     func pickRecent(_ path: String) async {
+        // Choosing a project from the card is adding it: the open one too, when its tile was taken off.
         guard path != project?.root.path else {
+            pin(path)
             pickingProject = false
             return
         }
@@ -88,7 +90,7 @@ extension ProjectStore {
         pickingProject = false
         guard let url = folderChooser() else { return }
         clearRefusal()
-        await open(url)
+        if await open(url), let opened = project { pin(opened.root.path) }
     }
 
     /// The card's rows for what is typed in its search field: a name or a path that contains it, in the list's order.

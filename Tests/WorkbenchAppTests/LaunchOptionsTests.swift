@@ -24,6 +24,8 @@ private final class SpyPreferences: Preferences, @unchecked Sendable {
         }
     }
 
+    var railProjects: [String]?
+
     var runSettings: Bool {
         get {
             reads += 1

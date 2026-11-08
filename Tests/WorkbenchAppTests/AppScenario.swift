@@ -32,7 +32,7 @@ enum AppScenario: String, CaseIterable {
     case taskThreads = "task-threads"
     case taskDone = "task-done"
     case threads, manyThreads = "many-threads", longCommands = "long-commands"
-    case threadsAtOnce = "threads-at-once"
+    case threadsAtOnce = "threads-at-once", projectRail = "project-rail"
     case chat
     case chatGoal = "chat-goal"
     case chatReplying = "chat-replying"
@@ -123,7 +123,7 @@ enum AppScenario: String, CaseIterable {
             try fixture.activity(id, ["type": "tool", "name": "Read", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "permission_denied", "tool": "Bash", "input": "git push origin main"])
-        case .needsYou, .reviewChanges, .reviewBaseMoved:
+        case .needsYou, .reviewChanges, .reviewBaseMoved, .projectRail:
             try await fixture.addThread(id, approved: true, title: Self.title)
             if hasWorktree {
                 // verify-app.sh start fills in the base commit and the worktree it makes.

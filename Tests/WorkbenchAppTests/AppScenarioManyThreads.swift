@@ -34,6 +34,10 @@ extension AppScenario {
         ]
     }
 
+    /// The projects of the rail, in order, by name (`rail` in the scenario's folder): `@PROJECT@` is the scenario's own project, a name
+    /// with `!` is a folder that is gone, any other is a repository `verify-app.sh start` makes beside it. Empty: the rail is the project alone.
+    var railNames: [String] { self == .projectRail ? ["api", "@PROJECT@", "mobile", "!docs", "web"] : [] }
+
     /// The pull requests the stand-in `gh` says are merged (`merged-prs`, one number a line); the rest it says are open.
     var mergedPullRequests: [Int] { self == .prMerged ? [480] : [] }
 
@@ -41,6 +45,10 @@ extension AppScenario {
     func writeSideFiles(into target: URL) throws {
         if let config {
             try config.write(to: target.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+        }
+        if !railNames.isEmpty {
+            try (railNames.joined(separator: "\n") + "\n").write(
+                to: target.appendingPathComponent("rail"), atomically: true, encoding: .utf8)
         }
         if !mergedPullRequests.isEmpty {
             let lines = mergedPullRequests.map { "\($0)\n" }.joined()
