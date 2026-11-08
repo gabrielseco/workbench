@@ -190,9 +190,15 @@ criteria and the diff, at most 10); `review --json` has them as `commits` (`[{sh
 
 ### `sync`
 
-`sync [id | --thread <id>]` brings the base's new commits into the thread's branch, in its worktree. It fetches `origin/<base>`,
+`sync [id | --thread <id>] [--run [--budget <usd>]]` brings the base's new commits into the thread's branch, in its worktree. It fetches `origin/<base>`,
 commits any uncommitted work as `chore: save work before bringing <base> in` (so the merge starts clean), then merges. History is
 never rewritten. A conflict is left in progress in the worktree, with the markers in the files.
+
+With `--run`, after a merge or a conflict it starts a turn exactly as `send-back` does, with a note that says what moved, which files
+the thread and the new commits both changed and which hold conflict markers (the names are fenced as data). The check runs after
+the turn like after any turn, and the exit code is the turn's (`run`'s table: 0 succeeded, 3 stopped, 4 timed out, 5 over budget, 1
+failed); a conflict the turn resolved is therefore 0. With nothing to bring in it starts no turn (0). `--run` on a thread with no
+turn yet is refused (6) before anything is merged, and `--budget` without `--run` is a usage error (2).
 
 | Code | Kind | When |
 |---|---|---|

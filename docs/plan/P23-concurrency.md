@@ -107,9 +107,10 @@ on the old base is weak evidence once it has. So bring the base in with an agent
   conflict in progress in the worktree; `base.synced` records it. `status` and `review` say when the base moved and which of the
   thread's files it touched too (`base_moved` in the JSON). No agent runs yet: the conflict is resolved by hand or with a
   `send-back` whose note the command prints.
-- **Part 2, next:** the agent does it. `sync` starts a turn whose prompt names the moved base and the overlapping or conflicted files
+- **Part 2, first half built: `sync --run`.** The agent does it. `sync` starts a turn whose prompt names the moved base and the overlapping or conflicted files
   (untrusted text fenced as such), the check runs on the result as for any turn, and the review screen and the app say what the sync
-  changed. Ship shows the same movement as a note.
+  changed. Ship shows the same movement as a note. As built: `sync --run [--budget]` starts the turn through `send-back`'s path with
+  `SyncPrompt`'s note; the app's review line and button, and the note on `ship`, are the second half.
 
 ### 7. Soak and raise the default
 

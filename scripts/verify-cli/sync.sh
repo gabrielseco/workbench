@@ -67,6 +67,14 @@ shown "$SCRATCH/y0.out"
 check "sync with nothing to bring in: exit 0 and says so" "exit $RC: $(head -c 200 "$SCRATCH/y0.out")" \
     bash -c 'test "$1" = 0 && grep -q "has not moved" "$2"' _ "$RC" "$SCRATCH/y0.out"
 
+# `--run` starts a turn from the sync's note, so a thread with no turn yet is refused before anything is merged (the paid half of
+# `--run` is scripts/verify-cli/sync-run.sh); `--budget` belongs to that turn.
+wbp "$SCRATCH/r0.out" sync --run
+check "sync --run on a thread with no turn: refused (exit 6) before merging" "exit $RC: $(head -c 200 "$SCRATCH/r0.out")" \
+    bash -c 'test "$1" = 6 && ! git -C "$2" rev-parse -q --verify MERGE_HEAD >/dev/null' _ "$RC" "$WT"
+wbp "$SCRATCH/r1.out" sync --budget 1
+check "sync --budget without --run: usage error (exit 2)" "exit $RC: $(head -c 200 "$SCRATCH/r1.out")" test "$RC" = 2
+
 # --- 2. a new file on the base: merges cleanly -------------------------------------------------------------
 
 land landed.txt "theirs" || die "the other clone could not push"

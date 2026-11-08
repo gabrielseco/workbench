@@ -67,9 +67,11 @@ let workbenchUsage = """
       review [id] [--patch <path>] [--fetch]  the goal's criteria, the diff, the check and denied tools; changes nothing
       next [id]                  what is still due on the thread, from its log: the judge, each review stage that applies to the
                                  change, then accept or ship; the first line is the next step; runs nothing, blocks nothing
-      sync [id]                  bring the base's new commits into the thread: fetch origin/<base>, commit uncommitted work on
-                                 its own, merge (history is never rewritten, so no force-push); a conflict is left in the
-                                 worktree for you or a send-back to resolve; exit 0 merged or up to date, 1 conflicts
+      sync [id] [--run [--budget <usd>]]  bring the base's new commits into the thread: fetch origin/<base>, commit uncommitted
+                                 work on its own, merge (history is never rewritten, so no force-push); a conflict is left in
+                                 the worktree for you or a send-back to resolve; exit 0 merged or up to date, 1 conflicts;
+                                 --run then starts a turn (as send-back does) from a note on what moved and what conflicted,
+                                 and the check runs on the result; the exit code is the turn's; nothing to bring in starts none
       open [id] [--editor <name-or-command>] [--print] [--goal | --diff]
                                  open the thread's worktree in an editor to read what the run changed (--goal: its
                                  goal file instead, which a draft has before any run; --diff: a folder where the
