@@ -94,7 +94,9 @@ reason per commit, on purpose. A new commit is a new identity.
   core first. The app target has no `Process`, `Subprocess`, `posix_spawn` or shell strings; `scripts/check-banned-apis.sh` is
   extended to `Sources/WorkbenchApp/` in task 0, and that edit is the only change to the script.
 - **Runs live in the app's process.** Closing the window does not end a run: the app stays resident for the menu bar (the Run
-  mockup says so). **Stop is `ThreadRunner.stop()` on the runner the app owns**, which records `stopped` itself. `requestStop(id:)` sends SIGTERM
+  mockup says so). While it is open, in the background too, it keeps the Mac from idle sleep (`SleepPrevention`: one
+  `PreventUserIdleSystemSleep` assertion in the app's process, taken at launch and released at quit; the display still sleeps, and
+  sleep the user asks for still happens; a failure to take it is logged under `dev.rogal.workbench`/`sleep-prevention` and the app goes on). **Stop is `ThreadRunner.stop()` on the runner the app owns**, which records `stopped` itself. `requestStop(id:)` sends SIGTERM
   to the pid in `runner.json`, so it is used only for a run another process holds, and is never sent when that pid is the
   app's own (the CLI's SIGTERM handler lives in the CLI target; the app has none and installs none for its own runs).
   Quitting (⌘Q) with a live run asks, then calls `stop()` and waits up to 6 s for the recorded `stopped`; a crash or force quit leaves the turn for `recoverOrphanedTurn()` on the next open, which the app shows as
