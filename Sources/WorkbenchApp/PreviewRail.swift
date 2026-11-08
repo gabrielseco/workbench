@@ -6,6 +6,7 @@ import WorkbenchCore
 struct PreviewRail: View {
     var store: ProjectStore
     static let width: CGFloat = 288
+    @FocusState private var focused: Bool
 
     var body: some View {
         let snapshot = store.tasks.snapshot(for: store.project)
@@ -24,6 +25,10 @@ struct PreviewRail: View {
             // One focus stop for the whole rail, so the arrows walk the threads and on into the tasks instead of stopping at the section edge.
             .focusable()
             .focusEffectDisabled()
+            .focused($focused)
+            .onChange(of: focused) { store.listFocused = focused }
+            .onDisappear { store.listFocused = false }
+            .listHasKeys(focused)
             .onMoveCommand { direction in
                 guard direction == .up || direction == .down else { return }
                 if store.allProjects {

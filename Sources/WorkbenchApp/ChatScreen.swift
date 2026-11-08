@@ -245,10 +245,10 @@ struct ChatComposer: View {
         .disabled(!state.canType)
         .opacity(state.replying ? 0.6 : 1)
         // A box that takes no typing does not keep the caret.
-        .onChange(of: state.canType) { focused = state.canType }
+        .onChange(of: state.canType) { focused = state.canType && !store.listHasKeys }
         .task {
             try? await Task.sleep(for: .milliseconds(40))
-            focused = state.canType && !store.railFocused
+            focused = state.canType && !store.listHasKeys
         }
     }
 

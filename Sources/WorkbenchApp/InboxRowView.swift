@@ -39,6 +39,7 @@ struct InboxRowView: View {
             .padding(.horizontal, Space.m).padding(.vertical, Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(selected ? Theme.raised : .clear, in: RoundedRectangle(cornerRadius: Radius.box))
+            .selectedFocusRing(selected, radius: Radius.box)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -32,6 +32,28 @@ import WorkbenchCore
         #expect(none.accessibility == "Inbox", "nothing to say when nothing asks")
     }
 
+    @Test func theArrowsStepOverTheSegmentsAndStopAtTheEnds() {
+        let ids = [ProjectStore.inboxSegment, ProjectStore.automationsSegment]
+        #expect(SegmentedSwitch.neighbour(of: ids[0], in: ids, left: false) == ids[1])
+        #expect(SegmentedSwitch.neighbour(of: ids[1], in: ids, left: true) == ids[0])
+        #expect(SegmentedSwitch.neighbour(of: ids[0], in: ids, left: true) == nil)
+        #expect(SegmentedSwitch.neighbour(of: ids[1], in: ids, left: false) == nil)
+        #expect(SegmentedSwitch.neighbour(of: "gone", in: ids, left: false) == nil)
+    }
+
+    @Test func aScreenOpeningUnderAnyListWithTheKeysDoesNotTakeTheCaret() async throws {
+        let store = try await store()
+        #expect(!store.listHasKeys)
+        store.listFocused = true
+        #expect(store.listHasKeys, "the thread or automations list")
+        store.listFocused = false
+        store.switchFocused = true
+        #expect(store.listHasKeys, "the top bar's switch")
+        store.switchFocused = false
+        store.railFocused = true
+        #expect(store.listHasKeys, "the project rail")
+    }
+
     @Test func theSelectionIsTheWindowMode() async throws {
         let store = try await store()
         #expect(store.switchSelection == ProjectStore.inboxSegment)

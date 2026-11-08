@@ -118,4 +118,13 @@ if [ -n "$hits" ]; then
     echo "       case there, not a field styled in a view. See AGENTS.md, Conventions." >&2
     status=1
 fi
+# A focus stop that hides the system's ring must draw its own (DESIGN.md, "Where the keys are is always drawn"): `.listHasKeys(` for a list
+# whose items draw `.selectedFocusRing`, or `.focusRing(` itself.
+for f in $(grep -rlF --include='*.swift' '.focusEffectDisabled()' Sources/WorkbenchApp 2>/dev/null); do
+    if ! grep -qE '\.listHasKeys\(|\.focusRing\(' "$f"; then
+        echo "$f: .focusEffectDisabled() with no .listHasKeys(...) or .focusRing(...)"
+        echo "error: a focus stop that hides the system ring must draw its own: see FocusRing.swift" >&2
+        status=1
+    fi
+done
 exit $status

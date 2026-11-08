@@ -15,6 +15,9 @@ extension ProjectStore {
         tasks.snapshot(for: project)?.entries.map(RailRow.task).filter { $0.mark == .broken }.count ?? 0
     }
 
+    /// A rail or list is being walked with the keys: a screen that opens under it must not take the caret.
+    var listHasKeys: Bool { railFocused || listFocused || switchFocused }
+
     var switchSelection: String { mode == .tasks ? Self.automationsSegment : Self.inboxSegment }
 
     func switchSegments() -> [SwitchSegment] {

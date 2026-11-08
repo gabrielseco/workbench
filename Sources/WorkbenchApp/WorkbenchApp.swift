@@ -62,6 +62,14 @@ import WorkbenchCore
                     .keyboardShortcut(.downArrow, modifiers: [.option, .command])
             }
             CommandGroup(after: .toolbar) {
+                // The top bar's switch, from the keyboard.
+                Button("Inbox") { store.chooseSwitch(ProjectStore.inboxSegment) }
+                    .keyboardShortcut("i", modifiers: .command)
+                    .disabled(store.project == nil)
+                Button("Automations") { store.chooseSwitch(ProjectStore.automationsSegment) }
+                    .keyboardShortcut("a", modifiers: [.shift, .command])
+                    .disabled(store.project == nil)
+                Divider()
                 Toggle("Run settings", isOn: Binding(get: { store.runSettingsShowing }, set: { _ in store.toggleRunSettings() }))
                     .keyboardShortcut("r", modifiers: [.option, .command])
             }

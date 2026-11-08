@@ -22,6 +22,7 @@ struct ProjectTile: View {
                 .frame(width: Self.side, height: Self.side)
                 .background(selected ? Theme.blue.opacity(0.18) : Theme.panel, in: shape)
                 .overlay(shape.strokeBorder(selected ? Theme.blue : Theme.line))
+                .selectedFocusRing(selected, radius: Radius.card)
                 .opacity(available ? 1 : 0.55)
         }
         .buttonStyle(.plain)

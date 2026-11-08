@@ -35,6 +35,16 @@ dir=$(tree other Other.swift 'struct A: View { var body: some View { MarkdownTex
 run "$dir" >/dev/null; [ "$?" = 0 ] || fail "another name ending in TextEditor( was refused"
 rm -rf "$dir"
 
+dir=$(tree blindstop Stop.swift 'struct A: View { var body: some View { VStack {}.focusable().focusEffectDisabled() } }')
+out=$(run "$dir"); code=$?
+[ "$code" = 1 ] || fail "a focus stop with no ring of its own passed ($code)"
+echo "$out" | grep -q "FocusRing.swift" || fail "the message does not say where the ring is: $out"
+rm -rf "$dir"
+
+dir=$(tree ringstop Stop.swift 'struct A: View { var body: some View { VStack {}.focusable().focusEffectDisabled().listHasKeys(f) } }')
+run "$dir" >/dev/null; [ "$?" = 0 ] || fail "a focus stop that draws its ring was refused"
+rm -rf "$dir"
+
 dir=$(tree prominent Bad.swift 'struct A: View { var body: some View { Button("x") {}.buttonStyle(.borderedProminent) } }')
 out=$(run "$dir"); code=$?
 [ "$code" = 1 ] || fail "a bare .borderedProminent passed ($code)"
