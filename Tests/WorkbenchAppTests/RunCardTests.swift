@@ -130,6 +130,16 @@ import WorkbenchCore
         #expect(shown(working: false, judge: true, verify: true).map(\.name) == ["Judge", "Verify"])
     }
 
+    @Test func aRunningReviewStageIsNamedAfterTheJudgeIsDone() {
+        let steps = goal([step("verifier"), step("judge")])
+        let shown = PendingStep.shown(
+            goal: steps, criteria: 3, working: false, judgeRunning: false, verifyRunning: false, stagesRunning: ["design"])
+        #expect(shown.map(\.name) == ["Design review"])
+        #expect(shown.map(\.detail) == ["running now"])
+        let none = PendingStep.shown(goal: steps, criteria: 3, working: false, judgeRunning: false, verifyRunning: false)
+        #expect(none.isEmpty)
+    }
+
     @Test func theLiveTailTakesAGroupsLatestCallsNotItsFirst() throws {
         let group = item(3, .toolGroup(count: 10, summaries: ["Read 1", "Read 2", "Read 3"]))
         let turn = FeedItem(id: "2", seq: 2, turn: 1, kind: working, latest: ["Read 8", "Read 9", "Read 10"])

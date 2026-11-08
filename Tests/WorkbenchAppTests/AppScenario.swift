@@ -23,7 +23,7 @@ enum AppScenario: String, CaseIterable {
     case discarded
     case reviewChanges = "review-changes"
     case reviewBaseMoved = "review-base-moved"
-    case verifyShots = "verify-shots"
+    case verifyShots = "verify-shots", designStage = "design-stage", designStageRunning = "design-stage-running"
     case corrupt
     case noThread = "no-thread"
     case draftGoal = "draft-goal"
@@ -143,7 +143,7 @@ enum AppScenario: String, CaseIterable {
             try fixture.append(id, .checkStarted, turn: 1)
             try fixture.append(
                 id, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a", "b", "c"], "tests_failed": []])
-        case .verifyShots:
+        case .verifyShots, .designStage, .designStageRunning:
             try await writeVerifyShots(in: fixture, id: id)
         case .accepted:
             try await fixture.addThread(id, approved: true, title: Self.title)
@@ -469,6 +469,22 @@ extension AppScenario {
             try fixture.append(id, .proofAdded, turn: 1, data: recorded)
         }
         try fixture.append(id, .verifierEnded, turn: 1, data: ["ok": true, "report": "All three criteria hold."])
+        if self != .verifyShots { try writeDesignStage(in: fixture, id: id, running: self == .designStageRunning) }
+    }
+}
+
+extension AppScenario {
+    /// After `verify-shots`, the project's `design` stage: it read the verifier's three screenshots and found something to fix. With
+    /// `running`, a second round has started and not finished, which is what the feed says while an auto run is still on it.
+    @MainActor fileprivate func writeDesignStage(in fixture: AppFixture, id: String, running: Bool) throws {
+        let names: JSONValue = .array(AppScenarioShots.all.map { .string("\($0.name).png") })
+        let first: JSONValue = ["stage": "design", "round": 1, "pr": 0, "head_sha": "abc1234", "proof": names]
+        try fixture.append(id, .reviewStageStarted, turn: 1, data: first)
+        let found: JSONValue = ["stage": "design", "round": 1, "verdict": "fix", "ok": true, "head_sha": "abc1234"]
+        try fixture.append(id, .reviewStageFinished, turn: 1, data: found)
+        guard running else { return }
+        let second: JSONValue = ["stage": "design", "round": 2, "pr": 0, "head_sha": "def5678", "proof": names]
+        try fixture.append(id, .reviewStageStarted, turn: 1, data: second)
     }
 }
 

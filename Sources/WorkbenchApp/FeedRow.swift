@@ -55,6 +55,8 @@ struct FeedRow: View {
                 symbol: "arrow.up.right.circle.fill", tint: Theme.green,
                 title: number.map { "Shipped as PR #\($0)" } ?? "Shipped", detail: url, inline: true, link: true)
         case .prReview(let round, let verdict, let ok): PRReviewRow(round: round, verdict: verdict, ok: ok)
+        case .stage(let name, let round, let verdict, let ok, _):
+            StageRow(name: name, round: round, verdict: verdict, ok: ok, shots: shots)
         case .next(let step, let why): NextCard(step: step, why: why)
         case .notice(let notice): NoticeRow(notice: notice)
         }
@@ -388,20 +390,10 @@ struct VerifyRow: View {
     var reason: String?
     var proofs: [String]
     var shots: [ProofShot] = []
-    @Environment(\.openScreenshotPreview) private var openPreview
 
     var body: some View {
         if ok, !shots.isEmpty {
-            VStack(alignment: .leading, spacing: Space.m) {
-                FeedLine(.passed, title: "Verify passed")
-                HStack(alignment: .top, spacing: Space.m) {
-                    ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
-                        ProofThumbnail(shot: shot) { openPreview(.proof(shots, at: index)) }
-                    }
-                }
-            }
-            .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
-            .card()
+            ShotsCard(shots: shots) { FeedLine(.passed, title: "Verify passed") }
         } else {
             line
         }
@@ -433,6 +425,56 @@ struct PRReviewRow: View {
         FeedLine(
             clean ? .passed : (ok ? .warning : .failed),
             title: "PR review" + (round.map { " round \($0)" } ?? "") + " · " + outcome, detail: nil)
+    }
+}
+
+/// A line with the screenshots under it, in one card: what Verify leaves and what a review stage was given.
+struct ShotsCard<Header: View>: View {
+    var shots: [ProofShot]
+    @ViewBuilder var header: Header
+    @Environment(\.openScreenshotPreview) private var openPreview
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.m) {
+            header
+            HStack(alignment: .top, spacing: Space.m) {
+                ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
+                    ProofThumbnail(shot: shot) { openPreview(.proof(shots, at: index)) }
+                }
+            }
+        }
+        .padding(Space.m).frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+}
+
+/// A review stage other than the PR review (the project's `design` stage): its verdict, and the screenshots it judged.
+struct StageRow: View {
+    var name: String
+    var round: Int?
+    var verdict: String?
+    var ok: Bool
+    var shots: [ProofShot] = []
+
+    static func title(name: String) -> String { name.prefix(1).uppercased() + name.dropFirst() + " review" }
+
+    static func outcome(ok: Bool, verdict: String?) -> String {
+        if verdict == ReviewStage.skippedVerdict { return "skipped, nothing it covers changed" }
+        return PRReviewRow.outcome(ok: ok, verdict: verdict)
+    }
+
+    var body: some View {
+        let skipped = verdict == ReviewStage.skippedVerdict
+        let clean = ok && verdict == "clean"
+        let line = FeedLine(
+            skipped ? .stopped : (clean ? .passed : (ok ? .warning : .failed)),
+            title: Self.title(name: name) + (round.map { " round \($0)" } ?? "") + " · " + Self.outcome(ok: ok, verdict: verdict),
+            detail: nil)
+        if shots.isEmpty {
+            line
+        } else {
+            ShotsCard(shots: shots) { line }
+        }
     }
 }
 

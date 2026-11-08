@@ -52,6 +52,8 @@ public struct FeedItem: Sendable, Equatable, Identifiable {
         case decision(String)
         case pullRequest(number: Int?, url: String?)
         case prReview(round: Int?, verdict: String?, ok: Bool)
+        /// A review stage other than the PR review (`design`): its name, round and verdict, and the screenshots it was given, by name.
+        case stage(name: String, round: Int?, verdict: String?, ok: Bool, proof: [String])
         /// The one next step and why, from the spine and attention; nil when nothing is left.
         case next(step: SpineStep?, why: String)
         case notice(Notice)

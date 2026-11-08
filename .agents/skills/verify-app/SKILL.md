@@ -66,6 +66,8 @@ what should now differ. Add one unchanged neighbour as a regression check. If no
 | `chat` | a chat before a goal (P22): the person's question and the agent's answer as message rows, a composer at the foot, `Make this a goal` enabled, `Send` disabled until something is typed. `Send` and `Discuss first` may be pressed: a chat turn is a real but small agent run on the fixture, and checking what a send does needs it. `Make this a goal` and `Draft the goal` start the goal agent (Codex usage): press them only when the change is about them |
 | `chat-replying` | the same chat with a second message whose turn has not ended: a `Replying…` row with `Stop`, the composer dimmed and disabled, `Make this a goal` disabled |
 | `chat-goal` | a chat that was made into a goal: an ordinary goal thread now (title from the goal, `Draft · not approved`), not the chat screen |
+| `design-stage` | `verify-shots` plus the project's `design` stage after it: `Design review round 1 · findings to fix` with the three screenshots it was given under it |
+| `design-stage-running` | `design-stage` with a second round started and not finished: the finished row stays, and `Design review` · `running now` shows under it |
 | `accepted` | accepted, no pull request: the finished banner with `Ship` and `New goal…`; `Ship` starts at once, with no confirmation, and runs a real preflight on the fixture repo, which has no `origin`, so it shows core's refusal and pushes nothing |
 | `cleaned` | merged and cleaned, a turn that reported no cost (`unknown`, never `$0.00`) |
 | `discarded` | a Codex turn that ended and was discarded: the finished banner with `New goal…`, `ran 4m12s`, `Files changed: unknown`, no "Review comes next" |
