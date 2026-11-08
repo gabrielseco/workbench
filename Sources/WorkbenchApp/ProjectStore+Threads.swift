@@ -146,26 +146,19 @@ extension ProjectStore {
 }
 
 extension ProjectStore {
-    /// How many threads the rail lists for the project on screen.
-    var railLimit: Int { railLimits[project?.root.path ?? ""] ?? RailModel.pageSize }
-
-    /// The thread the rail must list because it is what the window shows: the thread screen's, only while a thread is what is chosen. A task
+    /// The thread the inbox must list because it is what the window shows: the thread screen's, only while a thread is what is chosen. A task
     /// page, the new-thread screen or a New task screen over a thread that was open leaves it to the ordinary rules.
     var railShown: String? {
         guard mode == .thread, !newThread, case .thread(let snapshot) = screen else { return nil }
         return snapshot.id
     }
 
-    /// Lists another page of this project's threads.
-    func showMoreThreads() {
-        railLimits[project?.root.path ?? "", default: RailModel.pageSize] += RailModel.pageSize
-    }
+    /// Whether the Done section of the project on screen lists every finished thread.
+    var doneOpen: Bool { inboxDoneOpen.contains(project?.root.path ?? "") }
 
-    /// Whether `Show more` has been used, so `Show less` has something to undo.
-    var railExpanded: Bool { railLimit > RailModel.pageSize }
-
-    /// Back to the first page of threads.
-    func showFewerThreads() {
-        railLimits[project?.root.path ?? ""] = nil
+    /// Opens or closes the Done section of the project on screen.
+    func toggleDoneOpen() {
+        let key = project?.root.path ?? ""
+        if inboxDoneOpen.contains(key) { inboxDoneOpen.remove(key) } else { inboxDoneOpen.insert(key) }
     }
 }

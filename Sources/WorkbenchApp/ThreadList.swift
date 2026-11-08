@@ -17,6 +17,11 @@ struct ThreadRow: Equatable, Identifiable, Sendable {
     var line: String
     /// The number of the shipped pull request whose fate only GitHub knows (accepted, not cleaned): what the store reads for the row.
     var pullRequest: Int?
+    /// What the thread has cost, as the row shows it: `$1.88`, or `unknown` when the core says it cannot tell; nil before any turn.
+    var spend: String?
+    /// The thread is over: thrown away, abandoned, cleaned, or its pull request merged or closed. One accepted and not yet shipped, or with
+    /// its pull request still open, is not: it waits.
+    var finished = false
 }
 
 /// The project's threads for the list: the newest `ThreadListLoader.maxRows`, and how many older ones there are.
@@ -150,9 +155,12 @@ enum ThreadListLoader {
         let title = chatTitle(state: state, id: id)
         let mark = ThreadMark(activity: .chat(state: state, damaged: damaged))
         if damaged { return ThreadRow(id: id, title: title, mark: mark, line: "The log cannot be read") }
-        if let decision = state.decision { return ThreadRow(id: id, title: title, mark: mark, line: decision.capitalized) }
-        if state.chat?.open == true { return ThreadRow(id: id, title: title, mark: mark, line: "Chat · replying") }
-        return ThreadRow(id: id, title: title, mark: mark, line: "Chat")
+        let spend = spendText(state)
+        if let decision = state.decision {
+            return ThreadRow(id: id, title: title, mark: mark, line: decision.capitalized, spend: spend, finished: true)
+        }
+        if state.chat?.open == true { return ThreadRow(id: id, title: title, mark: mark, line: "Chat · replying", spend: spend) }
+        return ThreadRow(id: id, title: title, mark: mark, line: "Chat", spend: spend)
     }
 
     /// One thread's row: its log replayed once, the way the toolbar's pill is derived, with what GitHub said of its pull request when
@@ -197,7 +205,21 @@ enum ThreadListLoader {
         let unsettled = state.decision == "accepted" && !state.cleaned && outcome == .open
         return ThreadRow(
             id: id, title: title.flatMap { $0.isEmpty ? nil : $0 } ?? id, mark: mark, line: line,
-            pullRequest: unsettled ? recorded?.number : nil)
+            pullRequest: unsettled ? recorded?.number : nil, spend: spendText(state),
+            finished: isFinished(state: state, outcome: outcome))
+    }
+
+    /// `$1.88`, `unknown` when a cost could not be told, nil for a thread that has not run.
+    static func spendText(_ state: ThreadState) -> String? {
+        guard state.lastTurn > 0 else { return nil }
+        guard let cost = state.knownCostUSD else { return "unknown" }
+        return String(format: "$%.2f", cost)
+    }
+
+    /// Over, as the inbox's Done section means it: not waiting on a person, a run or GitHub.
+    static func isFinished(state: ThreadState, outcome: PullRequestOutcome) -> Bool {
+        if state.cleaned || state.isMerged || outcome != .open { return true }
+        return state.decision == "discarded" || state.decision == "abandoned"
     }
 
     /// What GitHub said became of the pull request; open when nothing was read, so a merge is only ever one GitHub confirmed.

@@ -104,10 +104,10 @@ import WorkbenchCore
     @Test func theRailShowsANewThreadRowFirstAndSelectedWhileItIsOpen() async throws {
         let (store, _) = try await store()
         let listing = store.threads.listing
-        #expect(RailModel.derive(listing: listing, tasks: nil).composing == nil)
-        let model = RailModel.derive(listing: listing, tasks: nil, composing: true)
+        #expect(InboxModel.derive(listing: listing, tasks: nil).composing == nil)
+        let model = InboxModel.derive(listing: listing, tasks: nil, composing: true)
         #expect(model.composing?.title == "New thread" && model.composing?.line == "Type to start · free")
-        #expect(model.composing?.id != model.threads.first?.id)
+        #expect(model.composing?.id != model.threadRows.first?.id)
     }
 
     @Test func theFooterAndTheToolbarSayNothingIsRunningWhileItIsOpen() async throws {

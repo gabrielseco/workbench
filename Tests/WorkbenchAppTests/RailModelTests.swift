@@ -41,21 +41,25 @@ import WorkbenchCore
     @Test func theRailListsTheThreadsThenTheTasksWithTheirCount() async throws {
         let shown = try await listing()
         let tasks = try await tasksSnapshot()
-        let model = RailModel.derive(listing: shown, tasks: tasks)
-        #expect(model.threads.map(\.key) == shown.rows.map(\.id) && model.threads.allSatisfy { $0.kind == .thread })
+        let inbox = InboxModel.derive(listing: shown, tasks: tasks, doneOpen: true)
+        let model = RailModel.derive(tasks: tasks)
+        let keys = inbox.threadRows.map(\.key)
+        #expect(Set(keys) == Set(shown.rows.map(\.id)))
+        #expect(inbox.threadRows.allSatisfy { $0.kind == .thread })
         #expect(model.tasks.map(\.key) == tasks.entries.map(\.id) && model.tasks.allSatisfy { $0.kind == .task })
         #expect(model.scheduledHeader == "SCHEDULED · \(tasks.entries.count)" && model.scheduledNote == nil)
-        #expect(Set(model.threads.map(\.id)).isDisjoint(with: model.tasks.map(\.id)), "a thread and a task never share a row id")
+        let asking = tasks.entries.map(RailRow.task).filter { $0.mark == .needsYou }
+        #expect(inbox.listed.filter(\.isAutomation).count == asking.count, "a task that asks is in the inbox as well")
+        #expect(Set(inbox.threadRows.map(\.id)).isDisjoint(with: model.tasks.map(\.id)), "a thread and a task never share an id")
     }
 
     @Test func aProjectWithNoTasksSaysSoAndOneNotReadYetSaysThatInstead() async throws {
-        let shown = try await listing()
         let empty = try await tasksSnapshot(.tasksEmpty)
         #expect(empty.entries.isEmpty, "the tasks-empty fixture has none")
-        let none = RailModel.derive(listing: shown, tasks: empty)
+        let none = RailModel.derive(tasks: empty)
         #expect(none.scheduledHeader == "SCHEDULED · 0")
         #expect(none.scheduledNote?.hasPrefix("No scheduled tasks.") == true)
-        let unread = RailModel.derive(listing: shown, tasks: nil)
+        let unread = RailModel.derive(tasks: nil)
         #expect(unread.scheduledNote == "Reading…", "not read yet is not the same as none")
     }
 
@@ -79,119 +83,118 @@ import WorkbenchCore
 
     @Test func taskThreadsAreNotInTheRail() async throws {
         let shown = ThreadListing(rows: [thread("mine", .idle), thread("t-done", .done), thread("t-gone", .idle)], older: 3)
-        let model = RailModel.derive(listing: shown, tasks: try await snapshot(naming: ["t-done", "t-gone"]))
-        // A finished thread a task's run made is listed nowhere: not in THREADS, and nothing hangs under the task.
-        #expect(model.threads.map(\.key) == ["mine"] && model.older == 3 && model.hidden == 0)
-        #expect(model.tasks.map(\.kind).allSatisfy { $0 == .task }, "the tasks are rows of their own, nothing under them")
+        let tasks = try await snapshot(naming: ["t-done", "t-gone"])
+        let model = InboxModel.derive(listing: shown, tasks: tasks)
+        // A finished thread a task's run made is listed nowhere: not in the inbox, and nothing hangs under the task.
+        #expect(model.threadRows.map(\.key) == ["mine"] && model.older == 3)
+        #expect(RailModel.derive(tasks: tasks).tasks.map(\.kind).allSatisfy { $0 == .task }, "the tasks are rows of their own")
         // One that is working, needs you or is broken stays where it is seen.
         let marks: [ThreadMark] = [.working, .needsYou, .broken]
         let active = ThreadListing(rows: marks.map { thread("t-\($0.rawValue)", $0) })
-        let kept = RailModel.derive(listing: active, tasks: try await snapshot(naming: active.rows.map(\.id)))
-        #expect(kept.threads.map(\.key) == active.rows.map(\.id))
+        let kept = InboxModel.derive(listing: active, tasks: try await snapshot(naming: active.rows.map(\.id)))
+        #expect(Set(kept.threadRows.map(\.key)) == Set(active.rows.map(\.id)))
         // And once it ends it goes, with the rest of its task's runs.
         let ended = ThreadListing(rows: [thread("t-working", .done)])
-        #expect(RailModel.derive(listing: ended, tasks: try await snapshot(naming: ["t-working"])).threads.isEmpty)
+        #expect(InboxModel.derive(listing: ended, tasks: try await snapshot(naming: ["t-working"])).threadRows.isEmpty)
     }
 
     @Test func theShownTaskThreadIsListed() async throws {
         let shown = ThreadListing(rows: [thread("mine", .idle), thread("t-done", .done), thread("t-other", .done)])
         let tasks = try await snapshot(naming: ["t-done", "t-other"])
         // Reached by Open thread on a run: it is listed while it is on screen, so what is selected can be seen, and only that one.
-        let model = RailModel.derive(listing: shown, tasks: tasks, shown: "t-done")
-        #expect(model.threads.map(\.key) == ["mine", "t-done"])
+        let model = InboxModel.derive(listing: shown, tasks: tasks, shown: "t-done")
+        #expect(model.threadRows.map(\.key) == ["mine", "t-done"])
         // Another row is chosen: it drops out again.
-        #expect(RailModel.derive(listing: shown, tasks: tasks, shown: "mine").threads.map(\.key) == ["mine"])
+        #expect(InboxModel.derive(listing: shown, tasks: tasks, shown: "mine").threadRows.map(\.key) == ["mine"])
     }
 
     @Test func aThreadYouStartedStaysEvenWhenItIsNamedLikeATask() async throws {
         let shown = ThreadListing(rows: [thread("bump-contract-details", .done), thread("update-docs", .idle)])
-        let model = RailModel.derive(listing: shown, tasks: try await snapshot(naming: ["some-other-thread"]))
-        #expect(model.threads.map(\.key) == ["bump-contract-details", "update-docs"])
+        let model = InboxModel.derive(listing: shown, tasks: try await snapshot(naming: ["some-other-thread"]))
+        #expect(model.threadRows.map(\.key) == ["bump-contract-details", "update-docs"])
     }
 
     @Test func nothingIsHiddenWhileTheTasksAreNotRead() {
         let shown = ThreadListing(rows: [thread("a", .done), thread("b", .idle)])
-        let model = RailModel.derive(listing: shown, tasks: nil)
-        #expect(model.threads.map(\.key) == ["a", "b"])
+        let model = InboxModel.derive(listing: shown, tasks: nil)
+        #expect(model.threadRows.map(\.key) == ["a", "b"])
     }
 
     @Test func theThreadsListIsEmptyWhenEveryThreadBelongsToATask() async throws {
         let shown = ThreadListing(rows: [thread("a", .done)])
-        let model = RailModel.derive(listing: shown, tasks: try await snapshot(naming: ["a"]))
-        #expect(model.threads.isEmpty, "the rail then says No threads yet. rather than listing none")
+        let model = InboxModel.derive(listing: shown, tasks: try await snapshot(naming: ["a"]))
+        #expect(model.threadRows.isEmpty && model.finishedCount == 0, "the rail then says No threads yet.")
     }
 
-    // MARK: Ten at a time
+    // MARK: Sections
 
-    private func many(_ count: Int, pinned: [Int: ThreadMark] = [:]) -> ThreadListing {
-        ThreadListing(rows: (0..<count).map { thread("t\($0)", pinned[$0] ?? .done) })
+    private func finished(_ id: String, _ mark: ThreadMark = .done) -> ThreadRow {
+        ThreadRow(id: id, title: id, mark: mark, line: "x", finished: true)
     }
 
-    @Test func initialLimitAndShowMore() {
-        // 25 threads, newest first; three old ones need you, are working or are broken, and an old one is on screen.
-        let shown = many(25, pinned: [12: .needsYou, 18: .working, 24: .broken])
-        let model = RailModel.derive(listing: shown, tasks: nil, shown: "t20")
-        #expect(model.threads.count == 10, "ten rows, the selected and the pinned ones among them")
-        #expect(model.threads.map(\.key) == ["t0", "t1", "t2", "t3", "t4", "t5", "t12", "t18", "t20", "t24"])
-        #expect(model.hidden == 15 && model.older == 0)
-        // Show more lists ten more, then the rest.
-        let more = RailModel.derive(listing: shown, tasks: nil, limit: 2 * RailModel.pageSize, shown: "t20")
-        #expect(more.threads.count == 20 && more.hidden == 5)
-        #expect(RailModel.derive(listing: shown, tasks: nil, limit: 3 * RailModel.pageSize).threads.count == 25)
-        // More pinned threads than room: still ten, the newest of them, with the one on screen.
-        let busy = many(15, pinned: Dictionary(uniqueKeysWithValues: (0..<15).map { ($0, ThreadMark.needsYou) }))
-        let capped = RailModel.derive(listing: busy, tasks: nil, shown: "t14")
-        #expect(capped.threads.map(\.key) == (0..<9).map { "t\($0)" } + ["t14"] && capped.hidden == 5)
+    @Test func threadsSortIntoNeedsYouWaitingAndDone() {
+        let rows = [
+            thread("asks", .needsYou), thread("works", .working), finished("over"), thread("broke", .broken),
+            thread("drafts", .idle), finished("thrown", .idle),
+        ]
+        let model = InboxModel.derive(listing: ThreadListing(rows: rows), tasks: nil, doneOpen: true)
+        #expect(model.needsYou.map(\.key) == ["asks", "broke"], "a broken thread needs you: it cannot go on without a person")
+        #expect(model.waiting.map(\.key) == ["works", "drafts"])
+        #expect(model.done.map(\.key) == ["over", "thrown"] && model.doneHidden == 0)
+        #expect(model.listed.map(\.key) == ["asks", "broke", "works", "drafts", "over", "thrown"], "drawn in that order")
+        #expect(Set(model.listed.map(\.id)).count == rows.count, "each thread is in exactly one section")
     }
 
-    @Test func showMoreAddsTen() {
-        let shown = many(25)
-        var limit = RailModel.pageSize
-        var counts: [(listed: Int, hidden: Int)] = []
-        for _ in 0..<4 {
-            let model = RailModel.derive(listing: shown, tasks: nil, limit: limit)
-            counts.append((model.threads.count, model.hidden))
-            limit += RailModel.pageSize
-        }
-        #expect(counts.map(\.listed) == [10, 20, 25, 25] && counts.map(\.hidden) == [15, 5, 0, 0])
-        // Ten or fewer: no line to press.
-        #expect(RailModel.derive(listing: many(10), tasks: nil).hidden == 0)
-        #expect(RailModel.derive(listing: many(3), tasks: nil).hidden == 0)
-        #expect(RailModel.derive(listing: many(0), tasks: nil).threads.isEmpty)
+    @Test func doneIsCollapsedToACountUntilItIsOpened() {
+        let rows = [thread("asks", .needsYou)] + (0..<12).map { finished("f\($0)") }
+        let closed = InboxModel.derive(listing: ThreadListing(rows: rows), tasks: nil)
+        #expect(closed.done.isEmpty && closed.doneHidden == 12 && closed.finishedCount == 12)
+        #expect(closed.listed.map(\.key) == ["asks"], "the finished are not rows until asked for")
+        let open = InboxModel.derive(listing: ThreadListing(rows: rows), tasks: nil, doneOpen: true)
+        #expect(open.done.count == 12 && open.doneHidden == 0 && open.finishedCount == 12)
+        // The one on screen is listed even while Done is closed, so what is selected can be seen.
+        let shown = InboxModel.derive(listing: ThreadListing(rows: rows), tasks: nil, shown: "f7")
+        #expect(shown.done.map(\.key) == ["f7"] && shown.doneHidden == 11 && shown.finishedCount == 12)
     }
 
-    @Test func theStoreRemembersHowManyForTheSession() async throws {
+    @Test func aNeedsYouTaskIsAnAutoRowAmongTheThreadsThatNeedYou() async throws {
+        var tasks = try await snapshot(naming: [])
+        let at = try #require(tasks.entries.firstIndex { $0.id == "bump-contract-details" })
+        tasks.entries[at].summary.approval = .never
+        let asking = tasks.entries.map(RailRow.task).filter { $0.mark == .needsYou }.map(\.key)
+        #expect(asking.contains("bump-contract-details"))
+        let model = InboxModel.derive(listing: ThreadListing(rows: [thread("asks", .needsYou)]), tasks: tasks)
+        let autos = model.needsYou.filter(\.isAutomation)
+        #expect(model.needsYou.first?.key == "asks", "the threads first")
+        #expect(autos.map(\.key) == asking, "every task that asks, after them")
+        #expect(autos.allSatisfy { $0.mark == .needsYou && $0.spend == nil })
+        #expect(autos.first?.accessibility.hasSuffix("automation") == true, "told in words, not by the tag alone")
+        // A task that asks nothing is not in the inbox: it stays in Scheduled.
+        let quiet = InboxModel.derive(listing: ThreadListing(rows: []), tasks: try await tasksSnapshot(.tasksEmpty))
+        #expect(quiet.listed.isEmpty)
+    }
+
+    @Test func theStoreRemembersWhichProjectsHaveDoneOpen() async throws {
         let fixture = try await AppFixture()
         keptRailFixtures.append(fixture)
         try await AppScenario.threads.build(in: fixture)
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: GoalActions())
         #expect(await store.open(fixture.root))
-        #expect(store.railLimit == 10)
-        store.showMoreThreads()
-        store.showMoreThreads()
-        #expect(store.railLimit == 30 && store.railExpanded)
-        // Show less goes back to the first page in one press, however many pages were added.
-        store.showFewerThreads()
-        #expect(store.railLimit == 10 && !store.railExpanded)
+        #expect(!store.doneOpen)
+        store.toggleDoneOpen()
+        #expect(store.doneOpen)
+        store.toggleDoneOpen()
+        #expect(!store.doneOpen)
     }
 
-    @Test func theShownThreadIsAlwaysListed() {
-        let shown = many(25)
-        // An old thread chosen from the menu bar or a link: it is listed though the ten do not reach it, in one of the ten places.
-        let model = RailModel.derive(listing: shown, tasks: nil, shown: "t20")
-        #expect(model.threads.map(\.key) == (0..<9).map { "t\($0)" } + ["t20"])
-        #expect(model.hidden == 15)
-        // One inside the ten is just listed.
-        #expect(RailModel.derive(listing: shown, tasks: nil, shown: "t3").hidden == 15)
-    }
-
-    @Test func arrowKeysSkipFoldedRows() {
-        let model = RailModel.derive(listing: many(25), tasks: nil)
-        let listed = model.threads.map(\.key)
-        #expect(ThreadListView.neighbour(of: "t9", in: listed, up: false) == nil, "the last listed row has none below it")
-        #expect(ThreadListView.neighbour(of: "t5", in: listed, up: false) == "t6")
-        #expect(ThreadListView.neighbour(of: "t0", in: listed, up: true) == nil)
-        #expect(!listed.contains("t10"), "a folded row is never what an arrow key lands on")
+    @Test func arrowKeysFollowTheListedRows() {
+        let rows = [thread("a", .needsYou), thread("b", .working)] + (0..<5).map { finished("f\($0)") }
+        let model = InboxModel.derive(listing: ThreadListing(rows: rows), tasks: nil)
+        let listed = model.listed.map(\.key)
+        #expect(InboxModel.neighbour(of: "b", in: listed, up: false) == nil, "the last listed row has none below it")
+        #expect(InboxModel.neighbour(of: "a", in: listed, up: false) == "b")
+        #expect(InboxModel.neighbour(of: "a", in: listed, up: true) == nil)
+        #expect(!listed.contains("f0"), "a folded row is never what an arrow key lands on")
     }
 
     // MARK: Rows
@@ -318,10 +321,10 @@ import WorkbenchCore
     }
 
     @Test func theOlderLineNamesTheCommandThatReachesThem() {
-        #expect(RailModel.olderHelp(1).hasPrefix("1 older thread is past"), "one is singular")
-        #expect(RailModel.olderHelp(10).hasPrefix("10 older threads are past"))
+        #expect(InboxModel.olderHelp(1).hasPrefix("1 older thread is past"), "one is singular")
+        #expect(InboxModel.olderHelp(10).hasPrefix("10 older threads are past"))
         for count in [1, 10] {
-            let help = RailModel.olderHelp(count)
+            let help = InboxModel.olderHelp(count)
             #expect(help.contains("workbench status --all") && help.contains("workbench log <id>"), "\(help)")
         }
     }

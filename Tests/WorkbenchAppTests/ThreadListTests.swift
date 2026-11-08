@@ -292,11 +292,11 @@ import WorkbenchCore
 
     @Test func theArrowKeysStepToTheNeighbourAndStopAtTheEnds() {
         let ids = ["a", "b", "c"]
-        #expect(ThreadListView.neighbour(of: "b", in: ids, up: true) == "a")
-        #expect(ThreadListView.neighbour(of: "b", in: ids, up: false) == "c")
-        #expect(ThreadListView.neighbour(of: "a", in: ids, up: true) == nil)
-        #expect(ThreadListView.neighbour(of: "c", in: ids, up: false) == nil)
-        #expect(ThreadListView.neighbour(of: nil, in: ids, up: false) == nil)
+        #expect(InboxModel.neighbour(of: "b", in: ids, up: true) == "a")
+        #expect(InboxModel.neighbour(of: "b", in: ids, up: false) == "c")
+        #expect(InboxModel.neighbour(of: "a", in: ids, up: true) == nil)
+        #expect(InboxModel.neighbour(of: "c", in: ids, up: false) == nil)
+        #expect(InboxModel.neighbour(of: nil, in: ids, up: false) == nil)
     }
 
     @Test func whatWasReadForOneProjectIsNotUsedForAnother() async throws {

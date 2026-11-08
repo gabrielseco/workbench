@@ -1,56 +1,5 @@
 import SwiftUI
 
-/// The project's threads in the rail (P22 slice 5): one row each, newest first. A click shows that thread; it starts and stops nothing.
-struct ThreadListView: View {
-    var store: ProjectStore
-    /// The rows of THREADS listed now, how many more `Show more` would add, and how many older ones the listing itself left out.
-    var rows: [RailRow]
-    var hidden: Int
-    var older: Int
-
-    /// The screen is what is observed, so the highlight follows it; `currentThread` is not.
-    private var shownThread: String? {
-        if case .thread(let snapshot) = store.screen { return snapshot.id }
-        return nil
-    }
-
-    /// The row above or below the one shown, for the arrow keys; nil at either end or when none is shown.
-    static func neighbour(of shown: String?, in ids: [String], up: Bool) -> String? {
-        guard let at = shown.flatMap({ ids.firstIndex(of: $0) }) else { return nil }
-        let next = up ? at - 1 : at + 1
-        return ids.indices.contains(next) ? ids[next] : nil
-    }
-
-    var body: some View {
-        let shown = shownThread
-        let selectedHere = store.mode == .thread && !store.newThread
-        LazyVStack(alignment: .leading, spacing: Space.xxs) {
-            ForEach(rows) { row in
-                RailRowView(row: row, selected: selectedHere && row.key == shown) {
-                    Task { await store.select(thread: row.key) }
-                }
-            }
-            if hidden > 0 {
-                Button("Show \(min(RailModel.pageSize, hidden)) more") { store.showMoreThreads() }
-                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                    .accessibilityLabel("Show \(min(RailModel.pageSize, hidden)) more threads, \(hidden) hidden")
-                    .help("\(hidden) more thread\(hidden == 1 ? "" : "s") are not listed")
-            }
-            if store.railExpanded {
-                Button("Show less") { store.showFewerThreads() }
-                    .buttonStyle(.link).textStyle(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                    .accessibilityLabel("Show fewer threads").help("Back to the newest \(RailModel.pageSize) threads")
-            }
-            if older > 0 {
-                Text(older == 1 ? "1 older thread" : "\(older) older threads")
-                    .role(.caption).padding(.horizontal, Space.s).padding(.top, Space.xs)
-                    .help(RailModel.olderHelp(older))
-            }
-        }
-        .accessibilityLabel("Threads")
-    }
-}
-
 /// A row of the rail as the artboards draw it: the mark at the left, the title on one line, and the state line under it, coloured by the
 /// mark. The selected row sits on a raised surface.
 struct RailRowView: View {

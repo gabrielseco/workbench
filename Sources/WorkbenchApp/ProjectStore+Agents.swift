@@ -12,6 +12,11 @@ enum AgentConfigState: Equatable {
     case read(AgentSetup)
 }
 
+extension AgentSetup {
+    /// "Codex · gpt-6.1-terra" for the run role; "Agents" when the config is unread, missing or has no such row.
+    static func runLabel(_ setup: AgentSetup?) -> String { setup?.row(.run)?.label ?? "Agents" }
+}
+
 extension ProjectStore {
     var agentSetup: AgentSetup? {
         if case .read(let setup) = agentConfig { return setup }
