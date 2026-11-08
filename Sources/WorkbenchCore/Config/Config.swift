@@ -98,7 +98,7 @@ public struct Config: Sendable, Equatable {
     /// How many ports each thread is given (`ThreadPorts`), for its run, check and setup. One is the first, `WORKBENCH_PORT`.
     public var ports: Int = 1
     /// How many threads may be active in the project at once (`ThreadStore.create` refuses past it). One keeps the single-thread rule.
-    public var maxActiveThreads: Int = 1
+    public var maxActiveThreads: Int = Config.defaultMaxActiveThreads
     /// How many threads may be running their check at once. A check over it is refused, never queued (`CheckSlot`).
     public var maxConcurrentChecks: Int = 2
     public var tools: ToolSet
@@ -405,6 +405,9 @@ public struct Config: Sendable, Equatable {
     /// The most threads that may be active at once; the plan sizes it for three.
     public static let maxActiveThreadsLimit = 8
 
+    /// Threads that may be active at once when the config does not say: the case P23 is sized for.
+    public static let defaultMaxActiveThreads = 3
+
     /// The `max_concurrent_checks` key: two when it is absent or after `fail` has been told.
     static func maxConcurrentChecksValue(_ entry: TOMLEntry?, fail: ReviewConfig.Fail) -> Int {
         guard let entry else { return 2 }
@@ -413,9 +416,9 @@ public struct Config: Sendable, Equatable {
         return 2
     }
 
-    /// The `max_active_threads` key: one when it is absent or after `fail` has been told.
+    /// The `max_active_threads` key: three (`defaultMaxActiveThreads`) when it is absent or after `fail` has been told.
     static func maxActiveThreadsValue(_ entry: TOMLEntry?, fail: ReviewConfig.Fail) -> Int {
-        guard let entry else { return 1 }
+        guard let entry else { return defaultMaxActiveThreads }
         if case .int(let n) = entry.value, (1...maxActiveThreadsLimit).contains(n) { return n }
         fail(.invalidValue, entry.line, "'max_active_threads' must be a whole number from 1 to \(maxActiveThreadsLimit)")
         return 1
@@ -517,7 +520,7 @@ public struct Config: Sendable, Equatable {
         # ports = 1                        # ports each thread gets for its run, check and setup (WORKBENCH_PORT, PORT)
         #                                  # more come as WORKBENCH_PORT_1, _2; no two threads share one
         # max_concurrent_checks = 2        # threads that may run their check at once; one over it is refused, not queued
-        # max_active_threads = 1           # threads that may be open at once (up to 8); a new goal over it is refused
+        # max_active_threads = 3           # threads that may be open at once (1 to 8); a new goal over it is refused
         # editor = "cursor"                # `workbench open`: cursor, code, zed, subl, windsurf or one plain command
         # reports_copy_to = "~/Obsidian/Vault/Workbench" # also copy each report of a `fix: report` task there (a vault folder)
         # herdr = "/Users/me/.local/bin/herdr-app" # the window's "Open in Herdr"; else `herdr-app` on PATH or in ~/.local/bin

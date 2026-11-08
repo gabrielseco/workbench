@@ -1,6 +1,6 @@
 # A thread that stays open until its pull request is merged
 
-Status: idea, not planned. It waits on [concurrency](README.md), because today one project has one active thread.
+Status: idea, not planned. It needed [concurrency](../plan/P23-concurrency.md), which is built: a project has up to three active threads, so a shipped thread waiting for its PR no longer holds the only one.
 
 ## The idea
 

@@ -3,7 +3,8 @@
 # run, so it costs nothing.
 #   bash scripts/verify-cli/threads-at-once.sh      (in the main checkout, on a clean origin/main, no active thread)
 #   VERIFY_CLI_FROM_BRANCH=1 bash scripts/verify-cli/threads-at-once.sh   (the same, on a branch that contains origin/main)
-# With `max_active_threads = 2`: two threads can be started and a third is refused (exit 6) naming both; `abandon` with no id
+# With no `max_active_threads` three threads can be started and a fourth is refused; with `= 1` the second is refused (the single-thread
+# rule); with `max_active_threads = 2`: two threads can be started and a third is refused (exit 6) naming both; `abandon` with no id
 # refuses (exit 6) and lists both, `abandon --thread <a>` ends a, `status --thread <b> --json` is b, a thread named twice
 # differently is a usage error (exit 2); `--thread` may come before a note or a stage name; with one thread left `abandon` needs no id again; at the default (1) a second thread is
 # refused as before. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
@@ -38,17 +39,34 @@ setcap() { # <n>: max_active_threads = n, above the tables
     { echo "max_active_threads = $1"; grep -v '^max_active_threads' "$CFG"; } >"$SCRATCH/cfg" && cp "$SCRATCH/cfg" "$CFG"
 }
 
-# --- 1. the default is one --------------------------------------------------------------------------------
+# --- 0. the default is three -------------------------------------------------------------------------------
 
+grep -q '^max_active_threads' "$CFG" && die "the clone's config sets max_active_threads, so it is not the default"
+DEFAULTS=()
+for name in verify-d1 verify-d2 verify-d3; do
+    wbp "$SCRATCH/$name.out" goal new "$name" --base "$BASE"
+    DEFAULTS+=("$(newid "$SCRATCH/$name.out")")
+    sleep 1
+done
+check "no max_active_threads: three threads start" "ids: ${DEFAULTS[*]}" test "${#DEFAULTS[@]}" = 3 -a -n "${DEFAULTS[0]}" -a -n "${DEFAULTS[2]}"
+wbp "$SCRATCH/d4.out" goal new verify-d4 --base "$BASE"
+shown "$SCRATCH/d4.out"
+check "no max_active_threads: a fourth is refused (exit 6) naming the three" "exit $RC: $(head -c 200 "$SCRATCH/d4.out")" \
+    bash -c 'test "$1" = 6 && grep -q "${@:3:1}" "$2" && grep -q "${@:5:1}" "$2"' _ "$RC" "$SCRATCH/d4.out" "${DEFAULTS[0]}" _ "${DEFAULTS[2]}"
+for id in "${DEFAULTS[@]}"; do wbp "$SCRATCH/ad.out" abandon "$id"; done
+
+# --- 1. a cap of one is the single-thread rule ----------------------------------------------------------------
+
+setcap 1
 wbp "$SCRATCH/n1.out" goal new verify-one --base "$BASE"
-check "default: the first thread starts" "exit $RC" test "$RC" = 0
+check "max_active_threads = 1: the first thread starts" "exit $RC" test "$RC" = 0
 ONE=$(newid "$SCRATCH/n1.out")
 wbp "$SCRATCH/n2.out" goal new verify-two --base "$BASE"
 shown "$SCRATCH/n2.out"
-check "default: a second thread is refused (exit 6) naming the first" "exit $RC: $(head -c 200 "$SCRATCH/n2.out")" \
+check "max_active_threads = 1: a second thread is refused (exit 6) naming the first" "exit $RC: $(head -c 200 "$SCRATCH/n2.out")" \
     bash -c 'test "$1" = 6 && grep -q "$2" "$3"' _ "$RC" "$ONE" "$SCRATCH/n2.out"
 wbp "$SCRATCH/a0.out" abandon "$ONE"
-check "default: the first thread is abandoned" "exit $RC" test "$RC" = 0
+check "max_active_threads = 1: the first thread is abandoned" "exit $RC" test "$RC" = 0
 
 # --- 2. two at once ---------------------------------------------------------------------------------------
 

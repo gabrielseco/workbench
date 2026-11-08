@@ -133,7 +133,8 @@ public struct ThreadService: Sendable {
             try await WorktreeManager(repoRoot: project.root, git: git).fetchRemoteBranch(updating)
         }
         let day = DateFormatter.dayStamp.string(from: now())
-        let id = try await createThreadDirectory(for: "g-\(day)-\(name)", maxActive: config?.maxActiveThreads ?? 1)
+        let cap = config?.maxActiveThreads ?? Config.defaultMaxActiveThreads
+        let id = try await createThreadDirectory(for: "g-\(day)-\(name)", maxActive: cap)
 
         let baseBranch: String
         if let updating {

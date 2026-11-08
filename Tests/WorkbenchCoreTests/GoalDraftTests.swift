@@ -51,7 +51,8 @@ struct Drafting {
 func drafting(
     provider: AgentProviderID = .codex, allowUnpriced: Bool? = true, answer: String? = proposalJSON, model: String? = nil
 ) async throws -> Drafting {
-    let fx = try await RunnerFixture()
+    // One active thread at a time: what these tests are about (the default allows several).
+    let fx = try await RunnerFixture(extraConfig: "max_active_threads = 1")
     let dir = fx.repo.deletingLastPathComponent().appendingPathComponent("draft-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     var config = try Config.load(from: fx.project.configURL)

@@ -203,9 +203,12 @@ import WorkbenchCore
     // MARK: The snapshot
 
     @Test func theSnapshotKnowsTheActiveThreadOnlyWhileOneIsOpen() async throws {
-        #expect(try await snapshot().activeThread == "invoice-pagination", "the tasks fixture's own open thread")
+        #expect(try await snapshot().activeThread == nil, "the tasks fixture's one open thread leaves slots free at the default")
         let fixture = try await AppFixture()
         keptTaskPageFixtures.append(fixture)
+        // A task is blocked when no thread slot is free: with one slot, the one open thread is what blocks it.
+        try "max_active_threads = 1\n\n[tools]\navailable = [\"Read\"]\n".write(
+            to: fixture.project.configURL, atomically: true, encoding: .utf8)
         try await fixture.addThread("t1")
         let read = try await TasksReader.core().read(fixture.project, now)
         #expect(read.activeThread == "t1")

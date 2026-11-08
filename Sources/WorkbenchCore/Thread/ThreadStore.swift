@@ -264,7 +264,7 @@ public struct ThreadStore: Sendable {
     }
 
     /// Makes the thread directory and refuses when `maxActive` threads are already active (one is the single-thread rule).
-    public func create(id: String, maxActive: Int = 1) throws {
+    public func create(id: String, maxActive: Int = Config.defaultMaxActiveThreads) throws {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
         // Counting the active threads and making the folder are one step: two commands at once must not both see a free slot.
         try FileManager.default.createDirectory(at: project.threadsDirectory, withIntermediateDirectories: true)

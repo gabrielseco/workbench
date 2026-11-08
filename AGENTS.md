@@ -159,8 +159,9 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
 - **Everything is bounded:** line size, log size, output, timeout, budget.
 - **Validate before it reaches git or a path.** Thread ids, bases and the check command go through
   `SafeNames` and `Config` validation; never build a git argument or a path from unchecked text.
-- **One project, one active thread.** No queue, no concurrent turns or checks. If a feature needs the
-  word "concurrent", it belongs in `docs/later/`.
+- **A project has at most `max_active_threads` active threads** (default 3, one per thread folder and worktree). No queue: a new thread
+  or a check over its cap is refused with a message, never waited for. A queue, a CPU or memory scheduler
+  or many projects at once belong in `docs/later/`.
 - **Reliability is an acceptance criterion.** Hangs, leaks and leftover processes are tested with the
   fake claude (`Sources/fake-claude`), which can hang, crash, ignore SIGTERM and leave children.
 - **A multi-line text box is `PlaceholderTextEditor`**, never a bare `TextEditor(` (`scripts/check-banned-apis.sh` fails one). SwiftUI's

@@ -181,6 +181,8 @@ private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_R
     }()
 
     @Test func manyThreadsEachWithRunWorktreeAndTeardown() async throws {
+        await SoakExclusion.shared.acquire()
+        defer { Task { await SoakExclusion.shared.release() } }
         let fx = try await RunnerFixture()
         let before = openDescriptorCount()
         var results: [String: Int] = [:]
@@ -264,6 +266,8 @@ private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_SOAK_R
     }
 
     @Test func aChildThatIgnoresSigtermIsKilledWithinTheDefaultGrace() async throws {
+        await SoakExclusion.shared.acquire()
+        defer { Task { await SoakExclusion.shared.release() } }
         // The plan's number: killed within 5s + 1s. This one uses the real default grace.
         let fx = try await RunnerFixture()
         let id = try await fx.approvedThread()
