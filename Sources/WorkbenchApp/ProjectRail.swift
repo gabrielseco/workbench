@@ -24,6 +24,14 @@ struct ProjectRail: View {
                 addProject
             }
             .padding(.vertical, Space.l).frame(maxWidth: .infinity)
+            // One focus stop for the rail, as in the automations list: Tab lands here, the arrows walk the tiles (the inbox of every
+            // project, then each project), and the open one is the one marked.
+            .focusable()
+            .focusEffectDisabled()
+            .onMoveCommand { direction in
+                guard direction == .up || direction == .down else { return }
+                Task { await store.moveRailSelection(by: direction == .up ? -1 : 1) }
+            }
         }
         .scrollIndicators(.hidden)
         .frame(width: Self.width)
