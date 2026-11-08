@@ -20,4 +20,5 @@ Order of likely return, each decided on its own once the previous is used daily:
 | [Triage integration](triage-integration.md) | Start a thread from a PR, status badge | Only once Workbench is used daily. |
 | [Thread list](thread-list.md) | Switch between a project's threads in the app | Needs concurrency: with one active thread the window already follows it, and `New goal…` appears once it is decided. |
 | [Thread until merged](thread-until-merged.md) | A shipped thread stays open, watching its PR, until it is merged | Needs concurrency: it would hold the only active thread. Today `ship --watch` ends and `clean` removes merged threads. |
+| [Auto-sync](auto-sync.md) | An open thread brings the base in by itself, and heals what that breaks | Needs the P23 soak: it starts turns nobody asked for. Builds on `workbench sync`, which is manual today. |
 | Profiles | Several named tool sets | One fixed set until the first real need. |
