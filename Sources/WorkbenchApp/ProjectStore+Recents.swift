@@ -80,9 +80,12 @@ extension ProjectStore {
         guard path != project?.root.path else {
             pin(path)
             pickingProject = false
+            allProjects = false
             return
         }
         await switchTo(path)
+        // Only when it opened: a refusal leaves the list that was up, and the reason.
+        if project?.root.path == path { allProjects = false }
     }
 
     /// "Choose folder…": the panel, then the folder it gave. Cancelling it changes nothing.

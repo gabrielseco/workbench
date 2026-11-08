@@ -5,7 +5,14 @@ import SwiftUI
 struct InboxRowView: View {
     var row: InboxRow
     var selected: Bool
+    /// The project's initials, on a row of the inbox of all projects: whose it is.
+    var project: String?
+    var accessibility: String?
     var action: () -> Void
+
+    init(row: InboxRow, selected: Bool, project: String? = nil, accessibility: String? = nil, action: @escaping () -> Void) {
+        (self.row, self.selected, self.project, self.accessibility, self.action) = (row, selected, project, accessibility, action)
+    }
 
     var body: some View {
         Button(action: action) {
@@ -14,6 +21,7 @@ struct InboxRowView: View {
                 VStack(alignment: .leading, spacing: Space.xxs) {
                     HStack(spacing: Space.s) {
                         Text(row.title).textStyle(.calloutStrong).lineLimit(1).truncationMode(.middle)
+                        if let project { Text(project).pill(style: .outlined) }
                         if row.isAutomation { Text("auto").pill(Theme.grey) }
                     }
                     Text(row.line).textStyle(.caption, row.mark.lineTint == .mark ? .state(row.mark.tint) : .secondary)
@@ -29,7 +37,7 @@ struct InboxRowView: View {
         }
         .buttonStyle(.plain)
         .help(row.help)
-        .accessibilityLabel(row.accessibility)
+        .accessibilityLabel(accessibility ?? row.accessibility)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

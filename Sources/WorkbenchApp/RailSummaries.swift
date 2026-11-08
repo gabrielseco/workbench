@@ -7,7 +7,12 @@ import WorkbenchCore
 @MainActor @Observable final class RailSummaries {
     /// The last count read for each project, threads and tasks together.
     private(set) var counts: [String: ProjectSummary] = [:]
+    /// The rows of each project, read only while the inbox of all projects is up; kept when a read fails, like the counts.
+    private(set) var rows: [String: [InboxRow]] = [:]
+    /// How many older threads each project's listing left out, with its rows.
+    private(set) var older: [String: Int] = [:]
     @ObservationIgnored private var caches: [String: ProjectSummaryLoader.Cache] = [:]
+    @ObservationIgnored private var listCaches: [String: ThreadListLoader.Cache] = [:]
     /// The tasks' part of each count as last read, used again when the tasks cannot be read this time.
     @ObservationIgnored private var lastTasks: [String: ProjectSummary] = [:]
     /// Projects whose read has not come back: asked again only when it has, so a hung folder holds one thread, not one a poll.
@@ -21,6 +26,23 @@ import WorkbenchCore
         let fresh = ProjectSummaryLoader.Cache()
         caches[path] = fresh
         return fresh
+    }
+
+    func listCache(for path: String) -> ThreadListLoader.Cache {
+        if let known = listCaches[path] { return known }
+        let fresh = ThreadListLoader.Cache()
+        listCaches[path] = fresh
+        return fresh
+    }
+
+    func setRows(_ rows: [InboxRow], for path: String) { self.rows[path] = rows }
+
+    /// Takes a project's rows from a read. Rows made without the tasks (they could not be read) replace only what was never read: the last
+    /// whole reading stands, with its automations, rather than a list that lacks them.
+    func keepRows(from read: Read, for path: String) {
+        guard let rows = read.rows, !read.rowsWithoutTasks || self.rows[path] == nil else { return }
+        self.rows[path] = rows
+        older[path] = read.older
     }
 
     func begin(_ path: String) -> Bool { reading.insert(path).inserted }
@@ -41,6 +63,8 @@ import WorkbenchCore
     func forget(_ path: String) {
         counts[path] = nil
         lastTasks[path] = nil
+        rows[path] = nil
+        older[path] = nil
     }
 
     /// Forgets what a project that is no longer on the rail (or is gone) had.
@@ -48,6 +72,9 @@ import WorkbenchCore
         counts = counts.filter { paths.contains($0.key) }
         caches = caches.filter { paths.contains($0.key) }
         lastTasks = lastTasks.filter { paths.contains($0.key) }
+        rows = rows.filter { paths.contains($0.key) }
+        older = older.filter { paths.contains($0.key) }
+        listCaches = listCaches.filter { paths.contains($0.key) }
     }
 
     /// What the tasks of a project add to its count, by the rules the rail's rows apply: a task that needs you, one that failed, one running.
@@ -72,14 +99,32 @@ import WorkbenchCore
         var threads: ProjectSummary?
         /// nil when the tasks could not be read: their last part stands.
         var tasks: ProjectSummary?
+        /// The project's rows for the inbox of all projects, when they were asked for and the threads could be listed.
+        var rows: [InboxRow]?
+        /// The tasks could not be read, so `rows` lack the automations and may list threads a task's runs made: they stand only when
+        /// nothing better was read before.
+        var rowsWithoutTasks = false
+        /// Threads past what the listing loads, which `rows` do not have.
+        var older = 0
     }
 
     /// The availability check is part of the read: it touches the same folder, so it is under the same limit.
-    nonisolated static func read(_ project: Project, cache: ProjectSummaryLoader.Cache, now: Date) -> Read {
+    /// - Parameter listCache: given when the rows are wanted (the inbox of all projects is up): the threads are then listed as the window
+    ///   lists them, from their logs alone (a pull request is never seen merged here), and the tasks that need approval are rows.
+    nonisolated static func read(
+        _ project: Project, cache: ProjectSummaryLoader.Cache, listCache: ThreadListLoader.Cache? = nil, now: Date
+    ) -> Read {
         if ProjectStore.unavailableReason(project.root.path) != nil { return Read(unavailable: true) }
-        return Read(
-            threads: ProjectSummaryLoader.read(project: project, cache: cache),
-            tasks: (try? TasksReader.entries(project, now: now)).map(tasks))
+        let entries = try? TasksReader.entries(project, now: now)
+        let threads = ProjectSummaryLoader.read(project: project, cache: cache)
+        var read = Read(threads: threads, tasks: entries.map(tasks))
+        if let listCache, threads != nil {
+            let listing = ThreadListLoader.load(project: project, cache: listCache)
+            read.rows = InboxModel.rows(listing: listing, entries: entries)
+            read.older = listing.older
+            read.rowsWithoutTasks = entries == nil
+        }
+        return read
     }
 
     /// `work` on a background queue, its answer if it comes within `seconds`, else nil: a folder that hangs (a network volume that went away)

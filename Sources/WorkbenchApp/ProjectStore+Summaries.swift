@@ -8,15 +8,17 @@ extension ProjectStore {
     func readRailSummaries() async {
         railSummaries.keep(Set(railPaths))
         let summaries = railSummaries
+        let wantRows = allProjects
         for path in railPaths where summaries.begin(path) {
             let project = Project(root: URL(fileURLWithPath: path))
             let cache = summaries.cache(for: path)
+            let listCache = wantRows ? summaries.listCache(for: path) : nil
             let now = Date()
             // The read is released when it has really finished, not when the poll gave up on it: a read that hangs holds one worker, however
             // many polls pass.
             let read = await RailSummaries.raced(
                 seconds: RailSummaries.timeout, finished: { Task { @MainActor in summaries.end(path) } },
-                { RailSummaries.read(project, cache: cache, now: now) })
+                { RailSummaries.read(project, cache: cache, listCache: listCache, now: now) })
             // A read that did not come back, or could not list the folder, keeps the last count.
             guard let read, railPaths.contains(path) else { continue }
             if read.unavailable {
@@ -26,6 +28,7 @@ extension ProjectStore {
             guard let threads = read.threads else { continue }
             let tasks = read.tasks ?? summaries.lastTasks(for: path)
             summaries.set(threads + tasks, tasks: tasks, for: path)
+            summaries.keepRows(from: read, for: path)
         }
     }
 

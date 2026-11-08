@@ -6,6 +6,9 @@ struct ProjectTile: View {
     var project: RailProject
     var selected: Bool
     var badge: RailBadge
+    /// An SF Symbol in place of the initials, for a tile that is not a project (the inbox of all of them), and the tooltip it has then.
+    var symbol: String?
+    var tooltip: String?
     var action: () -> Void
 
     static let side: CGFloat = 44
@@ -15,7 +18,7 @@ struct ProjectTile: View {
 
     var body: some View {
         Button(action: action) {
-            Text(project.initials).textStyle(.bodyStrong).foregroundStyle(available ? .primary : .secondary)
+            face
                 .frame(width: Self.side, height: Self.side)
                 .background(selected ? Theme.blue.opacity(0.18) : Theme.panel, in: shape)
                 .overlay(shape.strokeBorder(selected ? Theme.blue : Theme.line))
@@ -39,7 +42,15 @@ struct ProjectTile: View {
         }
         .accessibilityLabel(badge.label(for: project.name) + (project.unavailable.map { ", unavailable: \($0)" } ?? ""))
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .help(project.unavailable ?? project.name + " · " + (project.path as NSString).abbreviatingWithTildeInPath)
+        .help(tooltip ?? project.unavailable ?? project.name + " · " + (project.path as NSString).abbreviatingWithTildeInPath)
+    }
+
+    @ViewBuilder private var face: some View {
+        if let symbol {
+            Image(systemName: symbol).textStyle(.heading, selected ? .primary : .secondary)
+        } else {
+            Text(project.initials).textStyle(.bodyStrong).foregroundStyle(available ? .primary : .secondary)
+        }
     }
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Radius.card) }

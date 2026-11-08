@@ -98,7 +98,7 @@ cannot be read. A tile for a folder that is gone is not read (the tile says so);
 tile is the window's own reading (`railBadge`), the others are the last summary, and the project the window just left keeps the count it
 had while open. A log that cannot be read is failed (red), not zero.
 
-### 4. Inbox (4a, the project's own, built; 4b, all projects, next)
+### 4. Inbox (4a, the project's own, built; 4b, all projects, built)
 
 `InboxModel` replaces `RailModel`'s thread section: **Needs you**, **Waiting** (shipped, CI running or waiting on review), **Done** (collapsed, count),
 in that order, the selected thread kept visible. Row = `ThreadMark`, title, reason line, spend (the rows already carry all four). Automations
@@ -117,6 +117,17 @@ sections have `InboxSectionHeader`. The rail's header is `INBOX · <PROJECT>` wi
 `+`. `RailModel` keeps only the Scheduled section until slice 5 moves it; `ThreadListView` and the ten-at-a-time paging (`Show more`, `Show less`,
 `railLimits`) are gone, replaced by Done's fold. The rail's tile for the open project and the top tile are unchanged: 4b gives the top tile its
 inbox.
+
+As built (4b): the top tile is a real tile (`ProjectTile` with a `symbol`), selected while `ProjectStore.allProjects` is set; choosing it reads
+the rail's projects at once and the rail's list is `INBOX · ALL PROJECTS` (`AllInboxView`, `AllInboxModel`). The sections are the project
+inbox's, with every project's rows: in the rail's order, each project's own order (newest first) within it; Done is one count for all of them
+(`allInboxDoneOpen`). A row carries its project's initials in a neutral outlined pill (blue is a state, never a label) and says the project
+in words to VoiceOver. The other projects' rows are read by the same poll as their counts (`RailSummaries.read` with a `ThreadListLoader`
+cache), only while this list is up; they are listed from their logs alone, so a pull request is never seen merged there (the project's own
+inbox, when it is opened, asks GitHub as before), and a read that fails keeps the last rows. The open project's rows are the window's own,
+live. A click on a row opens that project when it is not the open one, shows the thread (or the automation's task) and goes back to that
+project's own inbox; a project's tile does too, and a project that cannot be opened keeps the list up and says why. Merge order is the rail's,
+not one newest-first list: a thread's row has no timestamp, and a stable list does not reorder under the finger between reads.
 
 ### 5. Top bar and Automations view
 

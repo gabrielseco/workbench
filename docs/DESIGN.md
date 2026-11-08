@@ -68,6 +68,9 @@ ships, and the mockup gets fixed.
   `Theme.raised`. A click shows that thread, with its feed and settings, or that task's page; it starts and stops nothing. The spine is not drawn twice.
   A thread a task started (its run log names it) is not in the rail once it is over (done or idle): it is one click from the task's page (each run's
   `Open thread`), and listed while it is on screen so the selection can be seen; one that is working, needs you or is broken stays in Threads.
+  The top tile of the project rail (a tray, with the needs-you count of every project) is the **inbox of all projects**: chosen, it is the selected tile and the rail's
+  list is `INBOX · ALL PROJECTS`, the same three sections with every project's rows in the rail's order, each row with its project's initials in a neutral outlined pill (blue is a state, never a
+  label); Done is one count and link for all of them; a click opens that project, shows the thread (or the automation's task) and goes back to that project's own inbox; a project tile does too.
   Under the Scheduled list a quiet `New task…` link opens the New task screen (File ▸ New Task…, ⇧⌘N; the one `+`, on Threads, starts a goal, as ⌘N does).
 - **The new-thread screen** is what the rail's `+` and ⌘N open: in the feed's 680 column
   under a `New thread` title and a phase row with Chat current, `What do you want to work on?` (`.title2`, semibold) and the line that says

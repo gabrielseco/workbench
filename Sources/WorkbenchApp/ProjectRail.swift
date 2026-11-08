@@ -1,7 +1,7 @@
 import SwiftUI
 import WorkbenchCore
 
-/// The column of projects (P26): a tile for each, the open one marked, a tile for the inbox of every project (arriving with the inbox view),
+/// The column of projects (P26): a tile for each, the open one marked, a tile for the inbox of every project,
 /// and `+` to add one. A tile's menu is where a project's own actions are: its agents, Doctor, the folder, and taking it off the rail.
 struct ProjectRail: View {
     var store: ProjectStore
@@ -14,7 +14,8 @@ struct ProjectRail: View {
                 Divider().frame(width: Space.xxxl - Space.xs)
                 ForEach(store.railTiles()) { tile in
                     ProjectTile(
-                        project: tile, selected: tile.path == store.project?.root.path, badge: store.railBadge(for: tile.path)
+                        project: tile, selected: tile.path == store.project?.root.path && !store.allProjects,
+                        badge: store.railBadge(for: tile.path)
                     ) {
                         Task { await store.pickRecent(tile.path) }
                     }
@@ -28,19 +29,15 @@ struct ProjectRail: View {
         .frame(width: Self.width)
     }
 
-    /// The tile for the inbox of every project: the inbox view that fills it is a later slice, so it only says so.
+    /// The tile for the inbox of every project: chosen, the rail lists theirs together; a project's tile goes back to its own.
     private var allProjects: some View {
-        Button {} label: {
-            Label("All projects", systemImage: "tray.full").labelStyle(.iconOnly).textStyle(.heading, .secondary)
-                .frame(width: ProjectTile.side, height: ProjectTile.side)
-                .background(Theme.raised, in: RoundedRectangle(cornerRadius: Radius.card))
+        let everything = RailProject(path: "", name: "All projects inbox", initials: "", unavailable: nil)
+        return ProjectTile(
+            project: everything, selected: store.allProjects, badge: store.allProjectsBadge(), symbol: "tray.full",
+            tooltip: "The inbox of every project on the rail"
+        ) {
+            Task { await store.showAllProjects() }
         }
-        .buttonStyle(.plain).disabled(true)
-        .overlay(alignment: .topTrailing) {
-            if let kind = CountBadge.Kind(store.allProjectsBadge()) { CountBadge(kind: kind).offset(x: Space.s, y: -Space.s) }
-        }
-        .accessibilityLabel(store.allProjectsBadge().label(for: "All projects inbox"))
-        .help("The inbox of every project: it arrives with the inbox view")
     }
 
     private var addProject: some View {
