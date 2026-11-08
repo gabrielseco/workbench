@@ -362,7 +362,7 @@ private final class Recorder: @unchecked Sendable {
         // A note left from an earlier send stays put when an approve is refused.
         store.guidanceNote = "left over"
         await store.approveAndRun()
-        #expect(store.actionError == "A run is already going." && store.guidanceNote == "left over")
+        #expect(store.actionError == "A run is already going in this thread." && store.guidanceNote == "left over")
         await gate.open()
     }
 }

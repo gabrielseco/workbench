@@ -321,8 +321,8 @@ struct RecentProject: Equatable, Identifiable {
     /// here and left to the log to report.
     func approveAndRun() async {
         guard let project, let thread = currentThread else { return }
-        if starting || ownedRun != nil {
-            actionError = starting ? "The goal is already being approved." : "A run is already going."
+        if starting || current.ownedRun != nil {
+            actionError = starting ? "The goal is already being approved." : "A run is already going in this thread."
             return
         }
         let mine = generation
@@ -356,8 +356,8 @@ struct RecentProject: Equatable, Identifiable {
     ) {
         // Said on the thread the run is for: an approval that took a moment may have left another one on screen.
         let started = session(project, thread)
-        guard ownedRun == nil else {
-            started.actionError = "A run is already going."
+        guard started.ownedRun == nil else {
+            started.actionError = "A run is already going in this thread."
             return
         }
         let handle: RunHandle
@@ -425,14 +425,8 @@ struct RecentProject: Equatable, Identifiable {
         } catch { return "\(error)" }
     }
 
-    /// The project this app has a run going in, if any.
-    var runningProjectPath: String? { ownedRun?.project.root.path }
-
-    /// Asks the run this app holds, in whichever thread, to end (a quit): it still ends with a recorded `stopped`.
-    func stopOwnedRun() async { await ownedRun?.handle.stop() }
-
     /// Whether this window's thread is the one the app is running.
-    var runningHere: Bool { ownedRun.map { $0.project == project && $0.thread == currentThread } ?? false }
+    var runningHere: Bool { ownedRuns.contains { $0.project == project && $0.thread == currentThread } }
 
     /// Asks the turn to end: through the runner this app holds, else the process a terminal's `workbench run` holds. The turn
     /// still ends with a recorded `stopped`; this only asks.
@@ -486,7 +480,7 @@ struct RecentProject: Equatable, Identifiable {
     }
 
     private var isWorking: Bool {
-        if busy != nil || ownedRun != nil { return true }
+        if busy != nil || !ownedRuns.isEmpty { return true }
         if case .thread(let snapshot) = screen { return snapshot.attention == .working }
         return false
     }
@@ -562,7 +556,7 @@ private extension ProjectStore {
     }
     /// Whether any session is working: one action at a time holds the window.
     var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }
-    var ownedRun: ThreadSession.OwnedRun? { sessions.values.lazy.compactMap(\.ownedRun).first }
+    var ownedRun: ThreadSession.OwnedRun? { ownedRuns.first }
 
     func setBusy(_ text: String?, in session: ThreadSession) {
         session.busyText = text

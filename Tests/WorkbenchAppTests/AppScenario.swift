@@ -31,6 +31,7 @@ enum AppScenario: String, CaseIterable {
     case taskThreads = "task-threads"
     case taskDone = "task-done"
     case threads, manyThreads = "many-threads", longCommands = "long-commands"
+    case threadsAtOnce = "threads-at-once"
     case chat
     case chatGoal = "chat-goal"
     case chatReplying = "chat-replying"
@@ -57,6 +58,9 @@ enum AppScenario: String, CaseIterable {
             "editor = \"@EDITOR_STUB@\"\n\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n"
                 + "[review]\nstages = [\"pr-review\", \"design\"]\n\n"
                 + "[review.stage.design]\nskill = \"design.md\"\napplies_to = [\"Sources/**\"]\n"
+        case .threadsAtOnce:
+            // The project allows three threads at once, and has three: the rail lists them all, each with its own mark.
+            "max_active_threads = 3\n\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n"
         case .draftGoal:
             // The goal agent is the real Codex: this is the scenario that drafts a goal for real, from a request and screenshots.
             "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n[agents.goal]\nprovider = \"codex\"\n"
@@ -219,6 +223,7 @@ enum AppScenario: String, CaseIterable {
             try fixture.append(
                 id, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a", "b"], "tests_failed": []])
             try await fixture.addThread("export-csv", title: "Export the invoice list as CSV")
+        case .threadsAtOnce: try await buildThreadsAtOnce(in: fixture)
         case .taskThreads:
             try await buildTaskThreads(in: fixture)
         case .taskDone:
@@ -478,5 +483,21 @@ extension AppScenario {
         finished["ok"] = true
         finished["verdict"] = "clean"
         try fixture.append(id, .prReviewFinished, data: .object(finished))
+    }
+}
+
+extension AppScenario {
+    /// Oldest first: a thread that needs you, one with a turn going, and a draft: three active threads at once.
+    @MainActor fileprivate func buildThreadsAtOnce(in fixture: AppFixture) async throws {
+        try await fixture.addThread("trim-whitespace", approved: true, title: "Trim whitespace in invoice names")
+        try fixture.turn("trim-whitespace", 1, cost: 0.92)
+        try fixture.append("trim-whitespace", .checkStarted, turn: 1)
+        try fixture.append(
+            "trim-whitespace", .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a"], "tests_failed": []])
+        let id = "invoice-pagination"
+        try await fixture.addThread(id, approved: true, title: Self.title)
+        try fixture.append(id, .turnStarted, turn: 1, data: ["session_id": "s1"])
+        try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
+        try await fixture.addThread("export-csv", title: "Export the invoice list as CSV")
     }
 }

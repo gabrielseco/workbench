@@ -80,11 +80,19 @@ whose log has an open check, under the same admission lock as thread creation. A
 recorded as a failed check that says why (there is no check-only rerun, so the thread is run again). See "Checks at once and the shared git directory" in
 [`../spec/goal-file.md`](../spec/goal-file.md).
 
-### 5. The app for N live threads
+### 5. The app for N live threads (built)
 
 The New goal flow stops abandoning the active thread. The rail shows every live thread with its attention mark. Quit lists and stops all
 live work (`liveWork` and `runningProjectPath` become per-thread), and a crash with several turns open ends each with one `turn.ended`
 (`recoverOrphanedTurn` per thread). Screenshots with `pr-shots`.
+
+As built: most of this was already true after slices 1 and 2. The New goal flow asks core, which abandons the one thread only at a cap of
+1 and refuses at a higher cap with no free slot, so at `max_active_threads > 1` it abandons nothing. The rail (P22) already lists every
+thread and pins the ones that are working, need you or are broken. What changed is `ProjectStore`: one run per thread instead of one in
+all (`ownedRuns`, `runningHere` for the thread on screen), and a quit that names and stops every run. A task's `Run now` still waits
+for this window's thread runs to end, which is conservative at a cap above 1 (core would refuse it only when no slot is free). Crash
+recovery was already per thread (each log closes its own open turn); a test covers three at once. The `threads-at-once` scenario
+shows the rail with three live threads.
 
 ### 6. Ship onto a moved base
 

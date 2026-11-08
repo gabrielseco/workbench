@@ -57,7 +57,7 @@ private final class Counter: @unchecked Sendable {
         await store.runAgain()
         #expect(store.runningHere)
         await store.runAgain()
-        #expect(calls.count("make") == 1 && store.actionError == "A run is already going.")
+        #expect(calls.count("make") == 1 && store.actionError == "A run is already going in this thread.")
         await gate.open()
         try await Task.sleep(for: .milliseconds(100))
         #expect(!store.runningHere)

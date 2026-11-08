@@ -33,7 +33,7 @@ extension ProjectStore {
             let name = shared ? "\(names[index]) (\(url.deletingLastPathComponent().lastPathComponent))" : names[index]
             return RecentProject(
                 path: path, name: name, isCurrent: path == project?.root.path,
-                isRunning: runningProjectPath == path, unavailable: Self.unavailableReason(path) ?? refusedPaths[path])
+                isRunning: runningProjectPaths.contains(path), unavailable: Self.unavailableReason(path) ?? refusedPaths[path])
         }
     }
 

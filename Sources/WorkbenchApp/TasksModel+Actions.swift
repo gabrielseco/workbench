@@ -11,7 +11,7 @@ extension TasksModel {
         case .approved: break
         }
         if let running = runningTask { return "A run of \(running) is going from this window." }
-        if threadRunGoing { return "This window's thread run is going: a project has one active run." }
+        if threadRunGoing { return "A thread run of this window is going: run the task when it has ended." }
         if entry.isRunning { return "A run of this task is already going." }
         return nil
     }

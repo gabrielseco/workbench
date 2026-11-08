@@ -183,7 +183,7 @@ import WorkbenchCore
     }
 
     @Test func quittingEndsAnEditInProgress() async throws {
-        #expect(QuitPrompt.work(threadRunIn: nil, taskRun: nil, editing: true) == "a task edit is still going.")
+        #expect(QuitPrompt.work(threadRunsIn: [], taskRun: nil, editing: true) == "a task edit is still going.")
         let (fixture, _) = try await scenario()
         let gate = Gate()
         let stops = Calls()

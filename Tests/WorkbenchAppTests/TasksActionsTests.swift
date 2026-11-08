@@ -175,7 +175,7 @@ import WorkbenchCore
         #expect(try reason("cleanup-branches")?.hasPrefix("Not approved") == true)
         #expect(try reason("update-docs")?.hasPrefix("Edited since") == true)
         #expect(try reason("broken-task")?.hasPrefix("The task does not load") == true)
-        #expect(try reason("weekly-report", thread: true)?.contains("thread run is going") == true)
+        #expect(try reason("weekly-report", thread: true)?.contains("thread run of this window is going") == true)
         // A run of the task going elsewhere (its log has an open run) is not started over.
         #expect(try reason("nightly-lint")?.contains("already going") == true)
     }
