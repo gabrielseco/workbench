@@ -6,6 +6,7 @@ import WorkbenchCore
 struct ProjectRail: View {
     var store: ProjectStore
     static let width: CGFloat = 72
+    @FocusState private var focused: Bool
 
     var body: some View {
         ScrollView {
@@ -28,6 +29,8 @@ struct ProjectRail: View {
             // project, then each project), and the open one is the one marked.
             .focusable()
             .focusEffectDisabled()
+            .focused($focused)
+            .onChange(of: focused) { store.railFocused = focused }
             .onMoveCommand { direction in
                 guard direction == .up || direction == .down else { return }
                 Task { await store.moveRailSelection(by: direction == .up ? -1 : 1) }

@@ -277,6 +277,8 @@ Every screen answers four questions without a click, and a change that touches a
   over a list or a row of tiles, Return opens, Esc leaves, and changing project, thread or tab leaves focus somewhere usable (the new
   screen's first control), never nowhere. A tile or row that is a shape with `onTapGesture` fails this by construction. Show it in
   the PR the way the screenshots are shown: the keys pressed and what the window did.
+  A screen that opens takes the caret only if nothing the person is walking with the keys holds it: the project rail keeps focus while
+  ⌥⌘↑/↓ or the arrows step over it (`ProjectStore.railFocused`), so the chat and new-goal boxes do not grab it from under the keys.
 - Keyboard shortcuts where the siblings have them: a card cancels with Esc and confirms with ⌘Return.
 - A multi-line text box is `PlaceholderTextEditor` (the placeholder sits where the text view starts its text, measured by
   `scripts/check-text-alignment.py`; a box that grows with its text hides its scroll bar). Never a bare `TextEditor`: CI refuses it.

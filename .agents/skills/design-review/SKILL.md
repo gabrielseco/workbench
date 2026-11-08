@@ -37,7 +37,8 @@ matters; say which file and line):
   (DESIGN.md, Controls: a list has a cap). The scenario with more than ten rows is among the screenshots, or it is "not reviewed".
 - A new clickable thing (a tile, a row, a card, a toolbar item) the keyboard cannot reach: no `Button`/`.focusable()`, no arrow-key
   handling in a list or column of them, no Return/Esc, or focus lost after switching project, thread or tab (DESIGN.md, Controls:
-  everything you can click can be reached from the keyboard). The PR says which keys it handles.
+  everything you can click can be reached from the keyboard). The PR says which keys it handles. A screen that grabs the caret
+  when it opens while the rail (or another list) is being walked with the arrows, so the next key press goes to a text box.
 - A text box that is not `PlaceholderTextEditor`, or a change to a text box or its placeholder with no `scripts/check-text-alignment.py`
   result in the PR (empty shot, typed shot, the offset in pixels; the verify-app skill says how).
 
