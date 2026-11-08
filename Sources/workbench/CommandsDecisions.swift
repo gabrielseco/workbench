@@ -31,7 +31,7 @@ extension Commands {
     static func discard(_ args: [String]) async throws {
         var a = Arguments(args)
         let yes = a.flag("--yes", "-y")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)
@@ -60,7 +60,7 @@ extension Commands {
         var a = Arguments(args)
         let yes = a.flag("--yes", "-y")
         let message = try a.value("-m", "--message")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadID(named)

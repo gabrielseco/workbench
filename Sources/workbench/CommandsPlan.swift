@@ -13,7 +13,7 @@ extension Commands {
         let again = a.flag("--again")
         let model = try a.value("--model")
         let budgetText = try a.value("--budget")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         var budget = Plan.budgetUSD
         if let budgetText {
@@ -24,7 +24,7 @@ extension Commands {
             budget = value
         }
         let ctx = try await Context.load()
-        let id = try ctx.threadIDForViewing(named)
+        let id = try ctx.threadIDForActing(named)
         let config = try Config.load(from: ctx.project.configURL)
         let agent = config.resolvedPlanAgent(modelFlag: model)
         let capped = config.agentProvider(agent.provider)?.capabilities.hardDollarCap ?? true
@@ -65,7 +65,7 @@ extension Commands {
     /// `plan show [id]`: the latest plan, who wrote it, what it cost and whether it still fits the goal.
     static func planShow(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadIDForViewing(named)
@@ -99,11 +99,11 @@ extension Commands {
         var a = Arguments(args)
         let apply = a.flag("--apply")
         let from = try a.value("--from")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         if apply && from != nil { throw CLIError.usage("--apply and --from are two ways to give the text; pass one") }
         let ctx = try await Context.load()
-        let id = try ctx.threadIDForViewing(named)
+        let id = try ctx.threadIDForActing(named)
         do {
             if !apply && from == nil {
                 let url = try await ctx.service.planDraft(id: id)

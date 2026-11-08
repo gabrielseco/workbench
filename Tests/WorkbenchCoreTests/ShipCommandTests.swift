@@ -264,7 +264,19 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         #expect(try fx.events(id).filter { $0.kind == .prOpened }.count == 1)
     }
 
-    @Test func withoutAnIdTheNewestAcceptedThreadIsShipped() async throws {
+    @Test func withoutAnIdTheOneAcceptedThreadIsShipped() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try FakeGH(in: fx)
+        let (id, _) = try await acceptedThread(fx)
+        _ = try await addOrigin(fx)
+
+        let result = try await ship(["--yes"], fx: fx, gh: gh)
+        #expect(result.code == 0, "\(result.text)")
+        #expect(result.text.contains("shipping \(id)"))
+        #expect(try fx.events(id).contains { $0.kind == .prOpened })
+    }
+
+    @Test func withoutAnIdSeveralAcceptedThreadsAreListedAndNoneIsShipped() async throws {
         let fx = try await RunnerFixture()
         let gh = try FakeGH(in: fx)
         let (older, _) = try await acceptedThread(fx)
@@ -275,13 +287,18 @@ private func branches(_ bare: URL, _ fx: RunnerFixture) async throws -> String {
         let worktree = fx.project.worktreesDirectory.appendingPathComponent(newer)
         try "two\n".write(to: worktree.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
         try await fx.service.accept(id: newer, message: "chore: second")
-        _ = try await addOrigin(fx)
+        let bare = try await addOrigin(fx)
 
         let result = try await ship(["--yes"], fx: fx, gh: gh)
-        #expect(result.code == 0, "\(result.text)")
-        #expect(result.text.contains("shipping \(newer)"))
-        #expect(!(try fx.events(older).contains { $0.kind == .prOpened }))
+        #expect(result.code == 6, "\(result.text)")
+        #expect(result.text.contains(older) && result.text.contains(newer) && result.text.contains("--thread"))
+        #expect(gh.count("pr create") == 0)
+        #expect(try await originBranches(bare, fx) == ["refs/heads/main"], "nothing was pushed")
+
+        let named = try await ship(["--yes", "--thread", newer], fx: fx, gh: gh)
+        #expect(named.code == 0, "\(named.text)")
         #expect(try fx.events(newer).contains { $0.kind == .prOpened })
+        #expect(!(try fx.events(older).contains { $0.kind == .prOpened }))
     }
 
     @Test func aDivergedOriginExitsFiveAndPushesNothing() async throws {

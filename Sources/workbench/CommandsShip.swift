@@ -18,7 +18,7 @@ extension Commands {
         let wantsLoop = a.flag("--review-loop")
         let minutes = try a.value("--timeout")
         let seconds = try a.value("--interval")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let limits = try watchLimits(watch: watch, minutes: minutes, seconds: seconds)
         try checkLoopFlags(wantsLoop: wantsLoop, watch: watch, screenshotsOnly: screenshotsOnly, yes: yes)
@@ -180,7 +180,7 @@ extension Commands {
 
     /// `ship --screenshots`: for a thread that is already shipped, try putting its screenshots in the PR again.
     private static func retryScreenshots(_ named: String?, ctx: Context) async throws -> Int32 {
-        let id = try ctx.threadIDForViewing(named)
+        let id = try ctx.threadIDForActing(named)
         guard let opened = prOpenedEvent(id, ctx: ctx), let number = opened.data["number"]?.intValue else {
             return refuse(.notAccepted("this thread has no pull request yet; run `workbench ship`"))
         }
@@ -292,6 +292,11 @@ extension Commands {
         }
         guard let latest = candidates.max(by: { ($0.createdAt ?? "") < ($1.createdAt ?? "") }) else {
             throw ShipError.notAccepted("there is no accepted thread waiting to be shipped; `workbench accept` one first")
+        }
+        // With a few threads in flight several can wait; pushing the wrong one is not undone, so none is guessed.
+        if candidates.count > 1 {
+            let ids = candidates.map(\.id).sorted().joined(separator: ", ")
+            throw CLIError.refused("\(candidates.count) accepted threads wait to be shipped (\(ids)): name one with --thread")
         }
         return latest.id
     }

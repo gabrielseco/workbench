@@ -23,7 +23,8 @@ let workbenchUsage = """
                                  base without --base: the default branch (origin/HEAD, else main, else master,
                                  else the checked-out branch); prints the editor `open` would use, never starts it
 
-    one thread at a time
+    one thread at a time (or up to max_active_threads of them; with several active, a command that acts on one needs it named:
+    `--thread` followed by its id, or the id as written below as [id]; without it the command exits 6 and lists them)
       goal new <name>            start a thread with a draft goal to fill in   [--base <branch>]
                                  base without --base: the default branch, as for doctor; printed as base:
                                  --from <goal-file> copies its request, criteria and out of scope into the draft,

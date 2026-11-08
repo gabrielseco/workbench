@@ -84,8 +84,9 @@ extension Commands {
     static func reviewStage(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let again = a.flag("--again")
+        try a.takeThreadFlag()
         guard let name = a.positional() else { throw CLIError.usage("review-stage needs the name of a stage") }
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         return try await reviewStage(name: name, again: again, named: named)
     }
@@ -93,14 +94,14 @@ extension Commands {
     private static func reviewStage(name: String, _ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let again = a.flag("--again")
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         return try await reviewStage(name: name, again: again, named: named)
     }
 
     private static func reviewStage(name: String, again: Bool, named: String?) async throws -> Int32 {
         let ctx = try await Context.load()
-        let id = try ctx.threadIDForViewing(named)
+        let id = try ctx.threadIDForActing(named)
         let config = try Config.load(from: ctx.project.configURL)
         guard ReviewStage.named(name, config: config) != nil else {
             throw CLIError.refused("\(PRReviewRefusal.unknownStage(name, listed: config.review.stages))")

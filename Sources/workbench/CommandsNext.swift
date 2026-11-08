@@ -6,7 +6,7 @@ extension Commands {
     /// line being the next step. Read-only and advisory: it runs nothing, and nothing here stops `accept` or `ship`.
     static func next(_ args: [String]) async throws {
         var a = Arguments(args)
-        let named = a.positional()
+        let named = try a.thread()
         try a.requireEmpty()
         let ctx = try await Context.load()
         let id = try ctx.threadIDForViewing(named)
