@@ -196,7 +196,8 @@ private func waitUntil(timeout: TimeInterval, _ condition: @Sendable () -> Bool)
         let answer: Int? = await RailSummaries.raced(
             seconds: 0.2, finished: { finished.set() },
             {
-                _ = latch.wait(timeout: .now() + 10)
+                // Released by the test; long, so a runner that starves the 0.2 s timer cannot let the work end first.
+                _ = latch.wait(timeout: .now() + 60)
                 return 1
             })
         #expect(answer == nil && !finished.isSet, "the poll gave up, the read has not ended")
@@ -211,7 +212,7 @@ private func waitUntil(timeout: TimeInterval, _ condition: @Sendable () -> Bool)
     @Test func aReadThatTakesTooLongGivesNothingAndOneThatDoesNotGivesItsAnswer() async {
         let latch = DispatchSemaphore(value: 0)
         let slow: Int? = await RailSummaries.raced(seconds: 0.2) {
-            _ = latch.wait(timeout: .now() + 5)
+            _ = latch.wait(timeout: .now() + 60)
             return 1
         }
         #expect(slow == nil, "the poll goes on without it")
