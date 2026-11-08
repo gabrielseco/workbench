@@ -188,6 +188,19 @@ than `accepted`, or an open pull request has no steps (`nothing is due: …`).
 `review` lists the commits on the thread's branch that are not on its base under `Commits` (between the
 criteria and the diff, at most 10); `review --json` has them as `commits` (`[{sha, subject}]`, see `cli-json.md`).
 
+### `sync`
+
+`sync [id | --thread <id>]` brings the base's new commits into the thread's branch, in its worktree. It fetches `origin/<base>`,
+commits any uncommitted work as `chore: save work before bringing <base> in` (so the merge starts clean), then merges. History is
+never rewritten. A conflict is left in progress in the worktree, with the markers in the files.
+
+| Code | Kind | When |
+|---|---|---|
+| 0 |  | merged, or the base had not moved (`nothing to bring in`) |
+| 1 | `failed` | the merge stopped on conflicts (the files are listed and left in progress), or the fetch or a git call failed |
+| 6 | `refused` | nothing was changed: the thread has ended, has no worktree yet, a run holds it, a merge is already in progress there, origin has no such branch, or several threads are active and none was named |
+| 7 | `not-found` | no such thread |
+
 ### `open`
 
 | Code | Kind | When |

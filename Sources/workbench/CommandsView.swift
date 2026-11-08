@@ -189,6 +189,7 @@ extension Commands {
                 if let model = goal.model { out("model:     \(model)") }
                 if let pushTo = goal.pushTo { out("push to:   \(pushTo)") }
                 if let line = await baseGapLine(goal.base, ctx: ctx, fetch: fetch) { out("           \(line)") }
+                if let line = await baseMovedLine(id, ctx: ctx, fetch: fetch) { out("moved:     \(line)") }
             } catch let error as GoalParseError {
                 let problems = error.description.split(separator: "\n").map { "           \($0)" }
                 out("goal:      not valid\n\(problems.joined(separator: "\n"))")
@@ -333,6 +334,20 @@ extension Commands {
             out("")
             out("Base       \(line)")
         }
+        if let line = await baseMovedLine(id, ctx: ctx, fetch: fetch) {
+            out("Moved      \(line)")
+        }
+    }
+
+    /// One line when the thread's base has moved on since its branch was cut (and, when it did, which of the thread's files it
+    /// touched too); nil when it has not, there is no worktree to compare, or the answer is unknown. A requested fetch that fails
+    /// is said, never replaced by a stale answer.
+    static func baseMovedLine(_ id: String, ctx: Context, fetch: Bool) async -> String? {
+        do {
+            guard let moved = try await ctx.service.baseMovement(id: id, fetch: fetch), moved.behind > 0 else { return nil }
+            let age = fetch ? "" : " (as of the last fetch; `--fetch` checks now)"
+            return "\(moved.line)\(age). `workbench sync` brings it in"
+        } catch { return fetch ? "could not check: \(error)" : nil }
     }
 
     /// One line when the base branch is behind its origin counterpart or could not be compared; nil when

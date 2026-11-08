@@ -94,10 +94,22 @@ for this window's thread runs to end, which is conservative at a cap above 1 (co
 recovery was already per thread (each log closes its own open turn); a test covers three at once. The `threads-at-once` scenario
 shows the rail with three live threads.
 
-### 6. Ship onto a moved base
+### 6. Ship onto a moved base (first part built)
 
 Two threads from the same `main` will touch the same files. Accept and ship rebase onto the new base or fail with a message saying what
 conflicted; the review screen says the base moved since the thread started.
+
+Design, from the discussion that shaped it: two threads from the same `main` do not conflict until the first lands, and a green check
+on the old base is weak evidence once it has. So bring the base in with an agent in the loop, the check as the judge, and a
+**merge**, never a rebase (no history rewrite, no force-push of a pushed branch; the pull requests are squash-merged anyway).
+
+- **Part 1, built: `workbench sync`.** Workbench fetches `origin/<base>`, commits uncommitted work on its own, merges, and leaves a
+  conflict in progress in the worktree; `base.synced` records it. `status` and `review` say when the base moved and which of the
+  thread's files it touched too (`base_moved` in the JSON). No agent runs yet: the conflict is resolved by hand or with a
+  `send-back` whose note the command prints.
+- **Part 2, next:** the agent does it. `sync` starts a turn whose prompt names the moved base and the overlapping or conflicted files
+  (untrusted text fenced as such), the check runs on the result as for any turn, and the review screen and the app say what the sync
+  changed. Ship shows the same movement as a note.
 
 ### 7. Soak and raise the default
 

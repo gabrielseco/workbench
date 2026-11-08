@@ -25,9 +25,12 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case budgetNeedsCap(provider: String)
     case goalEditRefused(String)
     case goalNotCopied(String)
+    /// `sync` could not start or finish; the text says why and what, if anything, was left in the worktree.
+    case syncRefused(String)
 
     public var description: String {
         switch self {
+        case .syncRefused(let why): why
         case .goalNotCopied(let why): "the goal was not copied into the worktree, so there is nothing to hand over: \(why)"
         case .copySourceMissing(let path): "no goal file to copy at \(path)"
         case .copySourceTooLarge(let path): "\(path) is too large to be a goal file"

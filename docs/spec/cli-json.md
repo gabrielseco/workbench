@@ -17,7 +17,7 @@ as an argument only. No key changed.
 
 One object. `workbench status [id] --json`.
 
-status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, worktree, progress, spine, attention, kind, chat
+status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, running, last_result, check, cost_usd, plan, plan_cost_usd, agents, approved_for, notes, base_gap, base_moved, worktree, progress, spine, attention, kind, chat
 
 - `lineage`: null for a thread someone started, else `{parent, root, round}` for a follow-up that `ship --review-loop`
   made: the thread it follows, the thread that opened the pull request, and its number among the root's follow-ups.
@@ -37,6 +37,7 @@ status keys: v, thread, lineage, follow_ups, ended, goal, turns, open_turn, runn
   else `{provider, model, recorded, spend_policy}` from the latest `goal.approved`; an approval without the two keys reads as `claude`, model
   null, `recorded: false`.
 - `notes`: `{turn, seq, text}` for each send-back.
+- `base_moved`: null (no worktree yet, or nothing to compare), or `{base, behind, tip, overlapping, overlap_truncated, fetched, fetch_note}`: how many commits `origin/<base>` is ahead of the thread's branch (not of your local branch: that is `base_gap`), the first 12 characters of its tip, and which files (at most 50) both those commits and the thread changed. Without `--fetch` nothing touches the network and `behind` is counted against the `origin/<base>` this repository already has (`fetched` false); with it origin is asked first (`fetched` true). A fetch that fails gives `{base: null, behind: null, fetched: false, fetch_note}`. `workbench sync` brings the commits in.
 - `base_gap`: null, or `{base, behind, fetch_note, fetched, as_of}`. Without `--fetch` nothing touches the network: `behind` is counted against the `origin/<base>` this repository already has, `fetched` is false and `as_of` is when it was last fetched (the mtime of git's `FETCH_HEAD`; null when git never recorded one). With `--fetch`, origin is asked first, `fetched` is true and `as_of` is null. `fetch_note` says why a requested fetch did not happen.
 - `worktree`: `{state: present | removed | none, path}`.
 - `progress`: null when no turn is open; else `{turn, elapsed_s, timeout_s, last_event, last_event_age_s, quiet,
@@ -62,7 +63,7 @@ runs and queues nothing.
 One object. `workbench review [id] --json`; `review --patch <path> --json` prints
 `{v, path, patch, binary, too_large_bytes}` for one file.
 
-review keys: v, thread, lineage, follow_ups, status, ended, title, approval, spend_policy, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, agents, approved_for, base, worktree, criteria, commits, diff, check, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap
+review keys: v, thread, lineage, follow_ups, status, ended, title, approval, spend_policy, goal_problem, turns, last_result, cost_usd, plan, plan_cost_usd, agents, approved_for, base, worktree, criteria, commits, diff, check, verifier, judge, pr_review, review_stages, denied_tools, notes, next, base_gap, base_moved
 
 - `base`: the goal's base branch, null when the goal is not valid. `worktree`: as in status.
 - `status`: `empty`, `running`, `awaiting_review`, `sent_back`, `decided`.
