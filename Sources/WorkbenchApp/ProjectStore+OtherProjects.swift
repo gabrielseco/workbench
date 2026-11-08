@@ -40,8 +40,8 @@ extension ProjectStore {
         guard let listed, let listing = listed else { return }
         var changed = false
         // A merge that could not be written the last time (the log was held) is written now.
-        for (thread, status) in model.unwrittenMerges(for: path) {
-            changed = await recordMerge(status, thread: thread, inProjectAt: path, project: other) || changed
+        for (thread, status) in model.unwrittenOutcomes(for: path) {
+            changed = await recordOutcome(status, thread: thread, inProjectAt: path, project: other) || changed
         }
         for row in listing.rows where row.pullRequest != nil {
             let readAt = model.readAt(row.id, for: path)
@@ -52,17 +52,19 @@ extension ProjectStore {
             guard path != project?.root.path, railPaths.contains(path) else { return }
             model.record(read, thread: row.id, for: path)
             changed = true
-            if let read, read.state == .merged {
-                _ = await recordMerge(read, thread: row.id, inProjectAt: path, project: other)
+            if let read, read.state != .open {
+                _ = await recordOutcome(read, thread: row.id, inProjectAt: path, project: other)
             }
         }
         if changed { await readRailSummaries() }
     }
 
-    /// Writes `pr.merged` for a thread of a project that is not open; a write that failed is kept and tried again on the next pass.
-    private func recordMerge(_ status: PRStatus, thread: String, inProjectAt path: String, project other: Project) async -> Bool {
+    /// Writes `pr.merged` or `pr.closed` for a thread of a project that is not open; a write that failed is kept and tried again on the next pass.
+    private func recordOutcome(
+        _ status: PRStatus, thread: String, inProjectAt path: String, project other: Project
+    ) async -> Bool {
         guard let git = try? GitRunner.discover() else { return false }
-        let result = await ThreadService(project: other, git: git).recordMerge(id: thread, status: status)
+        let result = await ThreadService(project: other, git: git).recordOutcome(id: thread, status: status)
         threads.setUnwrittenMerge(result == .failed ? status : nil, thread: thread, for: path)
         return true
     }

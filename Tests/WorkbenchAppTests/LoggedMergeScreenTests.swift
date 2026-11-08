@@ -41,10 +41,10 @@ import WorkbenchCore
         #expect(await store.open(fixture.root))
         let merged = PRStatus(number: 7, state: .merged, head: String(repeating: "a", count: 40), checks: nil)
         // A generation older than the open project's: the answer belongs to a project that was closed.
-        await store.recordMerge(merged, thread: "a", in: fixture.project, generation: store.generation - 1)
+        await store.recordOutcome(merged, thread: "a", in: fixture.project, generation: store.generation - 1)
         let events = try EventLogReader.read(at: fixture.project.eventsURL("a")).events
-        #expect(!events.contains { $0.kind == .prMerged } && store.threads.unwrittenMerges.isEmpty)
-        await store.recordMerge(merged, thread: "a", in: fixture.project, generation: store.generation)
+        #expect(!events.contains { $0.kind == .prMerged } && store.threads.unwrittenOutcomes.isEmpty)
+        await store.recordOutcome(merged, thread: "a", in: fixture.project, generation: store.generation)
         #expect(try EventLogReader.read(at: fixture.project.eventsURL("a")).events.contains { $0.kind == .prMerged })
     }
 

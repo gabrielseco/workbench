@@ -91,7 +91,7 @@ import WorkbenchCore
         #expect(events.filter { $0.kind == .prMerged }.count == 1)
     }
 
-    @Test func aPullRequestGitHubSaidClosedIsAskedAboutAgainBecauseItMayBeReopened() async throws {
+    @Test func aPullRequestGitHubSaidClosedIsWrittenToTheLogAndNotAskedAboutAgain() async throws {
         let (open, other) = (try await AppFixture(), try await shipped())
         keptGitHubFixtures.append(open)
         let github = GitHub()
@@ -99,7 +99,12 @@ import WorkbenchCore
         (store.threads.otherListEvery, store.threads.otherAskEvery) = (.zero, .zero)
         await store.readOtherProjectsPullRequests()
         await store.readOtherProjectsPullRequests()
-        #expect(github.reads.count == 2)
+        #expect(github.reads.count == 1, "the log says it from then on")
+        let events = try EventLogReader.read(at: other.project.eventsURL("a")).events
+        #expect(events.filter { $0.kind == .prClosed }.count == 1)
+        // A fresh store, which asks GitHub nothing, still shows it closed.
+        let rows = ThreadListLoader.load(project: other.project, cache: .init()).rows
+        #expect(rows.first?.mark == .idle && rows.first?.line == "PR #7 closed" && rows.first?.pullRequest == nil)
     }
 
     @Test func aThreadPastWhatTheInboxListsIsStillAskedAboutBecauseTheTileCountsIt() async throws {

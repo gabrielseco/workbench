@@ -44,7 +44,7 @@ struct ThreadListing: Equatable, Sendable {
     /// that is still open is quiet, so the line is not on screen for a second every few minutes.
     var syncing = false
     /// Merges GitHub confirmed whose `pr.merged` could not be written (the log was held): tried again on the next poll.
-    @ObservationIgnored var unwrittenMerges: [String: PRStatus] = [:]
+    @ObservationIgnored var unwrittenOutcomes: [String: PRStatus] = [:]
 
     /// How long a listed pull request's status is kept before it is read again.
     static let pullRequestInterval: Duration = .seconds(300)
@@ -53,7 +53,7 @@ struct ThreadListing: Equatable, Sendable {
     struct Saved {
         var pullRequests: [String: PRStatus] = [:]
         var readAt: [String: ContinuousClock.Instant] = [:]
-        var unwrittenMerges: [String: PRStatus] = [:]
+        var unwrittenOutcomes: [String: PRStatus] = [:]
     }
 
     /// The projects that are not open: what GitHub said of their threads (read in the background) and what was left from when they were.
@@ -74,11 +74,11 @@ struct ThreadListing: Equatable, Sendable {
     /// a switch shows the last known state at once instead of the log alone until `gh` answers again.
     func switchProject(to path: String?) {
         if let livePath {
-            saved[livePath] = Saved(pullRequests: pullRequests, readAt: pullRequestsReadAt, unwrittenMerges: unwrittenMerges)
+            saved[livePath] = Saved(pullRequests: pullRequests, readAt: pullRequestsReadAt, unwrittenOutcomes: unwrittenOutcomes)
         }
         let next = path.flatMap { saved[$0] } ?? Saved()
         (pullRequests, pullRequestsReadAt) = (next.pullRequests, next.readAt)
-        (unwrittenMerges, syncing) = (next.unwrittenMerges, false)
+        (unwrittenOutcomes, syncing) = (next.unwrittenOutcomes, false)
         livePath = path
     }
 
@@ -97,12 +97,12 @@ struct ThreadListing: Equatable, Sendable {
         saved[path] = entry
     }
 
-    func unwrittenMerges(for path: String) -> [String: PRStatus] { saved[path]?.unwrittenMerges ?? [:] }
+    func unwrittenOutcomes(for path: String) -> [String: PRStatus] { saved[path]?.unwrittenOutcomes ?? [:] }
 
     func setUnwrittenMerge(_ status: PRStatus?, thread id: String, for path: String) {
         guard path != livePath else { return }
         var entry = saved[path] ?? Saved()
-        entry.unwrittenMerges[id] = status
+        entry.unwrittenOutcomes[id] = status
         saved[path] = entry
     }
 
@@ -255,7 +255,7 @@ enum ThreadListLoader {
         let recorded = state.pullRequest
         let status = status.flatMap { $0.number == recorded?.number ? $0 : nil }
         // A merge the log recorded needs no read of GitHub.
-        let outcome = state.isMerged ? PullRequestOutcome.merged : outcome(status)
+        let outcome = state.settledOutcome(Self.outcome(status))
         let checks = status?.checksError == nil ? status?.checks : nil
         let spine = ThreadSpine.derive(
             state: state, approval: approval, outcome: outcome, checks: checks, currentHead: status?.head)

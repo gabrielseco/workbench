@@ -20,7 +20,8 @@ public enum SpineMark: String, Sendable, Equatable {
     case done, current, needsYou = "needs_you", pending, failed
 }
 
-/// What GitHub says became of the pull request. The log does not record it until `clean`, so the caller supplies it.
+/// What GitHub says became of the pull request. The log records a merge or a close once a reader saw it (`pr.merged`, `pr.closed`);
+/// until then the caller supplies it.
 public enum PullRequestOutcome: Sendable, Equatable {
     case open, merged, closed
 }
@@ -51,8 +52,8 @@ public struct ThreadSpine: Sendable, Equatable {
         state: ThreadState, approval: ApprovalState? = nil, outcome: PullRequestOutcome = .open,
         checks: PRChecksSummary? = nil, currentHead: String? = nil
     ) -> ThreadSpine {
-        // A merge the log recorded is the outcome whatever the caller read.
-        let outcome = state.isMerged ? PullRequestOutcome.merged : outcome
+        // A merge or a close the log recorded is the outcome whatever the caller read (a merge outranks a close).
+        let outcome = state.settledOutcome(outcome)
         let approved = approval.map { $0 == .approved } ?? (state.approvedGoalHash != nil)
         let review = state.review
         let decided = state.decision != nil

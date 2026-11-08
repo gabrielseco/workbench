@@ -68,6 +68,7 @@ struct ThreadSnapshot: Equatable {
         if state.cleaned { return "Cleaned: the branch was removed." }
         if let pr = state.pullRequest {
             if state.isMerged { return "Merged: PR #\(pr.number)." }
+            if state.isClosed { return "PR #\(pr.number) was closed without merging." }
             switch ci?.status?.state {
             case .merged?: return "Merged: PR #\(pr.number)."
             case .closed?: return "PR #\(pr.number) was closed without merging."
@@ -90,7 +91,9 @@ struct ThreadSnapshot: Equatable {
     var canReviewPullRequest: Bool { watchesPullRequest }
 
     /// Shipped, not cleaned and not known to have ended: its CI is worth reading and Merge is shown (enabled only when green).
-    var watchesPullRequest: Bool { state.pullRequest != nil && !state.cleaned && !state.isMerged && ci?.ended != true }
+    var watchesPullRequest: Bool {
+        state.pullRequest != nil && !state.cleaned && state.settledOutcome() == .open && ci?.ended != true
+    }
 
     /// GitHub said just now that the pull request is open and every check passed.
     var canMerge: Bool { watchesPullRequest && (ci?.canMerge ?? false) }

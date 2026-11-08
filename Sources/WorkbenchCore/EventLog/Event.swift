@@ -54,6 +54,7 @@ public struct EventKind: RawRepresentable, Hashable, Sendable, Codable, Expressi
     public static let prDescribed: EventKind = "pr.described"
     public static let prRefreshed: EventKind = "pr.refreshed"
     public static let prMerged: EventKind = "pr.merged"
+    public static let prClosed: EventKind = "pr.closed"
     public static let worktreeRemoved: EventKind = "worktree.removed"
     public static let branchRemoved: EventKind = "branch.removed"
     public static let branchAhead: EventKind = "branch.ahead"

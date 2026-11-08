@@ -169,12 +169,13 @@ public enum ProjectSummaryLoader {
         }
         // As the thread list reads it: only a status for the pull request the log names counts, and a merge the log recorded needs no read.
         let status = status.flatMap { $0.number == state.pullRequest?.number ? $0 : nil }
-        var outcome = PullRequestOutcome.open
-        if state.isMerged || status?.state == .merged {
-            outcome = .merged
-        } else if status?.state == .closed {
-            outcome = .closed
+        var read = PullRequestOutcome.open
+        switch status?.state {
+        case .merged?: read = .merged
+        case .closed?: read = .closed
+        case .open?, nil: break
         }
+        let outcome = state.settledOutcome(read)
         let checks = status?.checksError == nil ? status?.checks : nil
         let spine = ThreadSpine.derive(
             state: state, approval: approval, outcome: outcome, checks: checks, currentHead: status?.head)
