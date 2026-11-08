@@ -18,7 +18,8 @@ extension ProjectStore {
     /// The tile above (`-1`) or below (`1`) the one that is open; nothing past either end.
     func moveRailSelection(by step: Int) async {
         let current = allProjects ? nil : project?.root.path
-        guard let stop = RailProjects.stop(from: current, by: step, in: railPaths) else { return }
+        let gone = Set(railTiles().filter { $0.unavailable != nil }.map(\.path))
+        guard let stop = RailProjects.stop(from: current, by: step, in: railPaths, skipping: gone) else { return }
         await go(to: stop)
     }
 

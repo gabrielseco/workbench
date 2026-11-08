@@ -73,12 +73,20 @@ enum RailProjects {
         return number == 1 ? .everything : .project(paths[number - 2])
     }
 
-    /// The stop `step` places from `current` (`nil` is the inbox of all), stopping at either end: the rail is a list, not a loop.
-    static func stop(from current: String?, by step: Int, in paths: [String]) -> Stop? {
+    /// The stop `step` places from `current` (`nil` is the inbox of all), stopping at either end: the rail is a list, not a loop. A
+    /// project that cannot be opened is passed over, else a step onto it is refused and every later step aims at it again.
+    static func stop(from current: String?, by step: Int, in paths: [String], skipping unavailable: Set<String> = []) -> Stop? {
         let stops: [Stop] = [.everything] + paths.map(Stop.project)
         let here = current.flatMap { path in paths.firstIndex(of: path).map { $0 + 1 } } ?? 0
-        let target = min(max(here + step, 0), stops.count - 1)
-        return target == here ? nil : stops[target]
+        var target = here + (step < 0 ? -1 : 1)
+        while stops.indices.contains(target) {
+            if case .project(let path) = stops[target], unavailable.contains(path) {
+                target += step < 0 ? -1 : 1
+            } else {
+                return stops[target]
+            }
+        }
+        return nil
     }
 
     /// Two letters from a folder name: the first letters of its first two words (`expenses-backend` is `eb`), else its first two

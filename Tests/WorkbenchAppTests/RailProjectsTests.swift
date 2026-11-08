@@ -82,4 +82,12 @@ import Testing
         #expect(RailProjects.stop(from: nil, by: -1, in: list) == nil, "the inbox has nothing above")
         #expect(RailProjects.stop(from: "/gone", by: 1, in: list) == .project("/a"), "a project off the rail counts as the top")
     }
+
+    @Test func aStepPassesOverAProjectThatCannotBeOpened() {
+        let list = ["/a", "/gone", "/c"]
+        let gone: Set<String> = ["/gone"]
+        #expect(RailProjects.stop(from: "/a", by: 1, in: list, skipping: gone) == .project("/c"))
+        #expect(RailProjects.stop(from: "/c", by: -1, in: list, skipping: gone) == .project("/a"))
+        #expect(RailProjects.stop(from: "/a", by: 1, in: ["/a", "/gone"], skipping: gone) == nil, "nothing openable below")
+    }
 }
