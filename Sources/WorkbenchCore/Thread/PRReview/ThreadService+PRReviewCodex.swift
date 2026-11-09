@@ -19,7 +19,8 @@ extension ThreadService {
             return AgentRequest(
                 provider: .claude, model: round.agent.model,
                 prompt: PRReview.instruction(
-                    brief: round.paths.brief.lastPathComponent, checkout: round.paths.tree.lastPathComponent),
+                    brief: round.paths.brief.lastPathComponent, checkout: round.paths.tree.lastPathComponent,
+                    task: round.task),
                 images: images, workingDirectory: round.paths.folder, outputDirectory: round.paths.folder,
                 policy: .readOnlyEvidence, spend: spend, session: .start(proposed: round.sessionID),
                 purpose: .review, environment: round.settings.environment, limits: limits,
@@ -28,7 +29,7 @@ extension ThreadService {
         }
         return AgentRequest(
             provider: round.agent.provider, model: round.agent.model,
-            prompt: PRReview.instruction(brief: round.paths.brief.path), images: images,
+            prompt: PRReview.instruction(brief: round.paths.brief.path, task: round.task), images: images,
             workingDirectory: round.paths.tree, outputDirectory: round.paths.folder, policy: .readOnlyEvidence,
             spend: spend, purpose: .review, environment: round.settings.environment, limits: limits,
             answerFile: round.paths.answer, reasoningEffort: round.agent.reasoningEffort)

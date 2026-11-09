@@ -33,8 +33,8 @@ extension ThreadService {
         // the process, so there is never a stale one.
         guard let lock = FolderLock(folder: reviews) else { throw PRReviewRefusal.busy }
         defer { lock.release() }
-        // What a killed review left, for any pull request or commit: ended before anything is read or refused.
-        await recoverPullRequestLeftovers(in: reviews)
+        // What a killed review or explanation left, for any pull request or commit: ended before anything is read or refused.
+        await recoverByNumberLeftovers()
 
         let info = try await pullRequestInfo(number, gh: gh)
         let tip = try await originBranchTip(info.branch)
@@ -62,6 +62,14 @@ extension ThreadService {
         return PRReviewResult(
             round: 1, pr: number, maxRounds: 0, headSHA: round.reviewedSHA ?? tip, verdict: outcome.verdict,
             failure: reason, findingsPath: findingsPath, findings: outcome.findings, warnings: outcome.warnings)
+    }
+
+    /// Ends what a killed `pr-review --pr` or `explain-pr` left. Both hold the reviews' lock, so whichever takes it next
+    /// ends the other's leftovers too.
+    func recoverByNumberLeftovers() async {
+        await recoverPullRequestLeftovers(in: project.workbenchDirectory.appendingPathComponent("reviews", isDirectory: true))
+        await recoverPullRequestLeftovers(
+            in: project.workbenchDirectory.appendingPathComponent(PRExplain.folderName, isDirectory: true))
     }
 
     /// Ends what a killed review left in any pull request's folder. Called with the reviews lock held, so none is live.

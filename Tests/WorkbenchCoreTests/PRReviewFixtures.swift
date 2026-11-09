@@ -58,7 +58,7 @@ struct FakeCodex {
                    exit 1
                  } ;;
             esac
-            brief=$(printf '%s' "$prompt" | sed -n 's/^Read the review brief at \\(.*\\) and follow it exactly\\..*/\\1/p')
+            brief=$(printf '%s' "$prompt" | sed -n 's/^Read the [a-z]* brief at \\(.*\\) and follow it exactly\\..*/\\1/p')
             cp "$brief" "$d/brief_$n" 2>/dev/null
             diff=$(sed -n 's/.*saved at \\(.*\\)\\. Read that file.*/\\1/p' "$brief" | head -1)
             cp "$diff" "$d/diff_$n" 2>/dev/null

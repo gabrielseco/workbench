@@ -290,6 +290,18 @@ these differences:
 | 2 | `usage` | no stage name, or the `pr-review` cases |
 | 6 | `refused` | `<name>` is not in `review.stages` (nothing runs), `max_rounds` of this stage already ran for this pull request (counted over its own rounds; `--again` does not lift that), or the `pr-review` cases |
 
+### `explain-pr --pr <n>`
+
+The same codes as `pr-review --pr` for the same input, with no 15 (an explanation has no verdict). The output contract
+is [`../plan/explain-pr.md`](../plan/explain-pr.md).
+
+| Code | Kind | When |
+|---|---|---|
+| 0 |  | the explanation was written, or reused for a head that has not moved; the last stdout line is its absolute path |
+| 1 | `failed` | no explanation: the agent is missing, was at capacity three times, crashed, timed out or was stopped, its answer was empty or missing, or the file could not be written (no file is written or reported); also `gh` or origin could not be read |
+| 2 | `usage` | no `--pr`, a `--pr` that is not a positive number, or a wrong command line |
+| 6 | `refused` | nothing was spawned: no `gh`, an unreadable `--spec`, an `--out` whose folder does not exist or that is a folder, a pull request that is not open, from a fork or with a branch name Workbench will not pass to git, a branch origin no longer has, or another `pr-review --pr` or `explain-pr` holds the project |
+
 ### `accept`
 
 `-m` only applies when something is left to commit; work the agent already committed keeps its messages. Given

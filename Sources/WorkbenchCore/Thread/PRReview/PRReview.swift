@@ -59,15 +59,15 @@ public enum PRReview {
     public static let fixLine = "VERDICT: FIX"
 
     /// What the reviewer is asked on the command line: the review text is in the brief file, so this only points at it.
-    static func instruction(brief: String) -> String {
-        "Read the review brief at \(brief) and follow it exactly. Do not run builds or tests, do not change "
+    static func instruction(brief: String, task: PRRoundTask = .review) -> String {
+        "Read the \(task.briefName) at \(brief) and follow it exactly. Do not run builds or tests, do not change "
             + "files and do not post anything anywhere."
     }
 
     /// The same pointer for a reviewer that cannot work inside the checkout: it runs in the round's folder, which holds
     /// the brief, the saved diff and the checkout, and may only read files there.
-    static func instruction(brief: String, checkout: String) -> String {
-        "Read the review brief at \(brief) and follow it exactly. Your working directory holds the brief, the diff and the "
+    static func instruction(brief: String, checkout: String, task: PRRoundTask = .review) -> String {
+        "Read the \(task.briefName) at \(brief) and follow it exactly. Your working directory holds the brief, the diff and the "
             + "checkout of the head, which is the directory \(checkout); where the brief speaks of the working directory "
             + "it means that checkout. You can only read files. Do not change files and do not post anything anywhere."
     }
@@ -191,7 +191,7 @@ public enum PRReviewRefusal: Error, Equatable, Sendable, CustomStringConvertible
         case .pullRequestUnreadable(let number, let why):
             "pull request #\(number) could not be read with `gh`: \(why)"
         case .notReviewable(let number, let why):
-            "pull request #\(number) is not one `workbench pr-review --pr` reviews: \(why)"
+            "pull request #\(number) is not one Workbench can check out from origin: \(why)"
         case .unknownStage(let name, let listed):
             "there is no review stage '\(name)' in review.stages (it lists \(listed.joined(separator: ", "))). "
                 + "Add it to [review] stages and give it a [review.stage.\(name)] table."

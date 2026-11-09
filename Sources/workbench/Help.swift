@@ -101,6 +101,11 @@ enum Help {
         "pr-review": Extra(
             changes: "runs Codex read-only on a pull request in a throwaway checkout; records the round; posts nothing",
             example: "workbench pr-review --pr 12"),
+        "explain-pr": Extra(
+            changes:
+                "runs the review agent read-only on a pull request in a throwaway checkout; writes the explanation under "
+                + ".workbench/explains/ and to --out; records nothing in a thread, posts nothing",
+            example: "workbench explain-pr --pr 12 --out /tmp/pr-12.md"),
         "review-stage": Extra(
             changes: "runs one configured review stage read-only; records the round",
             example: "workbench review-stage design"),
