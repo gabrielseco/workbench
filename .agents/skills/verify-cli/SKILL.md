@@ -211,6 +211,18 @@ prints no `Verify` line and `status` no `verify:` line; `abandon` ends the threa
 fields back into what `status --json`, `review --json` and `review` printed, so "status --json has no verify field",
 "review --json has no verify field" and "review prints no Verify line" must FAIL.
 
+### explain-pr
+
+No agent runs, so it costs nothing: a clone whose origin is a bare copy in the temp folder, pull request #7 a branch pushed there,
+and stand-in `gh` and `codex` (on PATH and in `[providers.codex]`). Steps: `init`; `explain-pr --pr 7` exits 0 and its last stdout
+line is the absolute path of `.workbench/explains/pr-7-<head7>.md`; the file is the body only (the stand-in's front matter dropped,
+trimmed, one final newline); codex ran once with `-s read-only` in the throwaway checkout under `.workbench/explains/`; the clone's
+branches, origin's refs, HEAD, the working tree and the worktree list are as they were; `gh` was only asked `pr view`; a second
+run reuses the file (same path, codex not run); `--again` runs codex and replaces it; `--out` writes there and prints that path; a
+moved head is explained afresh into its own file; an empty answer exits 1 with no path on stdout; no `--pr` and `--pr seven` exit
+2; `help explain-pr` shows the synopsis. `VERIFY_CLI_SABOTAGE=1` puts front matter back in the file and drops the path line from
+stdout after the first run, so "the last stdout line is the absolute path" and "the file is the body only" must FAIL.
+
 ## Adding a scenario for the next feature
 
 One task, one script: `scripts/verify-cli/<feature>.sh`, started with `bash`. Do not copy `abandon.sh`: source
