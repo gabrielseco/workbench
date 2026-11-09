@@ -21,7 +21,7 @@
 # `task tick --all` must tick the project of every installed timer (its agent's folder) and, with that folder gone, say so and exit 1.
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in launchctl refuse to load, so "install writes the launcher and the agent and loads it",
 # "install prints the wake line and says it does not run sudo" (a failed load stops the output), "status says the agent is loaded and the
-# task approved", "a second install replaces the files", "the copy keeps running after the source is overwritten" and the four `refresh` steps that need an install must FAIL. The frame is in lib.sh. Run by
+# task approved", "a second install replaces the files", "the copy keeps running after the source is overwritten" must FAIL (the refresh steps do not depend on the load, so they pass in both runs). The frame is in lib.sh. Run by
 # hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
