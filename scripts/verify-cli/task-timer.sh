@@ -15,13 +15,13 @@
 # copy must run, and it must go on running after the binary it was installed from is overwritten (a rebuild); `status` must say `ok   binary:`.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # `refresh` (what the post-merge hook runs as `task timer refresh --all` after a pull of main) must bring the copy up to date with the binary
-# it runs from (here a newer, different file), keep the interval and `--pull-main` the person chose, not unload the agent (launchctl is not
+# it runs from (a stale copy is made by hand), keep the interval and `--pull-main` the person chose, not unload the agent (launchctl is not
 # called), say `up to date` the second time, leave a newer copy alone when run from an older binary, and refuse (exit 1) with no timer installed;
 # `refresh --all` does the same for every installed timer from any folder.
 # `task tick --all` must tick the project of every installed timer (its agent's folder) and, with that folder gone, say so and exit 1.
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in launchctl refuse to load, so "install writes the launcher and the agent and loads it",
 # "install prints the wake line and says it does not run sudo" (a failed load stops the output), "status says the agent is loaded and the
-# task approved", "a second install replaces the files", "the copy keeps running after the source is overwritten" and the five `refresh` steps must FAIL. The frame is in lib.sh. Run by
+# task approved", "a second install replaces the files", "the copy keeps running after the source is overwritten" and the four `refresh` steps that need an install must FAIL. The frame is in lib.sh. Run by
 # hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -130,25 +130,26 @@ check "a bad interval is a usage error (exit 2)" "exit $RC: $(head -c 200 "$SCRA
 
 # --- 4b. refresh ----------------------------------------------------------------------------------------------
 
-# A newer, different binary: what a build after a pull leaves.
-cp "$WB" "$SCRATCH/wb-new" && printf 'x' >>"$SCRATCH/wb-new" && touch "$SCRATCH/wb-new" || die "could not make a newer binary"
+# A copy that is older than this binary and different from it: what the timer holds after a pull and a rebuild. (The binary itself is
+# never edited: a changed executable can be killed by the system's signature check.)
+stale_copy() { printf '#!/bin/sh\necho stale\n' >"$COPY" && chmod 755 "$COPY" && touch -t 202001010000 "$COPY"; }
+stale_copy || die "could not make a stale copy"
 BOOTSTRAPS=$(grep -c "^bootstrap" "$LC/calls" 2>/dev/null)
-( cd "$P" && HOME="$HOME_T" WORKBENCH_LAUNCHCTL="$LC/launchctl" "$SCRATCH/wb-new" task timer refresh >"$SCRATCH/refresh1.out" 2>&1 ); RC=$?
-shown "$SCRATCH/refresh1.out" 4
-check "refresh puts the newer binary in the copy, keeps the choices and leaves the agent loaded" "exit $RC: $(head -c 300 "$SCRATCH/refresh1.out")" \
+wbp "$SCRATCH/refresh1.out" task timer refresh; shown "$SCRATCH/refresh1.out" 4
+check "refresh puts this binary in the copy, keeps the choices and leaves the agent loaded" "exit $RC: $(head -c 300 "$SCRATCH/refresh1.out")" \
     bash -c '[ "$1" = 0 ] && cmp -s "$2" "$3" && grep -q "refreshed binary" "$4" && grep -q "git pull --ff-only" "$5" && grep -q "<integer>300</integer>" "$6" && [ "$(grep -c "^bootstrap" "$7/calls")" = "$8" ]' \
-    _ "$RC" "$SCRATCH/wb-new" "$COPY" "$SCRATCH/refresh1.out" "$LAUNCHER" "$PLIST" "$LC" "$BOOTSTRAPS"
-( cd "$P" && HOME="$HOME_T" WORKBENCH_LAUNCHCTL="$LC/launchctl" "$SCRATCH/wb-new" task timer refresh >"$SCRATCH/refresh2.out" 2>&1 ); RC=$?
+    _ "$RC" "$WB" "$COPY" "$SCRATCH/refresh1.out" "$LAUNCHER" "$PLIST" "$LC" "$BOOTSTRAPS"
+wbp "$SCRATCH/refresh2.out" task timer refresh
 check "refreshing again says up to date" "exit $RC: $(head -c 200 "$SCRATCH/refresh2.out")" \
     bash -c '[ "$1" = 0 ] && grep -q ": up to date" "$2"' _ "$RC" "$SCRATCH/refresh2.out"
-touch -t 202001010000 "$SCRATCH/wb-old"; cp "$WB" "$SCRATCH/wb-old" && touch -t 202001010000 "$SCRATCH/wb-old"
-( cd "$P" && HOME="$HOME_T" WORKBENCH_LAUNCHCTL="$LC/launchctl" "$SCRATCH/wb-old" task timer refresh >"$SCRATCH/refresh3.out" 2>&1 ); RC=$?
+cp "$WB" "$SCRATCH/wb-old" && touch -t 202001010000 "$SCRATCH/wb-old" || die "could not make an older binary"
+( cd "$P" && HOME="$HOME_T" WORKBENCH_LAUNCHCTL="$LC/launchctl" with_timeout "$T_WB" "$SCRATCH/wb-old" task timer refresh >"$SCRATCH/refresh3.out" 2>&1 ); RC=$?
 check "a refresh from an older binary leaves the newer copy alone" "exit $RC: $(head -c 200 "$SCRATCH/refresh3.out")" \
-    bash -c '[ "$1" = 0 ] && grep -q "is newer than" "$2" && cmp -s "$3" "$4"' _ "$RC" "$SCRATCH/refresh3.out" "$SCRATCH/wb-new" "$COPY"
-printf 'y' >>"$SCRATCH/wb-new"; touch "$SCRATCH/wb-new"
-( cd "$SCRATCH" && HOME="$HOME_T" WORKBENCH_LAUNCHCTL="$LC/launchctl" "$SCRATCH/wb-new" task timer refresh --all >"$SCRATCH/refresh4.out" 2>&1 ); RC=$?
+    bash -c '[ "$1" = 0 ] && grep -q "is newer than" "$2"' _ "$RC" "$SCRATCH/refresh3.out"
+stale_copy
+( cd "$SCRATCH" && HOME="$HOME_T" WORKBENCH_LAUNCHCTL="$LC/launchctl" with_timeout "$T_WB" "$WB" task timer refresh --all >"$SCRATCH/refresh4.out" 2>&1 ); RC=$?
 check "refresh --all refreshes every installed timer from any folder" "exit $RC: $(head -c 300 "$SCRATCH/refresh4.out")" \
-    bash -c '[ "$1" = 0 ] && grep -q "refreshed binary" "$2" && cmp -s "$3" "$4"' _ "$RC" "$SCRATCH/refresh4.out" "$SCRATCH/wb-new" "$COPY"
+    bash -c '[ "$1" = 0 ] && grep -q "refreshed binary" "$2" && cmp -s "$3" "$4"' _ "$RC" "$SCRATCH/refresh4.out" "$WB" "$COPY"
 mkdir -p "$SCRATCH/other" && git -C "$SCRATCH/other" init -q
 ( cd "$SCRATCH/other" && HOME="$HOME_T" WORKBENCH_LAUNCHCTL="$LC/launchctl" "$WB" task timer refresh >"$SCRATCH/refresh5.out" 2>&1 ); RC=$?
 check "refresh with no timer installed for the project fails (exit 1) and writes nothing" "exit $RC: $(head -c 200 "$SCRATCH/refresh5.out")" \
