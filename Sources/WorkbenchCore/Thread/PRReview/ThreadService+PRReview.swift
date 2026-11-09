@@ -173,8 +173,9 @@ extension ThreadService {
         var outcome = PRReviewOutcome(warnings: round.warnings)
         // A stage that asked for proof and has none must not pass on the diff alone.
         var proof: [String] = []
+        let reviews = round.task == .review
         // Claude takes no images and there is no text substitute: say so before the proof itself is looked for.
-        if round.agent.provider == .claude, round.stage.config.needsProof {
+        if reviews, round.agent.provider == .claude, round.stage.config.needsProof {
             let why =
                 "claude cannot take images, and there is no text substitute for visual evidence: "
                 + "the \(round.stage.name) stage reads proof, so it cannot run on claude"
@@ -218,7 +219,8 @@ extension ThreadService {
         if round.config.projectInstructions {
             input.instructions = await ProjectInstructions.load(git: git, repo: project.root, commit: baseSHA)?.text
         }
-        if let path = round.stage.config.checklist {
+        // An explanation reads the change only: the stage's checklist, inputs and rubric are review criteria.
+        if reviews, let path = round.stage.config.checklist {
             if let text = Self.readChecklist(path, in: paths.tree) {
                 input.checklist = text
                 input.checklistPath = path
@@ -226,7 +228,7 @@ extension ThreadService {
                 outcome.warnings.append("the checklist \(path) is not a readable file in the pull request; reviewed without it")
             }
         }
-        for path in round.stage.config.fileInputs {
+        for path in reviews ? round.stage.config.fileInputs : [] {
             // A file the stage was told to read and cannot: a CLEAN would not mean what the project asked for.
             guard let text = Self.readChecklist(path, in: paths.tree) else {
                 return outcome.failed(
@@ -234,7 +236,7 @@ extension ThreadService {
             }
             input.files.append(PRReviewFile(path: path, text: text))
         }
-        if let path = round.stage.config.rubric {
+        if reviews, let path = round.stage.config.rubric {
             // Without the rubric the project asked for, a CLEAN would not mean what it should.
             guard let text = Self.readChecklist(path, in: paths.tree), let rubric = round.stage.rubric(from: text) else {
                 return outcome.failed("the rubric \(path) is not a readable, non-empty file in the pull request")
@@ -242,7 +244,8 @@ extension ThreadService {
             input.rubric = rubric
             input.rubricPath = path
         }
-        do { try round.stage.brief(for: input).write(to: paths.brief, atomically: true, encoding: .utf8) } catch {
+        let brief = reviews ? round.stage.brief(for: input) : PRExplain.prompt(for: input)
+        do { try brief.write(to: paths.brief, atomically: true, encoding: .utf8) } catch {
             return outcome.failed("the review brief could not be written: \(error.localizedDescription)")
         }
 
@@ -275,6 +278,11 @@ extension ThreadService {
         }
         guard let answer = Self.readAnswer(paths.answer) else {
             return outcome.failed("\(round.agent.provider) ended without writing an answer")
+        }
+        // An explanation has no verdict: the answer is the result, and its caller decides whether it is usable.
+        guard reviews else {
+            outcome.findings = answer
+            return outcome
         }
         guard let verdict = PRReview.parseVerdict(answer) else {
             return outcome.failed(

@@ -26,9 +26,7 @@ extension Commands {
     private static func reviewPullRequest(number: Int, specPath: String?, again: Bool) async throws -> Int32 {
         let ctx = try await Context.load()
         let config = try Config.load(from: ctx.project.configURL)
-        guard let gh = try? GitRunner.discover(tool: "gh", timeout: 60) else {
-            throw CLIError.refused("`gh` is not on PATH; it reads the pull request's branch and text")
-        }
+        let gh = try pullRequestGH()
         let spec = try specPath.map { try readSpec($0) }
         out(ReviewProgress.pullRequest(number, config: config))
         let holder = RunHolder()
@@ -67,8 +65,16 @@ extension Commands {
         }
     }
 
+    /// The `gh` that reads a pull request by number (`pr-review --pr`, `explain-pr`), refused when there is none.
+    static func pullRequestGH() throws -> GitRunner {
+        guard let gh = try? GitRunner.discover(tool: "gh", timeout: 60) else {
+            throw CLIError.refused("`gh` is not on PATH; it reads the pull request's branch and text")
+        }
+        return gh
+    }
+
     /// The file `--spec` names, read whole: a regular file of at most 64 KiB, read as text.
-    private static func readSpec(_ path: String) throws -> (text: String, path: String) {
+    static func readSpec(_ path: String) throws -> (text: String, path: String) {
         let url = URL(fileURLWithPath: path).standardizedFileURL
         let limit = 64 << 10
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),

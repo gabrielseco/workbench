@@ -97,6 +97,8 @@ do {
         exit(try await Commands.plan(Array(arguments.dropFirst())))
     case "pr-review":
         exit(try await Commands.prReview(Array(arguments.dropFirst())))
+    case "explain-pr":
+        exit(try await Commands.explainPR(Array(arguments.dropFirst())))
     case "review-stage":
         exit(try await Commands.reviewStage(Array(arguments.dropFirst())))
     case "accept":

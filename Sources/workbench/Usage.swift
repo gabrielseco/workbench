@@ -110,6 +110,11 @@ let workbenchUsage = """
       review-stage <name> [id] [--again]
                                  the same for the stage <name> of review.stages (pr-review is `pr-review`), with its
                                  own rounds; a stage whose applies_to matches no changed path is skipped (exit 0)
+      explain-pr --pr <n> [--out <file>] [--spec <file>] [--again]
+                                 the review agent explains a pull request in Markdown, read-only, in a throwaway checkout
+                                 of its head (as pr-review --pr); the last stdout line is the file's absolute path, the
+                                 file the body only (no front matter); kept as .workbench/explains/pr-<n>-<head7>.md (and
+                                 written to --out); an unmoved head reuses it unless --again; exit 0, 1 no explanation
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push; -m is used only
                                  when accept commits (work already committed keeps its messages)
       ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]

@@ -10,6 +10,11 @@ public enum ReviewProgress {
         "asking \(agentName(config)) to review pull request #\(number) \(wait)"
     }
 
+    /// `explain-pr --pr <n>`.
+    public static func explain(_ number: Int, config: Config) -> String {
+        "asking \(agentName(config)) to explain pull request #\(number) \(wait)"
+    }
+
     /// `pr-review [id]` and `review-stage <name> [id]`.
     public static func stage(_ name: String, thread id: String, config: Config) -> String {
         let agent = agentName(config, stage: name)

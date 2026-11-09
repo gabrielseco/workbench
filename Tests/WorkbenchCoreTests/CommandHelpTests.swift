@@ -147,6 +147,19 @@ private func commandNames(from usage: String) -> [String] {
         }
     }
 
+    @Test func explainPRIsInTheUsageListAndItsHelpSaysWhatItTakesAndWrites() async throws {
+        let dir = try emptyDirectory()
+        let usage = try await workbench(["help"], in: dir).stdout
+        #expect(commandNames(from: usage).contains("explain-pr"), "the usage list names it")
+        let help = try await workbench(["help", "explain-pr"], in: dir)
+        #expect(help.code == 0 && help.stdout.hasPrefix("workbench explain-pr\n"))
+        #expect(help.stdout.contains("explain-pr --pr <n> [--out <file>] [--spec <file>] [--again]"), "\(help.stdout)")
+        #expect(help.stdout.contains(".workbench/explains/") && help.stdout.contains("--json: no"), "\(help.stdout)")
+        // `--out` takes a value, read from the usage block: a value that reads `--help` is not a request for help.
+        let value = try await workbench(["explain-pr", "--pr", "12", "--out", "--help"], in: dir)
+        #expect(value.code != 0 && !value.stdout.hasPrefix("workbench "), "\(value.stdout)")
+    }
+
     @Test func anUnknownCommandIsAUsageErrorThatListsTheCommands() async throws {
         let dir = try emptyDirectory()
         let ran = try await workbench(["help", "frobnicate"], in: dir)
