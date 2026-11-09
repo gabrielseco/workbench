@@ -221,7 +221,7 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
 
 ## Commands
 
-- `workbench task timer install [--every <5m..1h>] [--pull-main] | status | remove`: makes the machine run the tasks (below). macOS.
+- `workbench task timer install [--every <5m..1h>] [--pull-main] | refresh [--all] | status | remove`: makes the machine run the tasks (below). macOS. `refresh` brings an installed timer up to date with the binary it runs from: it replaces the timer's copy by rename, rewrites the launcher and the agent file only if they differ (keeping the interval and `--pull-main`), reloads the agent only when its file changed (unloading would end a running tick), never replaces the copy with an older binary and never touches the wake schedule. `--all` does it for every installed timer; the post-merge hook runs it after rebuilding, so a pull of main reaches the timers. `status` warns when the copy is older than the binary it runs from and names `refresh`.
 - `workbench task log <name> [--all]`: what the task's last run did, told from its own log and the thread it started: when it began and ended,
   the outcome, the full reason, the units, the thread and pull request, then from the thread the setup result, the check result with the last
   lines of its output when it failed, how many tool calls were denied, and the agent's last message. `--all` is one line per run. A task that

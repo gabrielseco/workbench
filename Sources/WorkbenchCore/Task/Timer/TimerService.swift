@@ -80,8 +80,8 @@ public struct TimerService: Sendable {
         self.probes = probes
     }
 
-    private var domain: String { "gui/\(uid)" }
-    private var target: String { "gui/\(uid)/\(paths.label)" }
+    var domain: String { "gui/\(uid)" }
+    var target: String { "gui/\(uid)/\(paths.label)" }
 
     private func tasks() -> [TaskDefinition] {
         let library = TaskLibrary(project: project)
@@ -134,7 +134,7 @@ public struct TimerService: Sendable {
             "installed \(paths.label)",
             "  ticks every \(interval / 60) minutes; the tasks' own schedules say what is due",
             "  launcher: \(paths.launcher.path)",
-            "  binary:   \(paths.binary.path) (a copy of \(workbench.path); a rebuild leaves it, install again to update it)",
+            "  binary:   \(paths.binary.path) (a copy of \(workbench.path); `task timer refresh` updates it)",
             "  log:      \(paths.log.path)",
         ]
         switch TimerWake.plan(for: tasks()) {
@@ -171,7 +171,11 @@ public struct TimerService: Sendable {
         let temporary = folder.appendingPathComponent(".workbench-copy-\(UUID().uuidString)")
         do {
             try fm.copyItem(at: from, to: temporary)
-            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temporary.path)
+            // The copy keeps the binary's age on every platform: `status` and `refresh` tell a stale copy by comparing the two.
+            var attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o755]
+            let built = (try? fm.attributesOfItem(atPath: from.path))?[.modificationDate]
+            if let built { attributes[.modificationDate] = built }
+            try fm.setAttributes(attributes, ofItemAtPath: temporary.path)
             guard rename(temporary.path, destination.path) == 0 else {
                 throw TimerError.cannotWrite("\(String(cString: strerror(errno))) renaming the copy to \(destination.path)")
             }
@@ -324,7 +328,7 @@ public struct TimerService: Sendable {
     /// the app's own binary is not the command line tool, so it is not compared).
     private func binaryStatus() -> TimerStatusLine {
         let fm = FileManager.default
-        let fix = "workbench task timer install"
+        let fix = "workbench task timer refresh"
         guard fm.isExecutableFile(atPath: paths.binary.path) else {
             return TimerStatusLine(level: .fail, text: "binary: the copy the launcher runs is missing: \(fix)")
         }

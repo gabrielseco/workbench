@@ -41,6 +41,8 @@ private struct FakeLaunchctl {
         let text = (try? String(contentsOf: dir.appendingPathComponent("calls"), encoding: .utf8)) ?? ""
         return text.split(separator: "\n").map(String.init)
     }
+    /// What was changed: `print` only asks.
+    var changes: [String] { calls.filter { !$0.hasPrefix("print") } }
     var loaded: Bool { FileManager.default.fileExists(atPath: dir.appendingPathComponent("loaded").path) }
     func put(_ name: String, _ text: String = "") throws {
         try text.write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
@@ -139,7 +141,134 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(text(env.paths.binary) == "#!/bin/sh\necho v2\n")
     }
 
-    @Test func installFromTheCopyKeepsIt() async throws {
+    // MARK: refresh
+
+    /// A build newer than the copy, as a rebuild after a pull leaves it.
+    private func rebuild(_ env: Env, _ text: String = "#!/bin/sh\necho v2\n", ahead: TimeInterval = 120) throws {
+        try text.write(to: env.workbench, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755, .modificationDate: Date().addingTimeInterval(ahead)], ofItemAtPath: env.workbench.path)
+    }
+
+    @Test func refreshBringsTheCopyUpToDateKeepsWhatWasChosenAndLeavesTheAgentAlone() async throws {
+        let env = try Env()
+        _ = try await env.service().install(interval: 300, pullMain: true)
+        try rebuild(env)
+        let before = env.launchctl.changes
+        let result = try await env.service().refresh()
+        #expect(result.outcome == .refreshed)
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v2\n")
+        #expect(try String(contentsOf: env.paths.launcher, encoding: .utf8).contains("git pull --ff-only"))
+        #expect(try String(contentsOf: env.paths.plist, encoding: .utf8).contains("<integer>300</integer>"))
+        // An agent that is loaded is not unloaded for a new binary: that would end a tick that is running.
+        #expect(env.launchctl.changes == before)
+        // The next status is clean.
+        let status = await env.service().status()
+        #expect(!status.contains { $0.text.hasPrefix("binary: the copy") })
+    }
+
+    @Test func refreshWhenNothingDiffersWritesAndRunsNothing() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        let before = env.launchctl.changes
+        let launcherStamp = try FileManager.default.attributesOfItem(atPath: env.paths.launcher.path)[.modificationDate] as? Date
+        let result = try await env.service().refresh()
+        #expect(result.outcome == .upToDate)
+        #expect(env.launchctl.changes == before)
+        let after = try FileManager.default.attributesOfItem(atPath: env.paths.launcher.path)[.modificationDate] as? Date
+        #expect(after == launcherStamp)
+    }
+
+    @Test func refreshNeverPutsAnOlderBinaryOverANewerCopy() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        try rebuild(env, "#!/bin/sh\necho old\n", ahead: -3600)
+        let result = try await env.service().refresh()
+        #expect(result.outcome == .newerCopyKept)
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
+    }
+
+    @Test func refreshWithNoTimerInstalledWritesNothing() async throws {
+        let env = try Env()
+        let result = try await env.service().refresh()
+        #expect(result.outcome == .notInstalled)
+        #expect(!FileManager.default.fileExists(atPath: env.paths.launcherDirectory.path))
+        #expect(!FileManager.default.fileExists(atPath: env.paths.plist.path))
+        #expect(env.launchctl.changes.isEmpty)
+    }
+
+    @Test func refreshRewritesAnOutOfDateLauncherAndReloadsTheAgentOnlyWhenItsFileChanged() async throws {
+        let env = try Env()
+        _ = try await env.service().install(interval: 600)
+        try "#!/bin/sh\n# an older launcher\n".write(to: env.paths.launcher, atomically: true, encoding: .utf8)
+        var before = env.launchctl.changes
+        var result = try await env.service().refresh()
+        #expect(result.outcome == .refreshed)
+        #expect(try String(contentsOf: env.paths.launcher, encoding: .utf8).contains("task tick"))
+        #expect(FileManager.default.isExecutableFile(atPath: env.paths.launcher.path))
+        #expect(env.launchctl.changes == before)
+        // An agent file from an older template is rewritten, with the person's interval, and loaded again.
+        let plist = try String(contentsOf: env.paths.plist, encoding: .utf8)
+        let older = plist.replacingOccurrences(of: "<false/>", with: "<true/>")
+        try older.write(to: env.paths.plist, atomically: true, encoding: .utf8)
+        before = env.launchctl.changes
+        result = try await env.service().refresh()
+        #expect(result.outcome == .refreshed)
+        #expect(try String(contentsOf: env.paths.plist, encoding: .utf8) == plist)
+        #expect(Array(env.launchctl.changes.dropFirst(before.count)) == [
+            "bootout gui/501/\(env.paths.label)", "bootstrap gui/501 \(env.paths.plist.path)",
+        ])
+        #expect(env.launchctl.loaded)
+    }
+
+    @Test func aRefreshThatCannotCopyKeepsTheOldBinaryAndSaysWhy() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        let missing = env.workbench.deletingLastPathComponent().appendingPathComponent("gone")
+        await #expect(throws: TimerError.self) { _ = try await env.service(workbench: missing).refresh() }
+        #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
+    }
+
+        @Test func aRefreshWhoseUnloadFailsLeavesTheOldAgentFileSoARetryStillSeesTheChange() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        let old = try String(contentsOf: env.paths.plist, encoding: .utf8).replacingOccurrences(of: "<false/>", with: "<true/>")
+        try old.write(to: env.paths.plist, atomically: true, encoding: .utf8)
+        try env.launchctl.put("fail_bootout")
+        await #expect(throws: TimerError.self) { _ = try await env.service().refresh() }
+        #expect(try String(contentsOf: env.paths.plist, encoding: .utf8) == old)
+        try FileManager.default.removeItem(at: env.launchctl.dir.appendingPathComponent("fail_bootout"))
+        #expect(try await env.service().refresh().outcome == .refreshed)
+        #expect(try String(contentsOf: env.paths.plist, encoding: .utf8) != old)
+    }
+
+    @Test func aRefreshRepairsACopyThatLostItsExecuteBits() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: env.paths.binary.path)
+        let result = try await env.service().refresh()
+        #expect(result.outcome == .refreshed && result.lines.joined().contains("binary permissions"))
+        #expect(FileManager.default.isExecutableFile(atPath: env.paths.binary.path))
+    }
+
+    @Test func aRefreshLoadsAnAgentThatIsNotLoadedSoARetryAfterAFailedReloadWorks() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        try rebuild(env)
+        // The reload fails half way: the old agent is unloaded and the new one does not load.
+        try env.launchctl.put("fail_bootstrap")
+        try "#!/bin/sh\n# older\n".write(to: env.paths.plist, atomically: true, encoding: .utf8)
+        await #expect(throws: TimerError.self) { _ = try await env.service().refresh() }
+        #expect(!env.launchctl.loaded)
+        // The files now match what refresh would write, but the agent is not loaded: the retry loads it.
+        try FileManager.default.removeItem(at: env.launchctl.dir.appendingPathComponent("fail_bootstrap"))
+        let result = try await env.service().refresh()
+        #expect(result.outcome == .refreshed && result.lines.joined().contains("agent (loaded)"))
+        #expect(env.launchctl.loaded)
+        #expect(try await env.service().refresh().outcome == .upToDate)
+    }
+
+@Test func installFromTheCopyKeepsIt() async throws {
         let env = try Env()
         _ = try await env.service().install()
         _ = try await env.service(workbench: env.paths.binary).install()
@@ -335,7 +464,7 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         try FileManager.default.setAttributes([.modificationDate: later], ofItemAtPath: env.workbench.path)
         let stale = lines(await env.service().status())
         let warned = stale.contains {
-            $0.hasPrefix("warn: binary: the copy the launcher runs is from") && $0.hasSuffix("workbench task timer install")
+            $0.hasPrefix("warn: binary: the copy the launcher runs is from") && $0.hasSuffix("workbench task timer refresh")
         }
         #expect(warned)
         // A program that is not named workbench (the app's own binary) is not compared.
@@ -348,7 +477,7 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(notExecutable.contains { $0.hasPrefix("fail: binary: the copy the launcher runs is missing") })
         try FileManager.default.removeItem(at: env.paths.binary)
         let missing = lines(await env.service().status())
-        #expect(missing.contains("fail: binary: the copy the launcher runs is missing: workbench task timer install"))
+        #expect(missing.contains("fail: binary: the copy the launcher runs is missing: workbench task timer refresh"))
     }
 
     @Test func installedButNotLoadedIsAFailure() async throws {

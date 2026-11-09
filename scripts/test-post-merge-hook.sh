@@ -22,7 +22,7 @@ check() {  # name, expected substring, then the commit to make
   if [[ "$out" == *"$expect"* ]]; then echo "PASS  $name"; else echo "FAIL  $name: wanted '$expect', got '$out'"; FAILED=1; fi
 }
 change() { echo "$RANDOM" >> "$1"; git add -A; git commit -q -m c; }
-check "an app source change rebuilds" "post-merge: rebuild" change Sources/a.swift
+check "an app source change rebuilds and refreshes the timers" "post-merge: rebuild, then refresh the task timers" change Sources/a.swift
 check "a docs change does not" "skip: nothing the app is built from changed" change docs/a.md
 check "the bundle script changing rebuilds" "post-merge: rebuild" change scripts/bundle-app.sh
 git checkout -q -b feature
