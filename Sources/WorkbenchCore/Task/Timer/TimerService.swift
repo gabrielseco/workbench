@@ -171,7 +171,10 @@ public struct TimerService: Sendable {
         let temporary = folder.appendingPathComponent(".workbench-copy-\(UUID().uuidString)")
         do {
             try fm.copyItem(at: from, to: temporary)
-            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temporary.path)
+            // The copy keeps the binary's age on every platform: `status` and `refresh` tell a stale copy by comparing the two.
+            var attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o755]
+            if let built = (try? fm.attributesOfItem(atPath: from.path))?[.modificationDate] { attributes[.modificationDate] = built }
+            try fm.setAttributes(attributes, ofItemAtPath: temporary.path)
             guard rename(temporary.path, destination.path) == 0 else {
                 throw TimerError.cannotWrite("\(String(cString: strerror(errno))) renaming the copy to \(destination.path)")
             }
