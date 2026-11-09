@@ -24,8 +24,7 @@ extension ThreadService {
         // The reviews' lock: an explanation fetches into the same `FETCH_HEAD` as a review by number.
         guard let lock = FolderLock(folder: reviews) else { throw PRReviewRefusal.busy }
         defer { lock.release() }
-        await recoverPullRequestLeftovers(in: reviews)
-        await recoverPullRequestLeftovers(in: explains)
+        await recoverByNumberLeftovers()
 
         let info = try await pullRequestInfo(number, gh: gh)
         let tip = try await originBranchTip(info.branch)

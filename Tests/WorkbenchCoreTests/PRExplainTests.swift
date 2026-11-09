@@ -211,6 +211,29 @@ private func explainedPR(answer: String? = "# The thing\n\nIt fixes the thing.\n
         #expect(!next.reused && r.codex.runs == 2, "the next run explains again")
     }
 
+    @Test func whatAKilledExplanationLeftIsEndedByTheNextReviewByNumberAndTheReverse() async throws {
+        let r = try await explainedPR()
+        func leave(_ folder: String) async throws -> URL {
+            let tree = r.fx.project.workbenchDirectory.appendingPathComponent("\(folder)/round-1.tree")
+            try FileManager.default.createDirectory(at: tree.deletingLastPathComponent(), withIntermediateDirectories: true)
+            _ = try await r.fx.git.run(["worktree", "add", "--detach", tree.path, r.head], in: r.fx.repo)
+            return tree
+        }
+        let explanation = try await leave("explains/pr-12-aaaaaaa")
+        try r.codex.put("answer", "Fine.\nVERDICT: CLEAN\n")
+        _ = try await r.fx.service.reviewPullRequest(
+            number: 12, spec: nil, config: r.config, gh: ExplainGH(in: r).runner, codexPath: r.codex.path,
+            environment: r.codex.environment(), timeout: 30, capacityBackoff: { _ in 0 })
+        #expect(!FileManager.default.fileExists(atPath: explanation.path), "the review ended the explanation's leftover")
+
+        let review = try await leave("reviews/pr-12-bbbbbbb")
+        try r.codex.put("answer", "# A\n")
+        _ = try await explain(r)
+        #expect(!FileManager.default.fileExists(atPath: review.path), "the explanation ended the review's leftover")
+        let list = try await r.fx.git.run(["worktree", "list", "--porcelain"], in: r.fx.repo).stdout
+        #expect(!list.contains("round-1.tree"), "no registered checkout is left: \(list)")
+    }
+
     @Test func aSpecFileReplacesThePullRequestText() async throws {
         let r = try await explainedPR()
         let spec = r.fx.repo.deletingLastPathComponent().appendingPathComponent("spec.md")
