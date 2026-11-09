@@ -229,7 +229,29 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
     }
 
-        @Test func aRefreshLoadsAnAgentThatIsNotLoadedSoARetryAfterAFailedReloadWorks() async throws {
+        @Test func aRefreshWhoseUnloadFailsLeavesTheOldAgentFileSoARetryStillSeesTheChange() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        let old = try String(contentsOf: env.paths.plist, encoding: .utf8).replacingOccurrences(of: "<false/>", with: "<true/>")
+        try old.write(to: env.paths.plist, atomically: true, encoding: .utf8)
+        try env.launchctl.put("fail_bootout")
+        await #expect(throws: TimerError.self) { _ = try await env.service().refresh() }
+        #expect(try String(contentsOf: env.paths.plist, encoding: .utf8) == old)
+        try FileManager.default.removeItem(at: env.launchctl.dir.appendingPathComponent("fail_bootout"))
+        #expect(try await env.service().refresh().outcome == .refreshed)
+        #expect(try String(contentsOf: env.paths.plist, encoding: .utf8) != old)
+    }
+
+    @Test func aRefreshRepairsACopyThatLostItsExecuteBits() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: env.paths.binary.path)
+        let result = try await env.service().refresh()
+        #expect(result.outcome == .refreshed && result.lines.joined().contains("binary permissions"))
+        #expect(FileManager.default.isExecutableFile(atPath: env.paths.binary.path))
+    }
+
+    @Test func aRefreshLoadsAnAgentThatIsNotLoadedSoARetryAfterAFailedReloadWorks() async throws {
         let env = try Env()
         _ = try await env.service().install()
         try rebuild(env)

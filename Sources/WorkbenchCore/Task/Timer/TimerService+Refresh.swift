@@ -40,23 +40,36 @@ extension TimerService {
             project: project, workbench: paths.binary, label: paths.label, pullMain: current.pullMain)
         let plist = TimerFiles.plist(paths: paths, project: project, interval: current.interval)
         let copyChanged = !sameFile && !(fm.contentsEqual(atPath: source.path, andPath: paths.binary.path))
+        // Same bytes but not runnable (its execute bits were lost): that is a copy to repair, not "up to date".
+        let notExecutable = !fm.isExecutableFile(atPath: paths.binary.path) && fm.fileExists(atPath: paths.binary.path)
         let launcherChanged = (try? String(contentsOf: paths.launcher, encoding: .utf8)) != launcher
         let plistChanged = (try? String(contentsOf: paths.plist, encoding: .utf8)) != plist
         // An agent that is not loaded (a reload that failed half way, or a logout) is loaded here: a retry must not call that "up to date".
         let isLoaded = await agentIsLoaded()
-        guard copyChanged || launcherChanged || plistChanged || !isLoaded else {
+        guard copyChanged || notExecutable || launcherChanged || plistChanged || !isLoaded else {
             return RefreshResult(outcome: .upToDate, lines: ["\(paths.label): up to date"])
         }
         do {
             if copyChanged { try Self.copyBinary(from: workbench, to: paths.binary) }
+            if notExecutable, !copyChanged { try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: paths.binary.path) }
             if launcherChanged {
                 try launcher.write(to: paths.launcher, atomically: true, encoding: .utf8)
                 try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: paths.launcher.path)
             }
-            if plistChanged { try plist.write(to: paths.plist, atomically: true, encoding: .utf8) }
         } catch { throw TimerError.cannotWrite("\(error)") }
-        if plistChanged || !isLoaded, let launchctl {
-            if isLoaded { _ = try? await launchctl.run(["bootout", target], in: paths.home) }
+        if let launchctl, plistChanged || !isLoaded {
+            // Unload first and before the agent file is written: an unload that fails leaves the old file, so a retry sees it differ.
+            if isLoaded {
+                let unloaded = try? await launchctl.run(["bootout", target], in: paths.home)
+                if let unloaded, !unloaded.succeeded, !Self.notLoaded(unloaded) {
+                    throw TimerError.launchctlFailed("bootout", unloaded.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+                } else if unloaded == nil {
+                    throw TimerError.launchctlFailed("bootout", "it could not be run")
+                }
+            }
+            do { if plistChanged { try plist.write(to: paths.plist, atomically: true, encoding: .utf8) } } catch {
+                throw TimerError.cannotWrite("\(error)")
+            }
             let loaded = try? await launchctl.run(["bootstrap", domain, paths.plist.path], in: paths.home)
             guard let loaded, loaded.succeeded else {
                 let why = loaded.map { $0.stderr.trimmingCharacters(in: .whitespacesAndNewlines) } ?? "it could not be run"
@@ -64,7 +77,7 @@ extension TimerService {
             }
         }
         var what: [String] = []
-        if copyChanged { what.append("binary") }
+        if copyChanged { what.append("binary") } else if notExecutable { what.append("binary permissions") }
         if launcherChanged { what.append("launcher") }
         if plistChanged || !isLoaded { what.append(isLoaded ? "agent (reloaded)" : "agent (loaded)") }
         return RefreshResult(outcome: .refreshed, lines: ["\(paths.label): refreshed \(what.joined(separator: ", "))"])
