@@ -150,10 +150,14 @@ let workbenchUsage = """
                                  for every project that has a timer installed (a missing project is said and fails it)
       task timer install [--every <5m..1h>] [--pull-main]
                                  make the machine run the tasks: copy this binary beside a launcher (a rebuild leaves the copy;
-                                 install again to update it), write and load the launchd agent that runs `task tick` for this
+                                 `task timer refresh` updates it), write and load the launchd agent that runs `task tick` for this
                                  project (every 15 minutes by default) and print the one `sudo pmset repeat` wake line computed
                                  from the tasks' times, which you run yourself (Workbench never runs sudo). --pull-main
                                  fast-forwards a clean main before each tick. macOS; elsewhere it prints the crontab line
+      task timer refresh [--all] bring the installed timer's copy of the binary (and its launcher) up to date with this binary,
+                                 keeping its interval and --pull-main; does not unload a loaded agent or touch the wake
+                                 schedule; never replaces the copy with an older binary. --all does it for every installed
+                                 timer, from any folder (what the post-merge hook runs). Exit 1 when none is installed here
       task timer status          whether it will run tonight: the agent loaded, the last tick, each task, the wake schedule,
                                  power, FileVault; ok, warn or FAIL lines; exit 1 when something is a FAIL
       task timer remove          unload the agent and delete its files; names the sudo line that cancels the wake; exit 1 when

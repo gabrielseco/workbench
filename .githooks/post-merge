@@ -2,6 +2,9 @@
 # After a pull/merge on main that changed the app or what it is built from, rebuild ~/Applications/Workbench.app in the background so
 # the installed app matches main. Never quits a running Workbench: it owns the turn it started, so ending it would end that turn; the new
 # build is put in place and the notification says to quit it (⌘Q) and open it again. Not opened if it was not running.
+# It then builds the `workbench` command line tool and runs `workbench task timer refresh --all` with it: a task timer runs its own copy of
+# the binary (made by `task timer install`), which would otherwise stay as old as the day it was installed and fail on a config key that
+# came later. A refresh never unloads an agent that is running a tick and never touches the wake schedule.
 # The result is a macOS notification; details in ~/Library/Logs/Workbench/rebuild.log.
 # Enable once per clone: git config core.hooksPath .githooks
 # WORKBENCH_HOOK_DRY_RUN=1 only says what it would do (scripts/test-post-merge-hook.sh uses it).
@@ -16,7 +19,7 @@ if git diff --quiet ORIG_HEAD HEAD -- Sources Resources Package.swift Package.re
   exit 0
 fi
 if [[ "${WORKBENCH_HOOK_DRY_RUN:-0}" == 1 ]]; then
-  say "rebuild"
+  say "rebuild, then refresh the task timers"
   exit 0
 fi
 
@@ -37,9 +40,20 @@ notify() { osascript -e "display notification \"$1\" with title \"Workbench rebu
     notify "Build failed, see ~/Library/Logs/Workbench/rebuild.log"
     exit 1
   fi
-  if [[ "$RUNNING" == 1 ]]; then
-    notify "Rebuilt at $SHA; quit Workbench (⌘Q) and open it to load it"
+  TIMERS="task timers up to date"
+  # shellcheck source=../scripts/use-xcode.sh
+  . "$ROOT/scripts/use-xcode.sh"
+  if nice -n 10 swift build -c release -q --product workbench --package-path "$ROOT"; then
+    CLI="$(swift build -c release --product workbench --package-path "$ROOT" --show-bin-path)/workbench"
+    if ! (cd "$ROOT" && "$CLI" task timer refresh --all); then
+      TIMERS="a task timer could not be refreshed (workbench task timer status, in its project)"
+    fi
   else
-    notify "Rebuilt at $SHA"
+    TIMERS="the workbench tool did not build, so the task timers were not refreshed"
+  fi
+  if [[ "$RUNNING" == 1 ]]; then
+    notify "Rebuilt at $SHA; quit Workbench (⌘Q) and open it to load it. $TIMERS"
+  else
+    notify "Rebuilt at $SHA. $TIMERS"
   fi
 ) </dev/null >>"$LOG" 2>&1 &

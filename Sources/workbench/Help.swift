@@ -131,8 +131,9 @@ enum Help {
                 + "read-only; task edit: nothing, unless --accept, which rewrites task.md (an approval it had then reads stale); "
                 + "task approve: appends task.approved to the task's own run log "
                 + "(.workbench/tasks/<name>/runs.jsonl); task timer: install writes the launcher and a copy of the binary under "
-                + "~/.workbench/timers/ and the agent in ~/Library/LaunchAgents and loads it with launchctl, remove undoes "
-                + "that, status reads; task run and task tick: append task.run.started and task.run.ended there and, with "
+                + "~/.workbench/timers/ and the agent in ~/Library/LaunchAgents and loads it with launchctl, "
+                + "refresh rewrites the copy and, if they changed, the launcher and the agent; remove undoes that, "
+                + "status reads; task run and task tick: append task.run.started and task.run.ended there and, with "
                 + "fix: pr, create a thread, run Claude and the check in its worktree, accept it and push its branch to "
                 + "open a pull request",
             example: "workbench task new bump-countries --input countries.txt   or   workbench task run bump-countries"),
