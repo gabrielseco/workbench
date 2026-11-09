@@ -41,6 +41,8 @@ private struct FakeLaunchctl {
         let text = (try? String(contentsOf: dir.appendingPathComponent("calls"), encoding: .utf8)) ?? ""
         return text.split(separator: "\n").map(String.init)
     }
+    /// What was changed: `print` only asks.
+    var changes: [String] { calls.filter { !$0.hasPrefix("print") } }
     var loaded: Bool { FileManager.default.fileExists(atPath: dir.appendingPathComponent("loaded").path) }
     func put(_ name: String, _ text: String = "") throws {
         try text.write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
@@ -152,14 +154,14 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         let env = try Env()
         _ = try await env.service().install(interval: 300, pullMain: true)
         try rebuild(env)
-        let before = env.launchctl.calls
+        let before = env.launchctl.changes
         let result = try await env.service().refresh()
         #expect(result.outcome == .refreshed)
         #expect(text(env.paths.binary) == "#!/bin/sh\necho v2\n")
         #expect(try String(contentsOf: env.paths.launcher, encoding: .utf8).contains("git pull --ff-only"))
         #expect(try String(contentsOf: env.paths.plist, encoding: .utf8).contains("<integer>300</integer>"))
         // An agent that is loaded is not unloaded for a new binary: that would end a tick that is running.
-        #expect(env.launchctl.calls == before)
+        #expect(env.launchctl.changes == before)
         // The next status is clean.
         let status = await env.service().status()
         #expect(!status.contains { $0.text.hasPrefix("binary: the copy") })
@@ -168,11 +170,11 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
     @Test func refreshWhenNothingDiffersWritesAndRunsNothing() async throws {
         let env = try Env()
         _ = try await env.service().install()
-        let before = env.launchctl.calls
+        let before = env.launchctl.changes
         let launcherStamp = try FileManager.default.attributesOfItem(atPath: env.paths.launcher.path)[.modificationDate] as? Date
         let result = try await env.service().refresh()
         #expect(result.outcome == .upToDate)
-        #expect(env.launchctl.calls == before)
+        #expect(env.launchctl.changes == before)
         let after = try FileManager.default.attributesOfItem(atPath: env.paths.launcher.path)[.modificationDate] as? Date
         #expect(after == launcherStamp)
     }
@@ -192,28 +194,28 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(result.outcome == .notInstalled)
         #expect(!FileManager.default.fileExists(atPath: env.paths.launcherDirectory.path))
         #expect(!FileManager.default.fileExists(atPath: env.paths.plist.path))
-        #expect(env.launchctl.calls.isEmpty)
+        #expect(env.launchctl.changes.isEmpty)
     }
 
     @Test func refreshRewritesAnOutOfDateLauncherAndReloadsTheAgentOnlyWhenItsFileChanged() async throws {
         let env = try Env()
         _ = try await env.service().install(interval: 600)
         try "#!/bin/sh\n# an older launcher\n".write(to: env.paths.launcher, atomically: true, encoding: .utf8)
-        var before = env.launchctl.calls
+        var before = env.launchctl.changes
         var result = try await env.service().refresh()
         #expect(result.outcome == .refreshed)
         #expect(try String(contentsOf: env.paths.launcher, encoding: .utf8).contains("task tick"))
         #expect(FileManager.default.isExecutableFile(atPath: env.paths.launcher.path))
-        #expect(env.launchctl.calls == before)
+        #expect(env.launchctl.changes == before)
         // An agent file from an older template is rewritten, with the person's interval, and loaded again.
         let plist = try String(contentsOf: env.paths.plist, encoding: .utf8)
         let older = plist.replacingOccurrences(of: "<false/>", with: "<true/>")
         try older.write(to: env.paths.plist, atomically: true, encoding: .utf8)
-        before = env.launchctl.calls
+        before = env.launchctl.changes
         result = try await env.service().refresh()
         #expect(result.outcome == .refreshed)
         #expect(try String(contentsOf: env.paths.plist, encoding: .utf8) == plist)
-        #expect(Array(env.launchctl.calls.dropFirst(before.count)) == [
+        #expect(Array(env.launchctl.changes.dropFirst(before.count)) == [
             "bootout gui/501/\(env.paths.label)", "bootstrap gui/501 \(env.paths.plist.path)",
         ])
         #expect(env.launchctl.loaded)
@@ -227,7 +229,24 @@ private let weekdaysAtFour = "Repeating power events:\n  wakepoweron at 3:55AM w
         #expect(text(env.paths.binary) == "#!/bin/sh\necho v1\n")
     }
 
-    @Test func installFromTheCopyKeepsIt() async throws {
+        @Test func aRefreshLoadsAnAgentThatIsNotLoadedSoARetryAfterAFailedReloadWorks() async throws {
+        let env = try Env()
+        _ = try await env.service().install()
+        try rebuild(env)
+        // The reload fails half way: the old agent is unloaded and the new one does not load.
+        try env.launchctl.put("fail_bootstrap")
+        try "#!/bin/sh\n# older\n".write(to: env.paths.plist, atomically: true, encoding: .utf8)
+        await #expect(throws: TimerError.self) { _ = try await env.service().refresh() }
+        #expect(!env.launchctl.loaded)
+        // The files now match what refresh would write, but the agent is not loaded: the retry loads it.
+        try FileManager.default.removeItem(at: env.launchctl.dir.appendingPathComponent("fail_bootstrap"))
+        let result = try await env.service().refresh()
+        #expect(result.outcome == .refreshed && result.lines.joined().contains("agent (loaded)"))
+        #expect(env.launchctl.loaded)
+        #expect(try await env.service().refresh().outcome == .upToDate)
+    }
+
+@Test func installFromTheCopyKeepsIt() async throws {
         let env = try Env()
         _ = try await env.service().install()
         _ = try await env.service(workbench: env.paths.binary).install()

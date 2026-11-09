@@ -68,7 +68,7 @@ extension Commands {
                 continue
             }
             do {
-                for line in try await refreshing(timerService(ctx)).lines { out(line) }
+                for line in try await timerService(ctx).refresh().lines { out(line) }
             } catch let error as TimerError {
                 out("PROBLEM  \(entry.root.lastPathComponent): \(error)")
                 code = 1
