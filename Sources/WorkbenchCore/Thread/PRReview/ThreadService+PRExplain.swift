@@ -71,13 +71,20 @@ extension ThreadService {
                 file: nil, reused: false, failure: "\(round.agent.provider) wrote an empty explanation; no file was written",
                 transcript: transcript, warnings: outcome.warnings)
         }
+        // The reported file first: when it cannot be written, nothing is kept either, so the next run does not reuse an
+        // explanation whose run failed.
+        var warnings = outcome.warnings
+        if let out {
+            if let why = Self.write(body, to: out) {
+                return result(file: nil, reused: false, failure: why, transcript: transcript, warnings: warnings)
+            }
+            if let why = Self.write(body, to: kept) { warnings.append("not kept for reuse: \(why)") }
+            return result(file: out, reused: false, transcript: transcript, warnings: warnings)
+        }
         if let why = Self.write(body, to: kept) {
-            return result(file: nil, reused: false, failure: why, transcript: transcript, warnings: outcome.warnings)
+            return result(file: nil, reused: false, failure: why, transcript: transcript, warnings: warnings)
         }
-        if let out, let why = Self.write(body, to: out) {
-            return result(file: nil, reused: false, failure: why, transcript: transcript, warnings: outcome.warnings)
-        }
-        return result(file: out ?? kept, reused: false, transcript: transcript, warnings: outcome.warnings)
+        return result(file: kept, reused: false, transcript: transcript, warnings: warnings)
     }
 
     /// Writes the whole file or nothing (a reader never sees half an explanation); the reason when it could not.

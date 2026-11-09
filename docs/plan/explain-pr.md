@@ -36,7 +36,9 @@ same project lock as `pr-review --pr` (they share `FETCH_HEAD`), so the two neve
 - The explanation is always kept at `.workbench/explains/pr-<n>-<head7>.md` in the project, where `<head7>` is the first
   seven characters of the head commit explained.
 - With `--out <file>`, it is also written to `<file>`, and that is the path reported.
-- Both are written atomically: a reader sees the whole old file or the whole new one, never a part.
+- Both are written atomically: a reader sees the whole old file or the whole new one, never a part. The reported file is
+  written first; when it cannot be written the run fails and nothing is kept, so a later run does not reuse it. When
+  `--out` was written but the kept copy could not be, the run succeeds with a `note:` saying it was not kept for reuse.
 - The agent's transcript and brief stay in `.workbench/explains/pr-<n>-<head7>/` for reading after a failure.
 
 ## Reuse

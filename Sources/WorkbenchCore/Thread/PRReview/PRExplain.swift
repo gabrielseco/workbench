@@ -57,7 +57,8 @@ public enum PRExplain {
     /// The answer as the file keeps it: the Markdown body alone, trimmed, ending in one newline. A leading YAML front
     /// matter block is dropped, since the caller writes its own and two would break the note. Nil when nothing is left.
     static func body(_ answer: String) -> String? {
-        var text = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        // CRLF lines would keep a `\r` on the fences, so the front matter would not be seen.
+        var text = answer.replacingOccurrences(of: "\r\n", with: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         let lines = text.components(separatedBy: "\n")
         let isFence = { (line: String) in line.trimmingCharacters(in: .whitespaces) == "---" }
         if lines.first.map(isFence) == true, let close = lines.dropFirst().firstIndex(where: isFence) {

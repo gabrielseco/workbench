@@ -173,7 +173,10 @@ private func explainedPR(answer: String? = "# The thing\n\nIt fixes the thing.\n
         #expect(fresh.file == kept(r, head: moved) && FileManager.default.fileExists(atPath: kept(r, head: moved).path))
     }
 
-    @Test(arguments: [("empty", "  \n\n"), ("front matter only", "---\ntitle: x\n---\n"), ("missing", nil)])
+    @Test(arguments: [
+        ("empty", "  \n\n"), ("front matter only", "---\ntitle: x\n---\n"),
+        ("CRLF front matter only", "---\r\ntitle: x\r\n---\r\n"), ("missing", nil),
+    ])
     func anEmptyOrMissingAnswerIsAFailureAndWritesNoFile(label: String, answer: String?) async throws {
         let r = try await explainedPR(answer: answer)
         let result = try await explain(r)
@@ -183,6 +186,29 @@ private func explainedPR(answer: String? = "# The thing\n\nIt fixes the thing.\n
         #expect(ran.code == 1 && ran.stderr.contains("no explanation of pull request #12"), "\(label): \(ran.stderr)")
         #expect(ran.stdout.allSatisfy { !$0.hasPrefix("/") }, "\(label): no path on stdout: \(ran.stdout)")
         #expect(r.codex.read("brief_1") != nil, "\(label): the agent did run")
+    }
+
+    @Test(arguments: [
+        ("---\ntitle: x\n---\n\n# A\n\nB.\n\n", "# A\n\nB.\n"),
+        ("---\r\ntitle: x\r\n---\r\n# A\r\n\r\nB.\r\n", "# A\n\nB.\n"),
+        ("\n\n# A\n\n---\n\nB.", "# A\n\n---\n\nB.\n"),
+    ])
+    func theBodyDropsLeadingFrontMatterWhateverTheLineEndingsAndKeepsARuleLater(answer: String, body: String) {
+        #expect(PRExplain.body(answer) == body, "\(answer.debugDescription)")
+    }
+
+    @Test(.enabled(if: getuid() != 0, "root ignores file modes, so nothing can be locked"))
+    func anOutThatCannotBeWrittenIsAFailureAndKeepsNothingForReuse() async throws {
+        let r = try await explainedPR()
+        let locked = r.fx.repo.deletingLastPathComponent().appendingPathComponent("locked-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+        chmod(locked.path, 0o555)
+        defer { chmod(locked.path, 0o755) }
+        let result = try await explain(r, out: locked.appendingPathComponent("note.md"))
+        #expect(result.file == nil && result.failure?.contains("could not be written") == true, "\(result.failure ?? "")")
+        #expect(!FileManager.default.fileExists(atPath: kept(r).path), "a failed run leaves nothing a later run would reuse")
+        let next = try await explain(r)
+        #expect(!next.reused && r.codex.runs == 2, "the next run explains again")
     }
 
     @Test func aSpecFileReplacesThePullRequestText() async throws {
