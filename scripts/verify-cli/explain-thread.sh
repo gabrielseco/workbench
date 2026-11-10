@@ -108,13 +108,14 @@ printf '\n[providers.codex]\nexecutable = "%s"\n' "$BIN/codex" >>"$P/.workbench/
 state >"$SCRATCH/state.before"
 
 ARGS=(explain-thread --pr 7 --thread PRRT_probe1)
-wbp "$SCRATCH/first.out" "$P/probe" "${ARGS[@]}"
+wbp "$SCRATCH/first.out" "$P/docs" "${ARGS[@]}"
 shown "$SCRATCH/first.out"; shown "$SCRATCH/first.out.err"
 if [ "$SABOTAGE" = 1 ]; then
     sed '$d' "$SCRATCH/first.out" >"$SCRATCH/k" && mv "$SCRATCH/k" "$SCRATCH/first.out"
     grep -v 'COMMENT-' "$SCRATCH/brief.md" >"$SCRATCH/k" && mv "$SCRATCH/k" "$SCRATCH/brief.md"
 fi
-check "explain-thread exits 0, run from a subfolder of the clone" "exit $RC: $(cat "$SCRATCH/first.out.err")" test "$RC" = 0
+check "explain-thread exits 0, run from a subfolder of the clone (docs/)" "exit $RC: $(cat "$SCRATCH/first.out.err")" \
+    test "$RC" = 0
 check "the last stdout line is a JSON object with non-empty reasoning and proposed_fix, of the head" \
     "last line: $(tail -1 "$SCRATCH/first.out")" is_answer "$SCRATCH/first.out" "$HEAD_SHA"
 check "codex ran once, read-only (-s read-only), in the throwaway checkout under .workbench/explains/" \
