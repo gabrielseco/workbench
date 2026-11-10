@@ -223,6 +223,19 @@ moved head is explained afresh into its own file; an empty answer exits 1 with n
 2; `help explain-pr` shows the synopsis. `VERIFY_CLI_SABOTAGE=1` puts front matter back in the file and drops the path line from
 stdout after the first run, so "the last stdout line is the absolute path" and "the file is the body only" must FAIL.
 
+### explain-thread
+
+No agent runs, so it costs nothing: the same clone, origin and pull request #7 as `explain-pr` (its head adds a 40-line file),
+a stand-in `gh` that answers `pr view` and a `gh api graphql` thread on line 20 of that file with two comments, and a stand-in
+`codex`. Steps: `init`; `explain-thread --pr 7 --thread PRRT_probe1`, run from a subfolder of the clone, exits 0 and its last
+stdout line is a JSON object with non-empty `reasoning` and `proposed_fix`; codex ran once with `-s read-only` in the throwaway
+checkout under `.workbench/explains/`; its brief has the pull request's title, both comments in order and line 20 of the file
+marked; the clone, origin and the worktree list are as they were; `gh` was only asked `pr view` and `api graphql` with no
+mutation; an empty answer and one without `proposed_fix` exit 1 with `workbench: failed:` and no object; an unknown thread, a
+thread on another pull request and a closed pull request exit 6 with `workbench: refused:`; no `--thread` exits 2; `help` lists the
+command. `VERIFY_CLI_SABOTAGE=1` drops the object line from the first run's stdout and blanks the brief's thread, so "the last
+stdout line is the object" and "the brief has the title, both comments in order and the marked line" must FAIL.
+
 ## Adding a scenario for the next feature
 
 One task, one script: `scripts/verify-cli/<feature>.sh`, started with `bash`. Do not copy `abandon.sh`: source

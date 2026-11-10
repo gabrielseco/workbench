@@ -48,7 +48,8 @@ conflicting provider-selection design. P8 remains independent check-performance 
 
 Sizes are relative effort (S < M < L), not dates. Deferred work lives in [`../later/`](../later/README.md).
 What got in the way while using Workbench on itself is kept in [`FRICTION.md`](FRICTION.md).
-Output contracts other tools rely on: [`explain-pr.md`](explain-pr.md) (`workbench explain-pr`, read by Triage).
+Output contracts other tools rely on: [`explain-pr.md`](explain-pr.md) (`workbench explain-pr`, read by Triage) and
+[`explain-thread.md`](explain-thread.md) (`workbench explain-thread`, read by Triage).
 
 ## The scope rule
 

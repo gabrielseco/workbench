@@ -99,6 +99,8 @@ do {
         exit(try await Commands.prReview(Array(arguments.dropFirst())))
     case "explain-pr":
         exit(try await Commands.explainPR(Array(arguments.dropFirst())))
+    case "explain-thread":
+        exit(try await Commands.explainThread(Array(arguments.dropFirst())))
     case "review-stage":
         exit(try await Commands.reviewStage(Array(arguments.dropFirst())))
     case "accept":

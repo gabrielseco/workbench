@@ -244,8 +244,7 @@ extension ThreadService {
             input.rubric = rubric
             input.rubricPath = path
         }
-        let brief = reviews ? round.stage.brief(for: input) : PRExplain.prompt(for: input)
-        do { try brief.write(to: paths.brief, atomically: true, encoding: .utf8) } catch {
+        do { try Self.brief(round, input: input).write(to: paths.brief, atomically: true, encoding: .utf8) } catch {
             return outcome.failed("the review brief could not be written: \(error.localizedDescription)")
         }
 
@@ -291,6 +290,16 @@ extension ThreadService {
         outcome.verdict = verdict
         outcome.findings = answer
         return outcome
+    }
+
+    /// What the round's brief file says: the stage's review brief, or the explanation asked for.
+    private static func brief(_ round: PRReviewRound, input: PRReviewInput) -> String {
+        switch round.task {
+        case .review: round.stage.brief(for: input)
+        case .explain: PRExplain.prompt(for: input)
+        case .explainThread(let thread):
+            ThreadExplain.prompt(for: input, thread: thread, code: ThreadExplain.code(around: thread, in: round.paths.tree))
+        }
     }
 
     // MARK: Git
