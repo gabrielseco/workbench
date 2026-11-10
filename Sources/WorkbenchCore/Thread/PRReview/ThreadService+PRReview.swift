@@ -271,6 +271,7 @@ extension ThreadService {
         if let refusal = request.validate(against: provider) { return await refuse(refusal.message) }
 
         if round.settings.stopRequested() { return outcome.failed("the review was stopped") }
+        round.setupDone?()
         let transcript = await runAgent(provider, request: request, round: round, attach: attach)
         try? transcript.text.write(to: paths.transcript, atomically: true, encoding: .utf8)
         outcome.costUSD = transcript.costUSD

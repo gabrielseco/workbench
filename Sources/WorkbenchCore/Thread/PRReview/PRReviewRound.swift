@@ -66,6 +66,9 @@ struct PRReviewRound: Sendable {
     var sessionID = UUID().uuidString.lowercased()
     /// Where this round's provider processes are put on record; nil when the round runs outside a thread's log.
     var attempts: AttemptLog?
+    /// Called once the checkout, base and brief are made and the agent is about to start: whatever was held only for
+    /// that setup (a lock on the repository's `FETCH_HEAD`) is let go, so the agent's minutes do not block another run.
+    var setupDone: (@Sendable () -> Void)?
 
     /// Provider and model this stage resolves to.
     var agent: ResolvedAgent { config.resolvedReviewAgent(stage: stage.name) }

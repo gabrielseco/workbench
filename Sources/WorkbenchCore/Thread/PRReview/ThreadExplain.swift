@@ -309,17 +309,31 @@ public enum ThreadExplain {
     }
 
     /// The answer's two fields, both non-empty; nil when the answer is not such an object. A code fence around the object
-    /// is taken off first, since agents add one though asked not to.
+    /// is taken off first, since agents add one though asked not to. A line or two of prose before it is tolerated too
+    /// ("I've read the files, writing it up."), but only when the object starts a line and runs to the end: prose
+    /// around or inside it is still no answer.
     static func answer(_ text: String) -> (reasoning: String, proposedFix: String)? {
-        var body = text.replacingOccurrences(of: "\r\n", with: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        if body.hasPrefix("```") {
-            var lines = body.components(separatedBy: "\n")
-            if lines.count >= 2, lines.last?.trimmingCharacters(in: .whitespaces).hasPrefix("```") == true {
-                lines.removeFirst()
-                lines.removeLast()
-                body = lines.joined(separator: "\n")
-            }
+        let body = text.replacingOccurrences(of: "\r\n", with: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let found = fields(unfenced(body)) { return found }
+        let lines = body.components(separatedBy: "\n")
+        for index in lines.indices.dropFirst() where lines[index].hasPrefix("{") || lines[index].hasPrefix("```") {
+            if let found = fields(unfenced(lines[index...].joined(separator: "\n"))) { return found }
         }
+        return nil
+    }
+
+    private static func unfenced(_ text: String) -> String {
+        guard text.hasPrefix("```") else { return text }
+        var lines = text.components(separatedBy: "\n")
+        guard lines.count >= 2, lines.last?.trimmingCharacters(in: .whitespaces).hasPrefix("```") == true else {
+            return text
+        }
+        lines.removeFirst()
+        lines.removeLast()
+        return lines.joined(separator: "\n")
+    }
+
+    private static func fields(_ body: String) -> (reasoning: String, proposedFix: String)? {
         guard let object = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any],
             let reasoning = (object["reasoning"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
             let fix = (object["proposed_fix"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),

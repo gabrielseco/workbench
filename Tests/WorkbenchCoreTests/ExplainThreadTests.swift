@@ -271,6 +271,37 @@ private func threadPR(answer: String? = goodAnswer, base: String? = nil) async t
         #expect(!addedBrief.contains("| line "), "the head's file is not shown for the base's line")
     }
 
+    @Test func anotherThreadIsExplainedWhileOneIsRunningAndTheSameThreadIsRefused() async throws {
+        let r = try await threadPR()
+        let explains = r.fx.project.workbenchDirectory.appendingPathComponent(PRExplain.folderName)
+        func folder(_ thread: String) -> URL {
+            explains.appendingPathComponent(ThreadExplain.folderName(pr: 12, thread: thread))
+        }
+        // A run on another thread is past its setup: it holds its own folder's lock, not the reviews' one.
+        let tree = folder("PRRT_kwDOother").appendingPathComponent("round-1.tree")
+        try FileManager.default.createDirectory(at: tree.deletingLastPathComponent(), withIntermediateDirectories: true)
+        _ = try await r.fx.git.run(["worktree", "add", "--detach", tree.path, "HEAD"], in: r.fx.repo)
+        #expect(FileManager.default.fileExists(atPath: tree.path), "the other run's checkout was made")
+        let live = try #require(FolderLock(folder: folder("PRRT_kwDOother")))
+
+        let result = try await explain(r, gh: try ThreadGH(in: r))
+        #expect(result.reasoning != nil, "the second thread ran beside the first: \(result.failure ?? "")")
+        #expect(FileManager.default.fileExists(atPath: tree.path), "the live run's checkout is not removed")
+
+        // The same thread twice is refused, and the first run's checkout stays.
+        let same = try #require(FolderLock(folder: folder(threadID)))
+        do {
+            _ = try await explain(r, gh: try ThreadGH(in: r))
+            Issue.record("the same thread was explained twice at once")
+        } catch let error as PRReviewRefusal { #expect(error == .busy) }
+        same.release()
+        live.release()
+
+        // With no run live, a killed run's leftover is ended by the next one.
+        _ = try await explain(r, gh: try ThreadGH(in: r))
+        #expect(!FileManager.default.fileExists(atPath: tree.path))
+    }
+
     @Test func printsReasoningAndProposedFix() async throws {
         let r = try await threadPR()
         let ran = try await workbench(["explain-thread", "--pr", "12", "--thread", threadID], r, gh: try ThreadGH(in: r))
@@ -292,6 +323,10 @@ private func threadPR(answer: String? = goodAnswer, base: String? = nil) async t
         ("{\"reasoning\":\"A\",\"proposed_fix\":\"  \"}", false),
         ("{\"reasoning\":1,\"proposed_fix\":\"B\"}", false),
         ("The answer is {\"reasoning\":\"A\",\"proposed_fix\":\"B\"}", false),
+        ("I read the files, writing it up.\n\n{\"reasoning\":\"A\",\"proposed_fix\":\"B\"}", true),
+        ("Done.\n```json\n{\"reasoning\":\"A\",\"proposed_fix\":\"B\"}\n```", true),
+        ("{\"reasoning\":\"A\",\"proposed_fix\":\"B\"}\nThat is all.", false),
+        ("Intro\n{\"reasoning\":\"A\"}\n{\"x\":1}", false),
         ("[\"A\",\"B\"]", false),
     ])
     func theAnswerIsAnObjectWithBothFields(text: String, accepted: Bool) {
