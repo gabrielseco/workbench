@@ -28,14 +28,16 @@ Everything comes from the number and the id; the caller passes nothing else.
 - The pull request: `gh pr view <n> --json headRefName,baseRefName,title,body,state,isCrossRepository`. Its title and
   description go to the agent.
 - The thread: `gh api graphql` with a query on `node(id:)` (never a mutation): its file path, line (or original line and
-  start line for a range), outdated and resolved flags, the pull request it is on, and every comment (author, body,
+  start line for a range), the diff side of each (`diffSide`, `startDiffSide`), outdated and resolved flags, the pull request it is on, and every comment (author, body,
   time, diff hunk, outdated), read 100 at a time up to 1000 and put oldest first. A longer thread is cut and a `note:`
   says so.
 - The head: origin's tip of the pull request's branch (`git ls-remote`), fetched and checked out in a throwaway worktree
   under `.workbench/explains/pr-<n>-thread-<id>/`; the base is pinned from origin and the diff is saved beside it.
 - The code around the line: 20 lines either side of the commented line or range, from the head's checkout, the
-  commented lines marked. For an outdated thread the original line is used and the brief says it may have moved; the
-  thread's diff hunk is given in any case.
+  commented lines marked. A thread on the diff's left side (a deleted or changed line) is numbered in the base, so its
+  code is the file at the merge base of the base and the head (`git cat-file`), and the brief says so; a range whose
+  start is on the other side marks only its last line. For an outdated thread the original line is used and the brief
+  says it may have moved; the thread's diff hunk is given in any case.
 
 ## What it does
 

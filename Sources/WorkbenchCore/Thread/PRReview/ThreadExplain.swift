@@ -10,6 +10,13 @@ public struct ReviewThreadComment: Sendable, Equatable {
     public var outdated: Bool
 }
 
+/// The side of a pull request's diff a review comment is on: `left` is the base's file (a deleted or changed line, numbered
+/// as in the base), `right` the head's.
+public enum ReviewDiffSide: String, Sendable, Equatable {
+    case left = "LEFT"
+    case right = "RIGHT"
+}
+
 /// A pull request review thread: where it is and what was said, in order.
 public struct ReviewThreadContext: Sendable, Equatable {
     public var id: String
@@ -21,6 +28,9 @@ public struct ReviewThreadContext: Sendable, Equatable {
     public var originalLine: Int?
     /// The first line of a comment on a range of lines.
     public var startLine: Int?
+    /// The side of the diff `line` is on, and the side `startLine` is on.
+    public var side: ReviewDiffSide = .right
+    public var startSide: ReviewDiffSide?
     public var outdated: Bool
     public var resolved: Bool
     /// Every comment, oldest first.
@@ -30,6 +40,9 @@ public struct ReviewThreadContext: Sendable, Equatable {
 
     /// The line the code is shown around: the head's line, or the original one when the thread is outdated.
     var anchor: Int? { line ?? originalLine }
+    /// The first line of the range on the anchor's side; a range that starts on the other side is numbered in another
+    /// file, so only the anchor is marked.
+    var rangeStart: Int? { (startSide ?? side) == side ? startLine : nil }
 }
 
 /// Why `explain-thread` will not run. Nothing was spawned.
@@ -94,7 +107,7 @@ public enum ThreadExplain {
           node(id: $id) {
             __typename
             ... on PullRequestReviewThread {
-              isOutdated isResolved path line originalLine startLine originalStartLine
+              isOutdated isResolved path line originalLine startLine originalStartLine diffSide startDiffSide
               pullRequest { number repository { nameWithOwner } }
               comments(first: \(pageSize), after: $after) {
                 pageInfo { hasNextPage endCursor }
@@ -139,6 +152,8 @@ public enum ThreadExplain {
         let thread = ReviewThreadContext(
             id: id, pr: number, path: path, line: node["line"] as? Int, originalLine: node["originalLine"] as? Int,
             startLine: node["startLine"] as? Int ?? node["originalStartLine"] as? Int,
+            side: (node["diffSide"] as? String).flatMap(ReviewDiffSide.init(rawValue:)) ?? .right,
+            startSide: (node["startDiffSide"] as? String).flatMap(ReviewDiffSide.init(rawValue:)),
             outdated: node["isOutdated"] as? Bool ?? false, resolved: node["isResolved"] as? Bool ?? false,
             comments: parsed)
         let repository = (pull["repository"] as? [String: Any])?["nameWithOwner"] as? String
@@ -146,15 +161,16 @@ public enum ThreadExplain {
     }
 
     /// The code of the head around the thread's line, numbered, the commented lines marked with `>`; nil with the reason
-    /// when it cannot be shown. The file must stay inside the checkout.
+    /// when it cannot be shown. The file must stay inside the checkout. A thread on the diff's left side is numbered in
+    /// the base's file, not the head's: use `code(around:base:)` for it.
     static func code(around thread: ReviewThreadContext, in tree: URL) -> Result<String, PRReviewFailure> {
+        guard thread.side == .right else {
+            return .failure(PRReviewFailure("the thread is on the base's side of the diff, not the head's"))
+        }
         guard let anchor = thread.anchor, anchor > 0 else {
             return .failure(PRReviewFailure("the thread is on the file as a whole, not on a line"))
         }
-        let parts = thread.path.split(separator: "/", omittingEmptySubsequences: false)
-        guard !thread.path.hasPrefix("/"), !parts.contains(".."), !parts.contains("") else {
-            return .failure(PRReviewFailure("its path is not one Workbench reads"))
-        }
+        guard isReadablePath(thread.path) else { return .failure(PRReviewFailure("its path is not one Workbench reads")) }
         let root = tree.resolvingSymlinksInPath().path
         let file = tree.appendingPathComponent(thread.path).resolvingSymlinksInPath()
         guard file.path.hasPrefix(root + "/"),
@@ -164,10 +180,33 @@ public enum ThreadExplain {
         guard (attributes[.size] as? Int ?? 0) <= fileLimit,
             let data = FileManager.default.contents(atPath: file.path)
         else { return .failure(PRReviewFailure("\(thread.path) is larger than \(fileLimit >> 20) MiB")) }
-        let lines = String(decoding: data, as: UTF8.self).components(separatedBy: "\n")
-        let first = min(thread.startLine ?? anchor, anchor)
+        return numbered(String(decoding: data, as: UTF8.self), thread: thread, anchor: anchor, in: "the head")
+    }
+
+    /// The code of the base around a left-side thread's line: `base` is the file as the pull request's diff has it on its
+    /// left (at the merge base), or why it could not be read.
+    static func code(
+        around thread: ReviewThreadContext, base: Result<String, PRReviewFailure>
+    ) -> Result<String, PRReviewFailure> {
+        guard let anchor = thread.anchor, anchor > 0 else {
+            return .failure(PRReviewFailure("the thread is on the file as a whole, not on a line"))
+        }
+        return base.flatMap { numbered($0, thread: thread, anchor: anchor, in: "the base") }
+    }
+
+    /// A path as GitHub names a file of the repository: relative, without `..` or empty parts.
+    static func isReadablePath(_ path: String) -> Bool {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        return !path.hasPrefix("/") && !parts.contains("..") && !parts.contains("")
+    }
+
+    private static func numbered(
+        _ text: String, thread: ReviewThreadContext, anchor: Int, in version: String
+    ) -> Result<String, PRReviewFailure> {
+        let lines = text.components(separatedBy: "\n")
+        let first = min(thread.rangeStart ?? anchor, anchor)
         guard first <= lines.count else {
-            return .failure(PRReviewFailure("\(thread.path) has \(lines.count) lines in the head, fewer than \(anchor)"))
+            return .failure(PRReviewFailure("\(thread.path) has \(lines.count) lines in \(version), fewer than \(anchor)"))
         }
         let from = max(1, first - codeContext)
         let to = min(lines.count, anchor + codeContext)
@@ -220,7 +259,12 @@ public enum ThreadExplain {
         switch code {
         case .success(let text):
             lines += [
-                "`\(thread.path)` in the head, the commented lines marked with `>`"
+                "`\(thread.path)` "
+                    + (thread.side == .left
+                        ? "in the base, as the left side of the diff has it (the thread is on lines the pull request "
+                            + "removes or changes; the head does not have them at these numbers)"
+                        : "in the head")
+                    + ", the commented lines marked with `>`"
                     + (thread.line == nil ? " (the thread's original line, which may have moved)" : "") + ":",
                 "",
                 PRReview.fenced(text),
@@ -249,8 +293,9 @@ public enum ThreadExplain {
 
     private static func location(_ thread: ReviewThreadContext) -> String {
         guard let anchor = thread.anchor else { return "" }
-        let range = thread.startLine.map { $0 < anchor ? "lines \($0)-\(anchor)" : "line \(anchor)" } ?? "line \(anchor)"
-        return thread.line == nil ? ", originally \(range)" : ", \(range)"
+        let range = thread.rangeStart.map { $0 < anchor ? "lines \($0)-\(anchor)" : "line \(anchor)" } ?? "line \(anchor)"
+        let side = thread.side == .left ? " of the base (the left side of the diff)" : ""
+        return thread.line == nil ? ", originally \(range)\(side)" : ", \(range)\(side)"
     }
 
     /// The comments as one quoted text: who, when, and the body, each body bounded.

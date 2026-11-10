@@ -244,7 +244,13 @@ extension ThreadService {
             input.rubric = rubric
             input.rubricPath = path
         }
-        do { try Self.brief(round, input: input).write(to: paths.brief, atomically: true, encoding: .utf8) } catch {
+        var threadCode: Result<String, PRReviewFailure>?
+        if case .explainThread(let thread) = round.task {
+            threadCode = await code(around: thread, tree: paths.tree, baseSHA: baseSHA, sha: sha)
+        }
+        do {
+            try Self.brief(round, input: input, threadCode: threadCode).write(to: paths.brief, atomically: true, encoding: .utf8)
+        } catch {
             return outcome.failed("the review brief could not be written: \(error.localizedDescription)")
         }
 
@@ -293,13 +299,44 @@ extension ThreadService {
     }
 
     /// What the round's brief file says: the stage's review brief, or the explanation asked for.
-    private static func brief(_ round: PRReviewRound, input: PRReviewInput) -> String {
+    private static func brief(
+        _ round: PRReviewRound, input: PRReviewInput, threadCode: Result<String, PRReviewFailure>?
+    ) -> String {
         switch round.task {
         case .review: round.stage.brief(for: input)
         case .explain: PRExplain.prompt(for: input)
         case .explainThread(let thread):
-            ThreadExplain.prompt(for: input, thread: thread, code: ThreadExplain.code(around: thread, in: round.paths.tree))
+            ThreadExplain.prompt(
+                for: input, thread: thread,
+                code: threadCode ?? ThreadExplain.code(around: thread, in: round.paths.tree))
         }
+    }
+
+    /// The code a review thread is on: the head's file for the diff's right side; for its left side, the file at the
+    /// merge base of the pull request, which is what GitHub numbers a deleted or changed line by.
+    private func code(
+        around thread: ReviewThreadContext, tree: URL, baseSHA: String, sha: String
+    ) async -> Result<String, PRReviewFailure> {
+        guard thread.side == .left else { return ThreadExplain.code(around: thread, in: tree) }
+        return ThreadExplain.code(around: thread, base: await baseFile(thread.path, baseSHA: baseSHA, sha: sha))
+    }
+
+    private func baseFile(_ path: String, baseSHA: String, sha: String) async -> Result<String, PRReviewFailure> {
+        guard ThreadExplain.isReadablePath(path) else { return .failure(PRReviewFailure("its path is not one Workbench reads")) }
+        guard let base = try? await git.run(["merge-base", baseSHA, sha], in: project.root), base.succeeded,
+            let mergeBase = Self.firstSHA(base.stdout)
+        else { return .failure(PRReviewFailure("the merge base of the pull request could not be found")) }
+        let object = "\(mergeBase):\(path)"
+        guard let type = try? await git.run(["cat-file", "-t", object], in: project.root), type.succeeded,
+            type.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "blob"
+        else { return .failure(PRReviewFailure("\(path) is not a file in the base")) }
+        guard let size = try? await git.run(["cat-file", "-s", object], in: project.root), size.succeeded,
+            let bytes = Int(size.stdout.trimmingCharacters(in: .whitespacesAndNewlines)), bytes <= ThreadExplain.fileLimit
+        else { return .failure(PRReviewFailure("\(path) is larger than \(ThreadExplain.fileLimit >> 20) MiB")) }
+        guard let shown = try? await git.run(["cat-file", "blob", object], in: project.root), shown.succeeded,
+            !shown.outputTruncated
+        else { return .failure(PRReviewFailure("\(path) could not be read from the base")) }
+        return .success(String(decoding: shown.stdoutBytes.isEmpty ? Data(shown.stdout.utf8) : shown.stdoutBytes, as: UTF8.self))
     }
 
     // MARK: Git

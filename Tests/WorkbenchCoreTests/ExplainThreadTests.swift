@@ -65,8 +65,10 @@ private struct ThreadGH {
     func thread(
         pr: Int = 12, line: Int? = 30, originalLine: Int = 30, startLine: Int? = nil, outdated: Bool = false,
         path: String = "src/calc.swift", type: String = "PullRequestReviewThread", repository: String = "o/n",
-        comments: [FakeComment] = defaultComments, next: String? = nil, file: String = "thread.json"
+        comments: [FakeComment] = defaultComments, next: String? = nil, file: String = "thread.json",
+        side: String = "RIGHT", startSide: String? = nil
     ) throws {
+        let startSide = startSide.map { "\"\($0)\"" } ?? "null"
         let line = line.map(String.init) ?? "null"
         let start = startLine.map(String.init) ?? "null"
         let page = next.map { #"{"hasNextPage":true,"endCursor":"\#($0)"}"# } ?? #"{"hasNextPage":false,"endCursor":null}"#
@@ -75,6 +77,7 @@ private struct ThreadGH {
             """
             {"data":{"node":{"__typename":"\(type)","isOutdated":\(outdated),"isResolved":false,"path":"\(path)",\
             "line":\(line),"originalLine":\(originalLine),"startLine":\(start),"originalStartLine":null,\
+            "diffSide":"\(side)","startDiffSide":\(startSide),\
             "pullRequest":{"number":\(pr),"repository":{"nameWithOwner":"\(repository)"}},\
             "comments":{"pageInfo":\(page),"nodes":[\(comments.map(\.json).joined(separator: ","))]}}}}
             """)
@@ -117,8 +120,9 @@ private let goodAnswer = #"{"reasoning":"b can be 0 at line 30.","proposed_fix":
 private let threadID = "PRRT_kwDOtest123"
 
 /// Pull request #12 on origin, whose head adds `src/calc.swift` (60 numbered lines), with the fake `codex` as the
-/// project's Codex. A folder `src` is in the clone too, to run from.
-private func threadPR(answer: String? = goodAnswer) async throws -> ReviewedPR {
+/// project's Codex. A folder `src` is in the clone too, to run from. With `base`, `src/calc.swift` is on main first with
+/// that text, and the pull request changes it.
+private func threadPR(answer: String? = goodAnswer, base: String? = nil) async throws -> ReviewedPR {
     var r = try await reviewedPR(answer: answer)
     let fx = r.fx
     _ = try await fx.git.run(["push", "-q", "origin", "main:refs/heads/main"], in: fx.repo)
@@ -127,6 +131,12 @@ private func threadPR(answer: String? = goodAnswer) async throws -> ReviewedPR {
     _ = try await fx.git.run(["checkout", "-q", "workbench/\(r.id)"], in: clone)
     let src = clone.appendingPathComponent("src")
     try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true)
+    if let base {
+        try base.write(to: src.appendingPathComponent("calc.swift"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["add", "src/calc.swift"], in: clone)
+        _ = try await fx.git.run(["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "old"], in: clone)
+        _ = try await fx.git.run(["push", "-q", "origin", "HEAD:refs/heads/main"], in: clone)
+    }
     let text = (1...60).map { "line \($0)" }.joined(separator: "\n") + "\n"
     try text.write(to: src.appendingPathComponent("calc.swift"), atomically: true, encoding: .utf8)
     _ = try await fx.git.run(["add", "src/calc.swift"], in: clone)
@@ -229,6 +239,36 @@ private func threadPR(answer: String? = goodAnswer) async throws -> ReviewedPR {
         let rangedBrief = try #require(ranged.codex.read("brief_1"))
         #expect(rangedBrief.contains("> 30 |") && rangedBrief.contains("> 31 |") && rangedBrief.contains("> 32 |"))
         #expect(!rangedBrief.contains("> 33 |"))
+    }
+
+    @Test func deletedLineShowsTheBase() async throws {
+        // The base has 40 `old` lines; the pull request replaces them with 60 `line` lines. A comment on the left
+        // side's line 30 is on `old 30`, not on the head's line 30.
+        let base = (1...40).map { "old \($0)" }.joined(separator: "\n") + "\n"
+        let r = try await threadPR(base: base)
+        let gh = try ThreadGH(in: r)
+        try gh.thread(line: 30, startLine: 28, side: "LEFT", startSide: "LEFT")
+        let result = try await explain(r, gh: gh)
+        #expect(result.failure == nil, "\(result.failure ?? "")")
+        let brief = try #require(r.codex.read("brief_1"))
+        #expect(brief.contains("> 28 | old 28") && brief.contains("> 30 | old 30") && brief.contains("  31 | old 31"))
+        #expect(brief.contains("  10 | old 10") && !brief.contains("| line "), "only the base's code is shown")
+
+        // A range from the left side to the right is numbered in two files: only the anchor's line is marked.
+        let mixed = try await threadPR(base: base)
+        let mixedGH = try ThreadGH(in: mixed)
+        try mixedGH.thread(line: 32, startLine: 30, side: "RIGHT", startSide: "LEFT")
+        _ = try await explain(mixed, gh: mixedGH)
+        let mixedBrief = try #require(mixed.codex.read("brief_1"))
+        #expect(mixedBrief.contains("> 32 | line 32") && !mixedBrief.contains("> 30 |"))
+
+        // A left-side line on a file the base does not have: no code, not the head's in its place.
+        let added = try await threadPR()
+        let addedGH = try ThreadGH(in: added)
+        try addedGH.thread(side: "LEFT")
+        _ = try await explain(added, gh: addedGH)
+        let addedBrief = try #require(added.codex.read("brief_1"))
+        #expect(!addedBrief.contains("| line "), "the head's file is not shown for the base's line")
     }
 
     @Test func printsReasoningAndProposedFix() async throws {
