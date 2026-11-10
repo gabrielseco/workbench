@@ -68,7 +68,7 @@ cat >"$BIN/codex" <<EOF
 echo "\$@" >> "$SCRATCH/codex.calls"
 pwd -P >> "$SCRATCH/codex.cwds"
 cp "\$(pwd -P)/../round-1.brief.md" "$SCRATCH/brief.md" 2>/dev/null
-[ -f "$SCRATCH/slow" ] && { : > "$SCRATCH/slow.started"; sleep 8; }
+case "\$(pwd -P)" in *thread-PRRT_probe1/*) [ -f "$SCRATCH/slow" ] && { : > "$SCRATCH/slow.started"; sleep 8; } ;; esac
 out=""; prev=""
 for a in "\$@"; do [ "\$prev" = "-o" ] && out="\$a"; prev="\$a"; done
 [ -f "$SCRATCH/answer" ] && [ -n "\$out" ] && cat "$SCRATCH/answer" > "\$out"
