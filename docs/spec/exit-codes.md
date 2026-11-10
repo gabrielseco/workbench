@@ -302,6 +302,17 @@ is [`../plan/explain-pr.md`](../plan/explain-pr.md).
 | 2 | `usage` | no `--pr`, a `--pr` that is not a positive number, or a wrong command line |
 | 6 | `refused` | nothing was spawned: no `gh`, an unreadable `--spec`, an `--out` whose folder does not exist or that is a folder, a pull request that is not open, from a fork or with a branch name Workbench will not pass to git, a branch origin no longer has, or another `pr-review --pr` or `explain-pr` holds the project |
 
+### `explain-thread --pr <n> --thread <id>`
+
+The output contract is [`../plan/explain-thread.md`](../plan/explain-thread.md).
+
+| Code | Kind | When |
+|---|---|---|
+| 0 |  | the last stdout line is one JSON object with non-empty `reasoning` and `proposed_fix` |
+| 1 | `failed` | no explanation: the agent is missing, at capacity three times, crashed, timed out or was stopped, or its answer was empty, missing or not an object with both fields; also `gh` could not read the pull request or the thread, or origin could not be read |
+| 2 | `usage` | no `--pr` or `--thread`, a `--pr` that is not a positive number, a `--thread` that is not a node id, or a wrong command line |
+| 6 | `refused` | nothing was spawned: no `gh`, an unknown thread, a thread on another pull request, a pull request that is not open, from a fork or with a branch name Workbench will not pass to git, a branch origin no longer has, or another `pr-review --pr`, `explain-pr` or `explain-thread` holds the project |
+
 ### `accept`
 
 `-m` only applies when something is left to commit; work the agent already committed keeps its messages. Given

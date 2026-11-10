@@ -29,10 +29,12 @@ struct PRReviewPaths: Sendable {
     }
 }
 
-/// What a round asks the read-only agent for: a review that ends in a verdict line, or an explanation that is the answer itself.
+/// What a round asks the read-only agent for: a review that ends in a verdict line, or an explanation (of the pull
+/// request, or of one of its review threads) that is the answer itself.
 enum PRRoundTask: Sendable, Equatable {
     case review
     case explain
+    case explainThread(ReviewThreadContext)
 
     /// What the command line calls the brief file.
     var briefName: String { self == .review ? "review brief" : "explain brief" }

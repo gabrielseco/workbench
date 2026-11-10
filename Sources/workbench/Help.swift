@@ -106,6 +106,11 @@ enum Help {
                 "runs the review agent read-only on a pull request in a throwaway checkout; writes the explanation under "
                 + ".workbench/explains/ and to --out; records nothing in a thread, posts nothing",
             example: "workbench explain-pr --pr 12 --out /tmp/pr-12.md"),
+        "explain-thread": Extra(
+            changes:
+                "runs the review agent read-only on a pull request in a throwaway checkout; gh only reads; commits, pushes, "
+                + "replies and resolves nothing, records nothing in a thread",
+            example: "workbench explain-thread --pr 12 --thread PRRT_kwDOAbc123"),
         "review-stage": Extra(
             changes: "runs one configured review stage read-only; records the round",
             example: "workbench review-stage design"),

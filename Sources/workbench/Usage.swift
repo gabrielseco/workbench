@@ -115,6 +115,10 @@ let workbenchUsage = """
                                  of its head (as pr-review --pr); the last stdout line is the file's absolute path, the
                                  file the body only (no front matter); kept as .workbench/explains/pr-<n>-<head7>.md (and
                                  written to --out); an unmoved head reuses it unless --again; exit 0, 1 no explanation
+      explain-thread --pr <n> --thread <id>
+                                 the review agent explains one review thread (its GraphQL id) of a pull request,
+                                 read-only, in a throwaway checkout of its head; the last stdout line is one JSON object
+                                 with reasoning and proposed_fix; no reply, no commit, no push; exit 0, 1 no explanation
       accept [id] [-m <msg>] [--yes]  commit the work on its branch and end the thread; no push; -m is used only
                                  when accept commits (work already committed keeps its messages)
       ship [id] [--yes] [--no-describe] [--refresh-description] [--no-screenshots|--screenshots] [--keep-worktree]
