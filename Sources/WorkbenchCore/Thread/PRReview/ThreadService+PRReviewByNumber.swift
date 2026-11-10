@@ -72,7 +72,9 @@ extension ThreadService {
             in: project.workbenchDirectory.appendingPathComponent(PRExplain.folderName, isDirectory: true))
     }
 
-    /// Ends what a killed review left in any pull request's folder. Called with the reviews lock held, so none is live.
+    /// Ends what a killed review left in any pull request's folder. Called with the reviews lock held; a folder whose own
+    /// lock is held belongs to a run that is live now (an explanation keeps its folder's lock through the agent's turn
+    /// after letting go of the reviews lock), and is left alone.
     func recoverPullRequestLeftovers(in reviews: URL) async {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: reviews.path)) ?? []
         for name in names where name.hasPrefix("pr-") {
@@ -80,6 +82,8 @@ extension ThreadService {
             var isFolder: ObjCBool = false
             guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isFolder), isFolder.boolValue
             else { continue }
+            guard let live = FolderLock(folder: folder) else { continue }
+            defer { live.release() }
             await removeTree(PRReviewPaths(folder: folder, round: 1))
         }
     }

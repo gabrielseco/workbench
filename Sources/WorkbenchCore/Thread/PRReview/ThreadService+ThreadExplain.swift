@@ -21,10 +21,19 @@ extension ThreadService {
             executable: gh.executable, environment: gh.environment.filter { $0.key != "GH_REPO" }, timeout: gh.timeout)
         let reviews = project.workbenchDirectory.appendingPathComponent("reviews", isDirectory: true)
         let explains = project.workbenchDirectory.appendingPathComponent(PRExplain.folderName, isDirectory: true)
-        // The reviews' lock: the head is fetched into the same `FETCH_HEAD` as a review by number.
+        let folder = explains.appendingPathComponent(ThreadExplain.folderName(pr: number, thread: id), isDirectory: true)
+        let paths = PRReviewPaths(folder: folder, round: 1)
+        // This run's own lock, held to the end: the same thread twice is refused, and another run's recovery of
+        // leftovers (below) leaves this folder alone while the agent works.
+        guard let live = FolderLock(folder: folder) else { throw PRReviewRefusal.busy }
+        defer { live.release() }
+        // The reviews' lock: the head is fetched into the same `FETCH_HEAD` as a review by number. It is held for the
+        // setup only, and let go when the agent starts, so threads are explained side by side.
         guard let lock = FolderLock(folder: reviews) else { throw PRReviewRefusal.busy }
         defer { lock.release() }
         await recoverByNumberLeftovers()
+        // Ends what an earlier, killed run of this very thread left (recovery skips it: this run holds its lock).
+        await removeTree(paths)
 
         let originURL = (try? await git.run(["remote", "get-url", "origin"], in: project.root)).flatMap {
             $0.succeeded ? $0.stdout : nil
@@ -41,8 +50,6 @@ extension ThreadService {
                 failure: failure, transcriptPath: transcript, warnings: warnings)
         }
 
-        let folder = explains.appendingPathComponent(ThreadExplain.folderName(pr: number, thread: id), isDirectory: true)
-        let paths = PRReviewPaths(folder: folder, round: 1)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // A previous run's answer must not stand in for this one's.
         try? FileManager.default.removeItem(at: paths.answer)
@@ -53,6 +60,7 @@ extension ThreadService {
             id: "pr-\(number)", task: .explainThread(thread), stage: .prReview(config), pr: number, branch: info.branch,
             base: info.base, recordedBase: nil, goal: "# \(info.title)\n\n\(info.body)",
             goalRest: "pull request #\(number) on GitHub", tip: tip, paths: paths, config: config, settings: settings)
+        round.setupDone = { lock.release() }
         var warnings: [String] = []
         if thread.truncated {
             warnings.append("the thread has more than \(ThreadExplain.maxComments) comments; the agent read the first ones")

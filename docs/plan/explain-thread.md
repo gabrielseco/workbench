@@ -44,7 +44,10 @@ Everything comes from the number and the id; the caller passes nothing else.
 The review agent (`[agents.review]`, Codex unless configured otherwise) runs read-only on that checkout with the above in
 its brief, the comments quoted in a fence. Then the checkout is removed. Nothing is committed, pushed, replied, resolved
 or recorded in a thread's log; `gh` is only asked to read. It holds the same project lock as `pr-review --pr` and
-`explain-pr` (they share `FETCH_HEAD`), so none of them runs beside another. The agent's brief and transcript stay in
+`explain-pr` (they share `FETCH_HEAD`) while it fetches and makes the checkout, and lets go of it when the agent starts, so
+threads of one pull request, or of several, are explained side by side. A run keeps a lock on its own folder to the end:
+the same thread twice is `refused`, and the next run's cleanup of a killed run's leftovers leaves a live run's folder
+alone. The agent's brief and transcript stay in
 `.workbench/explains/pr-<n>-thread-<id>/` for reading after a failure, replaced by the next run of the same thread.
 
 ## stdout
@@ -64,6 +67,9 @@ Progress lines and `note:` lines come first. On success **the last line on stdou
 | `head_sha` | string | The head commit the agent read. |
 
 Keys may be added later; a caller ignores the ones it does not know. A caller reads the last line and nothing else.
+
+The agent is asked for the object and nothing else; a line of prose before it, or a code fence around it, is tolerated, text
+after it or on its line is not.
 
 On failure no object is printed: stdout has only progress lines, and stderr has one line,
 `workbench: <kind>: <message>`.
