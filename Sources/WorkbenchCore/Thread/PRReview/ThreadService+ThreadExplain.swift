@@ -23,17 +23,12 @@ extension ThreadService {
         let explains = project.workbenchDirectory.appendingPathComponent(PRExplain.folderName, isDirectory: true)
         let folder = explains.appendingPathComponent(ThreadExplain.folderName(pr: number, thread: id), isDirectory: true)
         let paths = PRReviewPaths(folder: folder, round: 1)
-        // This run's own lock, held to the end: the same thread twice is refused, and another run's recovery of
-        // leftovers (below) leaves this folder alone while the agent works.
-        guard let live = FolderLock(folder: folder) else { throw PRReviewRefusal.busy }
-        defer { live.release() }
         // The reviews' lock: the head is fetched into the same `FETCH_HEAD` as a review by number. It is held for the
         // setup only, and let go when the agent starts, so threads are explained side by side.
         guard let lock = FolderLock(folder: reviews) else { throw PRReviewRefusal.busy }
         defer { lock.release() }
+        // Ends what a killed run left, this thread's included; a live run's folder is locked and is skipped.
         await recoverByNumberLeftovers()
-        // Ends what an earlier, killed run of this very thread left (recovery skips it: this run holds its lock).
-        await removeTree(paths)
 
         let originURL = (try? await git.run(["remote", "get-url", "origin"], in: project.root)).flatMap {
             $0.succeeded ? $0.stdout : nil
@@ -50,7 +45,10 @@ extension ThreadService {
                 failure: failure, transcriptPath: transcript, warnings: warnings)
         }
 
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // This run's own lock, taken once the run is real (a refusal leaves no folder) and held to the end: the same
+        // thread twice is refused, and another run's recovery leaves this folder alone while the agent works.
+        guard let live = FolderLock(folder: folder) else { throw PRReviewRefusal.busy }
+        defer { live.release() }
         // A previous run's answer must not stand in for this one's.
         try? FileManager.default.removeItem(at: paths.answer)
         let settings = PRReviewSettings(

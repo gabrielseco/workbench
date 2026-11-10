@@ -8,10 +8,13 @@
 # reasoning and proposed_fix; codex ran once, read-only, in the throwaway checkout; the brief has the title, both comments in
 # order and line 20 marked; the clone, origin and worktrees are as they were; gh only read (pr view, api graphql, no
 # mutation); an empty answer and one without proposed_fix exit 1 (workbench: failed:) with no object; an unknown thread, a
-# thread on another pull request and a closed pull request exit 6 (workbench: refused:); no --thread exits 2; help lists it.
+# thread on another pull request and a closed pull request exit 6 (workbench: refused:); no --thread exits 2; help lists it;
+# an answer with a line of prose before the object is accepted; while one thread is being explained (the stand-in codex sleeps), a
+# second thread is explained and exits 0, and the same thread again exits 6 (refused: busy), then the first finishes with 0.
 # The output contract is docs/plan/explain-thread.md.
 # VERIFY_CLI_SABOTAGE=1 rewrites the first run's output after it ran (the object line dropped from stdout, the thread taken out
-# of the brief), so "the last stdout line is a JSON object ..." and "the brief has ..." must FAIL.
+# of the brief), so "the last stdout line is a JSON object ..." and "the brief has ..." must FAIL; it also drops the object from the
+# second thread's output, so "a second thread is explained while the first runs" must FAIL.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -65,6 +68,7 @@ cat >"$BIN/codex" <<EOF
 echo "\$@" >> "$SCRATCH/codex.calls"
 pwd -P >> "$SCRATCH/codex.cwds"
 cp "\$(pwd -P)/../round-1.brief.md" "$SCRATCH/brief.md" 2>/dev/null
+[ -f "$SCRATCH/slow" ] && { : > "$SCRATCH/slow.started"; sleep 8; }
 out=""; prev=""
 for a in "\$@"; do [ "\$prev" = "-o" ] && out="\$a"; prev="\$a"; done
 [ -f "$SCRATCH/answer" ] && [ -n "\$out" ] && cat "$SCRATCH/answer" > "\$out"
@@ -157,6 +161,36 @@ pr_json OPEN
 check "a closed pull request exits 6 with workbench: refused:" "exit $RC: $(cat "$SCRATCH/closed.out.err")" \
     sh -c "[ $RC = 6 ] && grep -q '^workbench: refused: .*not open' '$SCRATCH/closed.out.err'"
 check "no refusal ran codex" "runs $(runs), was $RAN" test "$(runs)" = "$RAN"
+
+# An answer with a line of prose before the object is still the answer.
+printf 'I read the files, writing it up.\n\n{"reasoning":"Line 20 is off by one.","proposed_fix":"Count from 0."}\n' >"$SCRATCH/answer"
+wbp "$SCRATCH/prose.out" "$P" "${ARGS[@]}"
+check "an answer with a line of prose before the object is accepted" "exit $RC: $(cat "$SCRATCH/prose.out.err")" \
+    sh -c "[ $RC = 0 ]" && check "... and the last stdout line is the object" "last line: $(tail -1 "$SCRATCH/prose.out")" \
+    is_answer "$SCRATCH/prose.out" "$HEAD_SHA"
+printf '{"reasoning":"Line 20 is off by one.","proposed_fix":"Count from 0."}\n' >"$SCRATCH/answer"
+
+# Two threads at once: the first is slow (the stand-in codex sleeps), the second must not be refused as busy.
+: > "$SCRATCH/slow"
+rm -f "$SCRATCH/slow.started" "$SCRATCH/a.rc"
+( cd "$P" && PATH="$BIN:$PATH" with_timeout "$T_WB" "$WB" "${ARGS[@]}" >"$SCRATCH/a.out" 2>"$SCRATCH/a.out.err"; echo $? >"$SCRATCH/a.rc" ) &
+for _ in $(seq 1 100); do [ -f "$SCRATCH/slow.started" ] && break; sleep 0.2; done
+echo "==> thread PRRT_probe1 is being explained; now PRRT_probe2 and PRRT_probe1 again" >&2
+wbp "$SCRATCH/b.out" "$P" explain-thread --pr 7 --thread PRRT_probe2
+[ "$SABOTAGE" = 1 ] && sed '$d' "$SCRATCH/b.out" >"$SCRATCH/k" && mv "$SCRATCH/k" "$SCRATCH/b.out"
+RCB=$RC
+wbp "$SCRATCH/again.out" "$P" "${ARGS[@]}"
+RCAGAIN=$RC
+check "a second thread is explained while the first runs (exit 0, an object)" "exit $RCB: $(cat "$SCRATCH/b.out.err"); last: $(tail -1 "$SCRATCH/b.out")" \
+    sh -c "[ $RCB = 0 ] && tail -1 '$SCRATCH/b.out' | grep -q '^{'"
+check "the same thread again exits 6 with workbench: refused:" "exit $RCAGAIN: $(cat "$SCRATCH/again.out.err")" \
+    sh -c "[ $RCAGAIN = 6 ] && grep -q '^workbench: refused: ' '$SCRATCH/again.out.err'"
+wait
+rm -f "$SCRATCH/slow"
+check "the first thread finished with exit 0 and an object" "exit $(cat "$SCRATCH/a.rc" 2>/dev/null): $(cat "$SCRATCH/a.out.err")" \
+    sh -c "[ \"\$(cat '$SCRATCH/a.rc')\" = 0 ] && tail -1 '$SCRATCH/a.out' | grep -q '^{'"
+check "no checkout is left by either" "$(g -C "$P" worktree list --porcelain | grep -c round-1.tree) left" \
+    sh -c "! git -C '$P' worktree list --porcelain | grep -q round-1.tree"
 
 wbp "$SCRATCH/nothread.out" "$P" explain-thread --pr 7
 check "no --thread exits 2 (usage)" "exit $RC: $(cat "$SCRATCH/nothread.out.err")" \
