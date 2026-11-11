@@ -198,11 +198,14 @@ public struct TaskRunner: Sendable {
         }
         guard !tried.isEmpty else { return nil }
         let threads = Set(tried.compactMap(\.thread))
-        guard let openBranches = await TaskPullRequests.openBranches(gh: gh, project: project) else {
-            let why = gh == nil ? "GitHub is not reachable" : "its list of open pull requests could not be read in full"
+        let openBranches: Set<String>
+        switch await TaskPullRequests.openBranches(gh: gh, project: project) {
+        case .success(let branches): openBranches = branches
+        case .failure(let failure):
             return TaskRunResult(
                 outcome: .skippedTooManyOpen,
-                reason: "cannot tell whether the task's earlier pull requests are still open (\(why)); not starting on a guess")
+                reason: "cannot tell whether the task's earlier pull requests are still open "
+                    + "(\(failure)); not starting on a guess")
         }
         let open = threads.filter { openBranches.contains("workbench/\($0)") }
         guard open.count >= limit else { return nil }

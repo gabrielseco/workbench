@@ -248,7 +248,23 @@ private struct Safe {
         try safe.openList([], extra: TaskPullRequests.openListLimit)
         let result = try await safe.run(try safe.shippable())
         #expect(result.outcome == .skippedTooManyOpen)
-        #expect(result.reason?.contains("could not be read in full") == true)
+        #expect(result.reason?.contains("500 or more pull requests are open") == true)
+    }
+
+    @Test func aFailedOpenListSaysWhyAndNamesAMissingConnection() async throws {
+        let safe = try await Safe()
+        let first = try await safe.run(try safe.shippable())
+        #expect(first.outcome == .prOpened)
+        try safe.gh.put("list_open_fail", "error connecting to api.github.com\ncheck your internet connection\n")
+        let result = try await safe.run(try safe.shippable())
+        #expect(result.outcome == .skippedTooManyOpen)
+        #expect(result.reason?.contains("gh exited with status 1: error connecting to api.github.com") == true)
+        #expect(result.reason?.contains("looks like no internet connection") == true)
+    }
+
+    @Test func aFailedOpenListWithAnotherErrorGivesItsLineWithoutTheHint() {
+        let why = TaskPullRequests.failedReason(status: 4, stderr: "try: gh auth login\nmore")
+        #expect(why == "gh exited with status 4: try: gh auth login")
     }
 
     @Test func aMergedOrClosedPullRequestNoLongerCounts() async throws {
