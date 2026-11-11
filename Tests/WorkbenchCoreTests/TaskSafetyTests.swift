@@ -57,6 +57,7 @@ private struct Safe {
 
     func run(_ directives: String..., gh override: GitRunner?? = nil) async throws -> TaskRunResult {
         var runner = TaskRunner(project: fx.project, git: fx.git, gh: override ?? gh.runner)
+        runner.retryDelay = .zero
         runner.runOptions = fx.options(directives.joined(separator: ","))
         runner.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory()]
         return await runner.run(task.name, trigger: .tick)
@@ -260,6 +261,23 @@ private struct Safe {
         #expect(result.outcome == .skippedTooManyOpen)
         #expect(result.reason?.contains("gh exited with status 1: error connecting to api.github.com") == true)
         #expect(result.reason?.contains("looks like no internet connection") == true)
+    }
+
+    @Test func aDroppedConnectionIsAskedAgainAndTheRunGoesOn() async throws {
+        let safe = try await Safe()
+        let first = try await safe.run(try safe.shippable())
+        #expect(first.outcome == .prOpened)
+        try safe.gh.put("list_open_fail_once", "")
+        let result = try await safe.run(try safe.shippable())
+        #expect(result.outcome != .skippedTooManyOpen, "\(result.reason ?? "")")
+    }
+
+    @Test func aFailureThatWillNotPassIsNotAskedAgain() async throws {
+        let safe = try await Safe()
+        let gh = GitRunner(executable: URL(fileURLWithPath: "/usr/bin/false"), environment: [:])
+        let result = await TaskPullRequests.openBranches(gh: gh, project: safe.fx.project, attempts: 3, retryDelay: .seconds(60))
+        guard case .failure(let failure) = result else { Issue.record("expected a failure"); return }
+        #expect(!failure.retryable)
     }
 
     @Test func aFailedOpenListWithAnotherErrorGivesItsLineWithoutTheHint() {

@@ -37,6 +37,9 @@ struct FakeGH {
               f="$d/list"
               case "$*" in *"--json headRefName --limit"*)
                 f="$d/list_open"
+                if [ -f "$d/list_open_fail_once" ]; then
+                  rm "$d/list_open_fail_once"; echo "error connecting to api.github.com" >&2; exit 1
+                fi
                 if [ -f "$d/list_open_fail" ]; then cat "$d/list_open_fail" >&2; exit 1; fi ;;
               esac
               if [ -f "$f" ]; then cat "$f"; else echo '[]'; fi; exit 0 ;;

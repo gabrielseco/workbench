@@ -36,19 +36,36 @@ enum TaskPullRequests {
     /// The head branches of every open pull request of the repository, in one question: how a task counts its own, without asking
     /// about each earlier thread. A failure when it cannot be known (`gh` missing or failing, or the list is as long as the limit and
     /// may be cut), and the failure says why, so a person can tell a dropped connection from a missing login.
-    static func openBranches(gh: GitRunner?, project: Project) async -> Result<Set<String>, OpenListFailure> {
+    /// A timeout or an answer that reads like no network is tried again (up to `attempts` times, `retryDelay` apart), since a dropped
+    /// connection often comes back within seconds; any other failure (no login, a cut list) would fail the same way again.
+    static func openBranches(
+        gh: GitRunner?, project: Project, attempts: Int = 3, retryDelay: Duration = .seconds(5)
+    ) async -> Result<Set<String>, OpenListFailure> {
+        var result = await openBranchesOnce(gh: gh, project: project)
+        var attempt = 1
+        while case .failure(let failure) = result, failure.retryable, attempt < attempts {
+            try? await Task.sleep(for: retryDelay)
+            result = await openBranchesOnce(gh: gh, project: project)
+            attempt += 1
+        }
+        return result
+    }
+
+    private static func openBranchesOnce(gh: GitRunner?, project: Project) async -> Result<Set<String>, OpenListFailure> {
         guard let gh else { return .failure(OpenListFailure("GitHub's command line tool (gh) was not found")) }
         let result: GitResult
         do {
             result = try await gh.run(
                 ["pr", "list", "--state", "open", "--json", "headRefName", "--limit", "\(openListLimit)"], in: project.root)
         } catch GitError.timedOut(_, let seconds) {
-            return .failure(OpenListFailure("gh did not answer in \(Int(seconds)) s; is there an internet connection?"))
+            return .failure(OpenListFailure(
+                "gh did not answer in \(Int(seconds)) s; is there an internet connection?", retryable: true))
         } catch {
             return .failure(OpenListFailure("gh could not be run: \(error)"))
         }
         guard result.succeeded else {
-            return .failure(OpenListFailure(failedReason(status: result.status, stderr: result.stderr)))
+            return .failure(OpenListFailure(
+                failedReason(status: result.status, stderr: result.stderr), retryable: looksOffline(result.stderr)))
         }
         guard !result.outputTruncated,
             let value = try? JSONDecoder().decode(JSONValue.self, from: result.stdoutBytes),
@@ -65,21 +82,29 @@ enum TaskPullRequests {
         let line = stderr.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
         let printable = String.UnicodeScalarView(line.unicodeScalars.filter { $0.value >= 32 && $0.value != 127 })
         let clean = String(printable.prefix(200)).trimmingCharacters(in: .whitespaces)
+        var why = "gh exited with status \(status)"
+        if !clean.isEmpty { why += ": " + clean }
+        if looksOffline(stderr) { why += " (looks like no internet connection)" }
+        return why
+    }
+
+    static func looksOffline(_ stderr: String) -> Bool {
         let lower = stderr.lowercased()
-        let offline = [
+        return [
             "error connecting", "no such host", "could not resolve", "network is unreachable", "dial tcp", "i/o timeout",
             "connection refused", "connection reset", "tls handshake", "offline",
         ].contains { lower.contains($0) }
-        var why = "gh exited with status \(status)"
-        if !clean.isEmpty { why += ": " + clean }
-        if offline { why += " (looks like no internet connection)" }
-        return why
     }
 
     /// Why the list of open pull requests could not be had, in words for the run log.
     struct OpenListFailure: Error, Equatable, CustomStringConvertible {
         let description: String
-        init(_ description: String) { self.description = description }
+        /// Worth asking again: the failure reads like a connection that may come back.
+        let retryable: Bool
+        init(_ description: String, retryable: Bool = false) {
+            self.description = description
+            self.retryable = retryable
+        }
     }
 
     /// The same, for the units a past run made a thread for.
