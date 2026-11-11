@@ -65,7 +65,8 @@ enum TaskPullRequests {
         }
         guard result.succeeded else {
             return .failure(OpenListFailure(
-                failedReason(status: result.status, stderr: result.stderr), retryable: looksOffline(result.stderr)))
+                failedReason(status: result.status, stderr: result.stderr, environment: gh.environment),
+                retryable: looksOffline(result.stderr)))
         }
         guard !result.outputTruncated,
             let value = try? JSONDecoder().decode(JSONValue.self, from: result.stdoutBytes),
@@ -78,8 +79,10 @@ enum TaskPullRequests {
     }
 
     /// Why a `gh` that exited non-zero failed: its own first line of complaint, bounded, with a hint when it reads like no network.
-    static func failedReason(status: Int32, stderr: String) -> String {
-        let line = stderr.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+    static func failedReason(status: Int32, stderr: String, environment: [String: String] = [:]) -> String {
+        let first = stderr.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        // Before the cut to 200 characters, so a credential is not left half there.
+        let line = ThreadService.withoutCredentials(first, environment: environment)
         let printable = String.UnicodeScalarView(line.unicodeScalars.filter { $0.value >= 32 && $0.value != 127 })
         let clean = String(printable.prefix(200)).trimmingCharacters(in: .whitespaces)
         var why = "gh exited with status \(status)"

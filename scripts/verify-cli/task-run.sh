@@ -19,6 +19,8 @@
 # With two of its pull requests open and `max_open: 2` the task must wait for review (exit 6, skipped-too-many-open, both addresses in the
 # reason): under the sabotage the pull requests read as closed, so "the task waits for review at max_open" must FAIL too. A task whose
 # setup fails before any turn must be failed (exit 1) with its thread discarded, and the next run must fail the same way and not be
+# With GitHub unreachable the task must be skipped saying why (exit 6): the sabotage leaves GitHub reachable, so "an unreachable GitHub
+# is skipped saying why" must FAIL.
 # skipped for a dead thread: the sabotage leaves a thread active, so "the next run is not skipped for a dead thread" must FAIL.
 # A `fix: report` task must not be skipped for an active thread (the sabotage makes it a pr task, so "a dry run is not skipped for an
 # active thread" must FAIL), and a task with `base: origin/main` must cut its thread from the freshly fetched tip of origin's main, which
@@ -69,6 +71,7 @@ case "\$1 \$2" in
 "auth status") exit 0 ;;
 "pr list")
     if [ -z "\$head" ]; then
+        if [ -f "$GHDIR/list_fail" ]; then echo "error connecting to api.github.com" >&2; exit 1; fi
         # No --head: the question about every open pull request (the task counts its own against max_open).
         if [ "$STATE" = OPEN ]; then
             printf '['; sed 's/.*/{"headRefName":"&"}/' "$GHDIR/heads" 2>/dev/null | paste -sd, -; printf ']\n'
@@ -179,6 +182,12 @@ check "the task waits for review at max_open (exit 6, both pull requests named)"
     bash -c '[ "$1" = 6 ] && grep -q "^bump: skipped-too-many-open" "$2" && grep -q "2 of the task.s pull requests are still open (max_open 2)" "$2" && grep -q "pull/1" "$2" && grep -q "pull/2" "$2"' _ "$RC" "$SCRATCH/waits.out"
 sed -i.bak 's/^max_open: 2$/max_open: 5/' "$TASK/task.md" && rm -f "$TASK/task.md.bak"
 wbp "$SCRATCH/approve3.out" task approve bump
+# GitHub cannot be reached: asked again, then skipped saying why (the sabotage never takes the connection away).
+[ "$SABOTAGE" = 1 ] || touch "$GHDIR/list_fail"
+wbp "$SCRATCH/offline.out" task run bump; shown "$SCRATCH/offline.out" 5
+check "an unreachable GitHub is skipped saying why (exit 6, no internet connection)" "exit $RC: $(head -c 400 "$SCRATCH/offline.out")" \
+    bash -c '[ "$1" = 6 ] && grep -q "^bump: skipped-too-many-open" "$2" && grep -q "error connecting to api.github.com" "$2" && grep -q "looks like no internet connection" "$2"' _ "$RC" "$SCRATCH/offline.out"
+rm -f "$GHDIR/list_fail"
 
 # --- 2c. a setup that fails before any turn -------------------------------------------------------------------
 

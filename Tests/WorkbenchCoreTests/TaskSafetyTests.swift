@@ -280,6 +280,16 @@ private struct Safe {
         #expect(!failure.retryable)
     }
 
+    @Test func aCredentialInGhsComplaintIsNotKept() {
+        let why = TaskPullRequests.failedReason(
+            status: 1, stderr: "not allowed (https://user:sekret@api.github.com/graphql) ghp_abcdefgh12345678\n",
+            environment: ["GH_TOKEN": "hunter2hunter2"])
+        #expect(!why.contains("sekret") && !why.contains("ghp_abcdefgh") && !why.contains("hunter2"))
+        let leaked = TaskPullRequests.failedReason(
+            status: 1, stderr: "bad token hunter2hunter2", environment: ["GH_TOKEN": "hunter2hunter2"])
+        #expect(!leaked.contains("hunter2"))
+    }
+
     @Test func aFailedOpenListWithAnotherErrorGivesItsLineWithoutTheHint() {
         let why = TaskPullRequests.failedReason(status: 4, stderr: "try: gh auth login\nmore")
         #expect(why == "gh exited with status 4: try: gh auth login")
