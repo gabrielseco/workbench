@@ -268,9 +268,11 @@ In order, ending the run with an outcome at the first step that stops it:
    (Only a task that starts a thread needs the project free: a `fix: report` run starts none, so an active thread does not skip it.)
 4. A `fix: pr` task with `max_open` of its own pull requests still open waits (`skipped-too-many-open`, the addresses in the reason), before
    the pending script or any thread. Every earlier run that made a thread counts (one that died after publishing, and one a person shipped by hand, as well as those that
-   ended `pr-opened`), however old: GitHub is asked once for all the repository's open pull requests (`gh pr list --state open`, up to 500) and
-   the task's branches are looked up in that list. When it cannot answer, or the list is as long as the limit and may be cut, the run is
-   skipped saying so, never started on a guess.
+   ended `pr-opened`), however old: GitHub is asked for all the repository's open pull requests at once (`gh pr list --state open`, up to 500) and
+   the task's branches are looked up in that list. A timeout or an error that reads like no network is asked again, up to 3 times in all, 5 s
+   apart; any other failure is not. When it still cannot answer, or the list is as long as the limit and may be cut, the run is
+   skipped saying why (gh missing, timed out, gh's first line of complaint with credentials removed, and "looks like no internet connection"
+   when it reads that way), never started on a guess.
 5. The `pending` script, the pull request states, the batch: no units left is `nothing-pending`; a script that fails is `failed` with its reason.
 6. `fix: report` stops here: it asks the read-only agent (above), saves the answer under `reports/` and records `reported` with the first line of the report and where it is, or `failed` with why (no config, the agent is not installed or ran out of budget, an empty answer). `task run <name> --dry` instead lists the units it would take and starts no agent: `reported` with `dry run: would take ...`.
 7. `fix: pr` needs `check_command` in the project's config, else `failed: no check configured`: work is not accepted unchecked. The goal is a

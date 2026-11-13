@@ -57,6 +57,7 @@ private struct Safe {
 
     func run(_ directives: String..., gh override: GitRunner?? = nil) async throws -> TaskRunResult {
         var runner = TaskRunner(project: fx.project, git: fx.git, gh: override ?? gh.runner)
+        runner.retryDelay = .zero
         runner.runOptions = fx.options(directives.joined(separator: ","))
         runner.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory()]
         return await runner.run(task.name, trigger: .tick)
@@ -248,7 +249,50 @@ private struct Safe {
         try safe.openList([], extra: TaskPullRequests.openListLimit)
         let result = try await safe.run(try safe.shippable())
         #expect(result.outcome == .skippedTooManyOpen)
-        #expect(result.reason?.contains("could not be read in full") == true)
+        #expect(result.reason?.contains("500 or more pull requests are open") == true)
+    }
+
+    @Test func aFailedOpenListSaysWhyAndNamesAMissingConnection() async throws {
+        let safe = try await Safe()
+        let first = try await safe.run(try safe.shippable())
+        #expect(first.outcome == .prOpened)
+        try safe.gh.put("list_open_fail", "error connecting to api.github.com\ncheck your internet connection\n")
+        let result = try await safe.run(try safe.shippable())
+        #expect(result.outcome == .skippedTooManyOpen)
+        #expect(result.reason?.contains("gh exited with status 1: error connecting to api.github.com") == true)
+        #expect(result.reason?.contains("looks like no internet connection") == true)
+    }
+
+    @Test func aDroppedConnectionIsAskedAgainAndTheRunGoesOn() async throws {
+        let safe = try await Safe()
+        let first = try await safe.run(try safe.shippable())
+        #expect(first.outcome == .prOpened)
+        try safe.gh.put("list_open_fail_once", "")
+        let result = try await safe.run(try safe.shippable())
+        #expect(result.outcome != .skippedTooManyOpen, "\(result.reason ?? "")")
+    }
+
+    @Test func aFailureThatWillNotPassIsNotAskedAgain() async throws {
+        let safe = try await Safe()
+        let gh = GitRunner(executable: URL(fileURLWithPath: "/usr/bin/false"), environment: [:])
+        let result = await TaskPullRequests.openBranches(gh: gh, project: safe.fx.project, attempts: 3, retryDelay: .seconds(60))
+        guard case .failure(let failure) = result else { Issue.record("expected a failure"); return }
+        #expect(!failure.retryable)
+    }
+
+    @Test func aCredentialInGhsComplaintIsNotKept() {
+        let why = TaskPullRequests.failedReason(
+            status: 1, stderr: "not allowed (https://user:sekret@api.github.com/graphql) ghp_abcdefgh12345678\n",
+            environment: ["GH_TOKEN": "hunter2hunter2"])
+        #expect(!why.contains("sekret") && !why.contains("ghp_abcdefgh") && !why.contains("hunter2"))
+        let leaked = TaskPullRequests.failedReason(
+            status: 1, stderr: "bad token hunter2hunter2", environment: ["GH_TOKEN": "hunter2hunter2"])
+        #expect(!leaked.contains("hunter2"))
+    }
+
+    @Test func aFailedOpenListWithAnotherErrorGivesItsLineWithoutTheHint() {
+        let why = TaskPullRequests.failedReason(status: 4, stderr: "try: gh auth login\nmore")
+        #expect(why == "gh exited with status 4: try: gh auth login")
     }
 
     @Test func aMergedOrClosedPullRequestNoLongerCounts() async throws {

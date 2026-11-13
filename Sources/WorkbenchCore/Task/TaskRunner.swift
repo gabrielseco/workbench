@@ -85,6 +85,8 @@ public struct TaskRunner: Sendable {
     public var notice: @Sendable (String) -> Void = { _ in }
     /// `--dry`: a `fix: report` run lists what it would take and starts no agent.
     public var dryRun = false
+    /// The wait before asking GitHub again for the open pull requests after a timeout or a dropped connection; a test sets zero.
+    public var retryDelay: Duration = .seconds(5)
     /// The agent a report turn asks, for a test; nil takes the one `[agents.plan]` names.
     public var readOnlyAgent: (any ReadOnlyAgent)?
 
@@ -198,11 +200,14 @@ public struct TaskRunner: Sendable {
         }
         guard !tried.isEmpty else { return nil }
         let threads = Set(tried.compactMap(\.thread))
-        guard let openBranches = await TaskPullRequests.openBranches(gh: gh, project: project) else {
-            let why = gh == nil ? "GitHub is not reachable" : "its list of open pull requests could not be read in full"
+        let openBranches: Set<String>
+        switch await TaskPullRequests.openBranches(gh: gh, project: project, retryDelay: retryDelay) {
+        case .success(let branches): openBranches = branches
+        case .failure(let failure):
             return TaskRunResult(
                 outcome: .skippedTooManyOpen,
-                reason: "cannot tell whether the task's earlier pull requests are still open (\(why)); not starting on a guess")
+                reason: "cannot tell whether the task's earlier pull requests are still open "
+                    + "(\(failure)); not starting on a guess")
         }
         let open = threads.filter { openBranches.contains("workbench/\($0)") }
         guard open.count >= limit else { return nil }

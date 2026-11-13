@@ -34,16 +34,80 @@ enum TaskPullRequests {
     static let openListLimit = 500
 
     /// The head branches of every open pull request of the repository, in one question: how a task counts its own, without asking
-    /// about each earlier thread. Nil when it cannot be known (`gh` missing or failing, or the list is as long as the limit and may be cut).
-    static func openBranches(gh: GitRunner?, project: Project) async -> Set<String>? {
-        guard let gh else { return nil }
-        let result = try? await gh.run(
-            ["pr", "list", "--state", "open", "--json", "headRefName", "--limit", "\(openListLimit)"], in: project.root)
-        guard let result, result.succeeded, !result.outputTruncated,
+    /// about each earlier thread. A failure when it cannot be known (`gh` missing or failing, or the list is as long as the limit and
+    /// may be cut), and the failure says why, so a person can tell a dropped connection from a missing login.
+    /// A timeout or an answer that reads like no network is tried again (up to `attempts` times, `retryDelay` apart), since a dropped
+    /// connection often comes back within seconds; any other failure (no login, a cut list) would fail the same way again.
+    static func openBranches(
+        gh: GitRunner?, project: Project, attempts: Int = 3, retryDelay: Duration = .seconds(5)
+    ) async -> Result<Set<String>, OpenListFailure> {
+        var result = await openBranchesOnce(gh: gh, project: project)
+        var attempt = 1
+        while case .failure(let failure) = result, failure.retryable, attempt < attempts {
+            try? await Task.sleep(for: retryDelay)
+            result = await openBranchesOnce(gh: gh, project: project)
+            attempt += 1
+        }
+        return result
+    }
+
+    private static func openBranchesOnce(gh: GitRunner?, project: Project) async -> Result<Set<String>, OpenListFailure> {
+        guard let gh else { return .failure(OpenListFailure("GitHub's command line tool (gh) was not found")) }
+        let result: GitResult
+        do {
+            result = try await gh.run(
+                ["pr", "list", "--state", "open", "--json", "headRefName", "--limit", "\(openListLimit)"], in: project.root)
+        } catch GitError.timedOut(_, let seconds) {
+            return .failure(OpenListFailure(
+                "gh did not answer in \(Int(seconds)) s; is there an internet connection?", retryable: true))
+        } catch {
+            return .failure(OpenListFailure("gh could not be run: \(error)"))
+        }
+        guard result.succeeded else {
+            return .failure(OpenListFailure(
+                failedReason(status: result.status, stderr: result.stderr, environment: gh.environment),
+                retryable: looksOffline(result.stderr)))
+        }
+        guard !result.outputTruncated,
             let value = try? JSONDecoder().decode(JSONValue.self, from: result.stdoutBytes),
-            let items = value.arrayItems, items.count < openListLimit
-        else { return nil }
-        return Set(items.compactMap { $0["headRefName"]?.stringValue })
+            let items = value.arrayItems
+        else { return .failure(OpenListFailure("gh's answer was cut off or was not a list")) }
+        guard items.count < openListLimit else {
+            return .failure(OpenListFailure("\(openListLimit) or more pull requests are open, so the list may be cut"))
+        }
+        return .success(Set(items.compactMap { $0["headRefName"]?.stringValue }))
+    }
+
+    /// Why a `gh` that exited non-zero failed: its own first line of complaint, bounded, with a hint when it reads like no network.
+    static func failedReason(status: Int32, stderr: String, environment: [String: String] = [:]) -> String {
+        let first = stderr.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        // Before the cut to 200 characters, so a credential is not left half there.
+        let line = ThreadService.withoutCredentials(first, environment: environment)
+        let printable = String.UnicodeScalarView(line.unicodeScalars.filter { $0.value >= 32 && $0.value != 127 })
+        let clean = String(printable.prefix(200)).trimmingCharacters(in: .whitespaces)
+        var why = "gh exited with status \(status)"
+        if !clean.isEmpty { why += ": " + clean }
+        if looksOffline(stderr) { why += " (looks like no internet connection)" }
+        return why
+    }
+
+    static func looksOffline(_ stderr: String) -> Bool {
+        let lower = stderr.lowercased()
+        return [
+            "error connecting", "no such host", "could not resolve", "network is unreachable", "dial tcp", "i/o timeout",
+            "connection refused", "connection reset", "tls handshake", "offline",
+        ].contains { lower.contains($0) }
+    }
+
+    /// Why the list of open pull requests could not be had, in words for the run log.
+    struct OpenListFailure: Error, Equatable, CustomStringConvertible {
+        let description: String
+        /// Worth asking again: the failure reads like a connection that may come back.
+        let retryable: Bool
+        init(_ description: String, retryable: Bool = false) {
+            self.description = description
+            self.retryable = retryable
+        }
     }
 
     /// The same, for the units a past run made a thread for.
