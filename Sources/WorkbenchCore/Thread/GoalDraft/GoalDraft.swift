@@ -89,8 +89,8 @@ public enum GoalDraft {
         ]
         // Without a verifier skill at the base nothing makes a screenshot, and Approve is refused for such a proof.
         if !verifierSkill {
-            parts[0] += "\n- This project has no verifier skill, so nothing can take screenshots: never use a \"screenshot:\" proof; "
-                + "prove each criterion with a test or a command."
+            parts[0] += "\n- This project has no verifier skill, so nothing can take screenshots: "
+                + "never use a \"screenshot:\" proof; prove each criterion with a test or a command."
         }
         // A conversation is bounded by the chat's own limits; a rough request by the findings limit.
         let quoted = conversation ? Chat.quote(request) : ReviewLoop.quoted(request).text
