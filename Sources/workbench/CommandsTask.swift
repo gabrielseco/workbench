@@ -72,7 +72,7 @@ extension Commands {
         if let url = result.pullRequest { out("  pull request: \(url)") }
         if !result.recorded { out("  not recorded in the task's run log") }
         switch result.outcome {
-        case .prOpened, .reported, .nothingPending, .nothingToDo: return 0
+        case .prOpened, .needsYou, .reported, .nothingPending, .nothingToDo: return 0
         case .skippedProjectBusy, .skippedAlreadyRunning, .skippedTooManyOpen, .staleApproval: return 6
         case .budgetExceeded: return 5
         case .failed, .interrupted: return 1
@@ -287,6 +287,11 @@ extension Commands {
                 "each listed tool is a capability for an unattended run: a read tool and a write tool are two entries."
                     + (loaded.definition.fix == .report
                         ? " fix: report can change no file, but a listed tool that writes still writes." : ""))
+        }
+        if loaded.definition.fix == .update {
+            out(
+                "fix: update: each run merges the base into one open pull request's branch, resolves only generated or "
+                    + "bookkeeping conflicts, and when its check passes pushes to that branch. It never forces and never merges.")
         }
         if loaded.definition.fix == .pr {
             out(

@@ -14,6 +14,9 @@ extension EventKind {
 
 public enum TaskOutcome: String, Sendable, Equatable {
     case prOpened = "pr-opened"
+    /// A `fix: update` run found a merge it will not do unattended (real logic edited on both sides, or a resolution that went past
+    /// what main changed): nothing was pushed and the pull request's branch is as it was.
+    case needsYou = "needs-you"
     case reported
     case nothingPending = "nothing-pending"
     case nothingToDo = "nothing-to-do"
@@ -77,9 +80,10 @@ public struct TaskHistory: Sendable, Equatable {
         return result
     }
 
-    /// Units a run recorded as having a pull request.
+    /// Units a run recorded as having a pull request, or (for `fix: update`) as needing a person: the unit names the main it was
+    /// tried against, so the next main brings it back and a retry of the same one would only spend the same turn again.
     public var openedUnits: Set<String> {
-        Set(runs.filter { $0.outcome == .prOpened }.flatMap(\.units))
+        Set(runs.filter { $0.outcome == .prOpened || $0.outcome == .needsYou }.flatMap(\.units))
     }
 
     /// How many times each unit was tried and ended without a pull request (failed, nothing to do, over budget, interrupted). A dry

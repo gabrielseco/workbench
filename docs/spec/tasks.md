@@ -38,7 +38,7 @@ Bump the next countries. Follow the skill exactly.
 | `include` | one file, up to 16 KiB, whose text is added to the prompt |
 | `inputs` | up to 20 paths, 200 files and 32 KiB in all (across every path), regular files only, hidden files skipped. The engine never parses them: the agent reads them, fenced as untrusted data |
 | `pending` | the script that names the units (below) |
-| `fix` | `report`: one read-only turn, in a checkout of the base as committed (the agent of `[agents.plan]`, with Read, Glob and Grep and, when the task sets `mcp_tools`, exactly those MCP tools; never the working tree), whose answer is kept as `.workbench/tasks/<name>/reports/<time>.md` (cut at 256 KiB) and whose first line is the run's reason. It starts no thread, changes and opens nothing, and costs at most the task's `budget` (the project's default budget when it sets none). `pr`: does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request. Nothing merges |
+| `fix` | `report`: one read-only turn, in a checkout of the base as committed (the agent of `[agents.plan]`, with Read, Glob and Grep and, when the task sets `mcp_tools`, exactly those MCP tools; never the working tree), whose answer is kept as `.workbench/tasks/<name>/reports/<time>.md` (cut at 256 KiB) and whose first line is the run's reason. It starts no thread, changes and opens nothing, and costs at most the task's `budget` (the project's default budget when it sets none). `pr`: does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request. Nothing merges `update`: brings the base (`base`, default `origin/main`) into one open pull request's own branch and pushes to that same branch; see "Updating pull requests". It opens no pull request and merges nothing |
 | `max_open` | 1 to 50, default 2 for `fix: pr` (a `fix: report` run is not limited): the task starts no run while this many of its own pull requests are open, because the pull requests of one task tend to touch the same files and pile up. The run ends `skipped-too-many-open` with the addresses; merged and closed ones do not count. It is part of the approval only when the file sets it |
 | `timeout` | minutes the agent's turn may run, 5 to 240. Without it the goal's default of 30 stands. Part of the approval only when the file sets it |
 | `base` | the branch the thread is cut from: `origin/main` is **fetched first** and the thread starts from it, so a local `main` that is behind cannot give a stale starting point; the fetch names the branch explicitly (`+refs/heads/<b>:refs/remotes/origin/<b>`), so a restricted `remote.origin.fetch` cannot leave it stale; a fetch that fails ends the run `failed` rather than falling back to a stale branch; and a local tag or branch literally named `origin/<b>`, which git would read first, is refused with a message. A name without `origin/` is used as it is. Without it, the project's default base. Part of the approval only when the file sets it. (`pending` still reads the working tree: for a list that lives in files of the checkout, `timer install --pull-main` keeps that current) |
@@ -121,6 +121,9 @@ same bounded process layer as every child: 60 s, 4 MiB of output. It prints a JS
 ```json
 [{"id": "ROU", "title": "Romania v1 -> v6"}, {"id": "TUR"}]
 ```
+
+A unit of a `fix: update` task also names the pull request's branch, `{"id": "1894-fa2c5b2b", "title": "...", "branch": "refactor/x"}`. It
+is checked like a push target (a safe branch name, never `main`, `master`, `trunk` or `develop`); one that is not refuses the whole list.
 
 Ids are letters, digits, `.`, `_` and `-` (they reach branch names and paths), at most 500 units, none twice. A non-zero exit, a
 timeout, too much output or anything else than that list ends the run as `failed` with the reason. A task without `pending` has one
@@ -215,7 +218,7 @@ approval are not tries. A run whose thread never started a turn (setup failed, t
 the next run is not skipped for it; a thread that ran a turn is still left for a person. When the discard itself fails the reason says the
 thread is left for you (`workbench abandon`), never that it was removed.
 
-Outcomes: `pr-opened`, `reported`, `nothing-pending`, `nothing-to-do`, `skipped-project-busy`, `skipped-already-running`, `skipped-too-many-open`, `budget-exceeded`,
+Outcomes: `pr-opened` (also an update that was pushed), `needs-you` (`fix: update` only), `reported`, `nothing-pending`, `nothing-to-do`, `skipped-project-busy`, `skipped-already-running`, `skipped-too-many-open`, `budget-exceeded`,
 `failed`, `stale-approval`, `interrupted` (a run whose process died; the next writer closes it). Holding the log's lock is what makes a task
 run once at a time: a second run finds it taken and ends as `skipped-already-running`.
 
@@ -239,7 +242,7 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
   not what was approved), and a script that fails shows `unknown (why)`.
 - `workbench task approve <name>`: records the approval. Exit 6 for a task that does not parse, 7 for no such task.
 
-- `workbench task run <name> [--dry]`: runs the task now (below); `--dry` makes a `fix: report` task list what it would take instead of asking the agent. Exit 0 when it did its work or found none (`pr-opened`, `reported`,
+- `workbench task run <name> [--dry]`: runs the task now (below); `--dry` makes a `fix: report` task list what it would take instead of asking the agent. Exit 0 when it did its work or found none (`pr-opened`, `needs-you`, `reported`,
   `nothing-pending`, `nothing-to-do`), 6 when it was skipped or refused (`skipped-project-busy`, `skipped-already-running`,
   `stale-approval`; nothing was changed), 5 over budget, 1 failed, 7 no such task.
 - `workbench task tick [--all]`: runs the tasks whose next due time has passed, the earliest first, one after the other, and prints how each ended. A
@@ -290,6 +293,30 @@ In order, ending the run with an outcome at the first step that stops it:
    the thread stays accepted and `workbench ship` finishes it by hand, because the fallback body is the goal's request, which holds the skill
    and the input files. The screenshots are skipped. Nothing merges.
    When the task has `labels`, they are added as the pull request is opened: each is created first (`gh label create --force`, which keeps the colour of one that exists) and then put on the pull request. A label that cannot be created or added is only noted: the run still ends `pr-opened`, the thread is shipped as usual, and `reason` is one bounded line naming each label and why (`the pull request is open, but label 'x': ...`). A pull request found already open for the branch is not labelled.
+
+## Updating pull requests
+
+`fix: update` is for the chore of keeping your own open pull requests current with main. The task file needs `pending` (the script that lists
+the pull requests, each unit with its `branch`; put the main's short sha in the id so a unit comes back when main moves), `batch` stays 1
+(each run updates one branch, because each has its own push), and `labels`, `max_open` and `history` are refused: it opens no pull request. One run:
+
+1. The thread is cut from the pull request's branch as it is on origin (`push_to` is that branch, as for `goal new --update`), so what is
+   shipped goes to the same branch. The project must have a `check_command`, as for `fix: pr`.
+2. Workbench merges the base into the branch itself (`syncBase`, with the base named), not the agent: a merge needs no shell. A branch that
+   already has the base ends the run `nothing-to-do`. History is never rewritten.
+3. The agent's one turn is told which cases it may touch: a conflict in a generated or bookkeeping file, or a plain list or export union, it
+   resolves; real logic edited on both sides it leaves as it is and says why. A clean merge needs nothing from it. The agent has the same
+   tools as in a `fix: pr` turn and cannot commit, push or abort the merge.
+4. A conflict marker left in a file that conflicted ends the run `needs-you` ("not updated, a person has to merge", with the files and the
+   agent's reason): nothing is pushed, the branch on origin is as it was, the thread is discarded, and the unit is not tried again for the same
+   main. This is decided by reading the files, not by the agent's word.
+5. The check (and the verifier, when configured) must pass, as for `fix: pr`; the thread is then accepted as `task:<name>`.
+6. Before the push, the change relative to the branch on origin may only be files that main changed since the branch left it. A resolution
+   that touched anything else is `failed` with the files named, and the thread is left for you.
+7. The push is a plain one to the pull request's own branch (never forced), and the run ends `pr-opened` with `updated <branch> with <base>`
+   and the pull request's address. The thread's own `workbench/<id>` branch is not pushed. Nothing is merged, no screenshots, no new body.
+
+A branch that moved on origin since the thread was cut is refused by the push (it is not a fast-forward) and the run is `failed`.
 
 ## The timer
 

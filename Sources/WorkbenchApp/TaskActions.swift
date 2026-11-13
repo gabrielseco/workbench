@@ -23,6 +23,8 @@ struct TaskCardInfo: Equatable {
             Line(
                 label: "fix",
                 value: task.fix == .pr ? "pr: does the work, opens a pull request, merges nothing"
+                    : task.fix == .update
+                    ? "update: merges the base into open pull requests' branches and pushes to them; opens and merges nothing"
                     : "report: a read-only agent writes a report; nothing is changed or opened"),
             Line(label: "batch", value: "\(task.batch) unit\(task.batch == 1 ? "" : "s") a run"),
             Line(label: "budget", value: task.budgetUSD.map { "$\(money($0)) a run" } ?? "none set"),

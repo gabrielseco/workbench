@@ -29,21 +29,8 @@ extension ThreadService {
         let file = try await approve(id: id)
         // The file can change between the read above and the approval; what was approved is what counts.
         if file.goal.budgetUSD != nil { throw ThreadServiceError.budgetNeedsCap(provider: Self.handoffAgent) }
-        let copy = (try? Config.load(from: project.configURL))?.copy ?? []
         let manager = WorktreeManager(repoRoot: project.root, git: git)
-        if !manager.exists(id) {
-            try await withLog(id) { log in
-                if let decision = ThreadStore(project: project).state(of: id).decision {
-                    throw ThreadServiceError.threadEnded(decision)
-                }
-                // As a run does: a new goal starts from what origin has, or not at all. A goal continuing `push_to`
-                // starts from that branch, so its base is left alone.
-                if file.goal.pushTo == nil { try await manager.updateBaseFromOrigin(file.goal.base) }
-                let created = try await manager.create(
-                    threadID: id, base: file.goal.base, fetching: file.goal.pushTo, copying: copy)
-                try await log.append(.worktreeCreated, data: created.eventData)
-            }
-        }
+        try await cutWorktreeIfMissing(id: id, goal: file.goal)
         // The session is told to read this file: without it there is nothing to hand over.
         if case .skipped(let why) = await manager.writeGoalCopy(file.text, for: id) {
             throw ThreadServiceError.goalNotCopied(why)
@@ -51,6 +38,23 @@ extension ThreadService {
         _ = await manager.writeAttachmentCopies(GoalAttachments.stored(in: project.threadDirectory(id)), for: id)
         return PreparedHandoff(worktree: manager.path(for: id), turnTimeoutMin: file.goal.turnTimeoutMin,
             marker: project.runnerURL(id))
+    }
+
+    /// Cuts the thread's worktree as a run cuts it and records `worktree.created`, when it has none: a task that has to merge into
+    /// the branch before any turn needs the files there first. A new goal starts from what origin has (or not at all); a goal
+    /// continuing `push_to` starts from that branch, so its base is left alone.
+    func cutWorktreeIfMissing(id: String, goal: Goal) async throws {
+        let manager = WorktreeManager(repoRoot: project.root, git: git)
+        guard !manager.exists(id) else { return }
+        let copy = (try? Config.load(from: project.configURL))?.copy ?? []
+        try await withLog(id) { log in
+            if let decision = ThreadStore(project: project).state(of: id).decision {
+                throw ThreadServiceError.threadEnded(decision)
+            }
+            if goal.pushTo == nil { try await manager.updateBaseFromOrigin(goal.base) }
+            let created = try await manager.create(threadID: id, base: goal.base, fetching: goal.pushTo, copying: copy)
+            try await log.append(.worktreeCreated, data: created.eventData)
+        }
     }
 
     static let handoffAgent = "An interactive Claude session in Herdr"

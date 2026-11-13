@@ -13,7 +13,7 @@ enum TaskPage {
 
     static func header(_ entry: TaskEntry, now: Date) -> Header {
         let summary = entry.summary
-        let fix = summary.fix == .pr ? "opens a PR" : "reports"
+        let fix = summary.fix == .pr ? "opens a PR" : summary.fix == .update ? "updates PRs" : "reports"
         let runs = "\(entry.runs.count) run\(entry.runs.count == 1 ? "" : "s")"
         return Header(
             line: "\(summary.schedule ?? "manual") · \(fix) · \(runs) · next \(TasksText.next(summary, now: now))",
