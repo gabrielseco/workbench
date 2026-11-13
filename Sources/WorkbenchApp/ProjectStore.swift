@@ -108,6 +108,8 @@ struct RecentProject: Equatable, Identifiable {
     var drafting = false
     /// The last draft was refused because the config names no goal agent: the sheet offers to name one.
     var goalAgentOff = false
+    /// Setting up a folder with no `.workbench/` yet (`ProjectStore+Setup.swift`); reset when another folder opens.
+    var setup = ProjectSetupState()
     @ObservationIgnored var draftStop: DraftStop?
     /// A pull request review round on screen: the one that just ran, or the latest one the person asked to see.
     var prReviewShown: PRReviewShown?
@@ -248,7 +250,7 @@ struct RecentProject: Equatable, Identifiable {
         newThreadText = ""
         clearGuidance()
         current.pendingDiscard = nil
-        prReviewShown = nil
+        (prReviewShown, setup) = (nil, ProjectSetupState())
         // The thread goes first: the project alone would pair the new project with the old project's thread id.
         (currentThread, lastWatch, selectedThread) = (nil, nil, nil)
         // A thread id means another thread in another project: what was read for the old project is not the new one's.

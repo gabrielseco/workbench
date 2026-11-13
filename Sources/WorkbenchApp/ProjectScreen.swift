@@ -21,8 +21,9 @@ enum ProjectScreen: Equatable {
             ("Not a git repository", "\(path) is not inside a git repository. Choose the repository's folder.")
         case .workbenchMissing(let path):
             (
-                "This project has no .workbench folder",
-                "Run `workbench init` in \(path), then choose it again."
+                "Workbench is not set up here",
+                "\(path) has no .workbench folder, and nothing was written to it. Set up Workbench here, or run `workbench init` "
+                    + "in it and choose it again."
             )
         case .noThread:
             ("No thread yet", "Start one with New goal, or in a terminal: workbench goal new <name>.")

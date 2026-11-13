@@ -154,6 +154,7 @@ struct NewThreadScreen: View {
 
     /// A refusal asks the person to change something: amber, with their text kept. A project with no goal agent can name one.
     @ViewBuilder private var messages: some View {
+        if let done = store.setup.done { Message(.success, done) }
         if let problem = staging.problem { Message(.warning, problem) }
         if store.goalAgentOff {
             VStack(alignment: .leading, spacing: Space.s) {

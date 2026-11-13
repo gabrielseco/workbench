@@ -120,6 +120,8 @@ struct Centre: View {
             TasksView(store: store)
         } else if case .thread(let snapshot) = store.screen {
             FeedScreen(snapshot: snapshot, store: store)
+        } else if case .workbenchMissing(let path) = store.screen, store.offersSetup {
+            ProjectSetupScreen(path: path, store: store)
         } else if let message = store.screen.message {
             EmptyState(title: message.title, next: message.next, store: store)
         }
@@ -225,6 +227,9 @@ struct EmptyState: View {
             HStack {
                 Button("Choose project…") { Task { await store.chooseFolder() } }
                 if store.screen == .noThread { Button("New goal…") { store.beginNewGoal() } }
+                if case .workbenchMissing = store.screen, store.project != nil {
+                    Button("Set up Workbench…") { store.resumeSetup() }
+                }
             }
             .padding(.top, Space.s)
             if let error = store.actionError { Text(error).role(.error) }
