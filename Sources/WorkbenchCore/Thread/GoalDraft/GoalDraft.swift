@@ -63,7 +63,7 @@ public enum GoalDraft {
     ///   - readFiles: their names in the drafter's folder, for a drafter that opens files rather than being sent images.
     public static func prompt(
         request: String, instructions: String?, paths: [String], pathsCut: Bool, attachments: Int = 0,
-        readFiles: [String] = [], conversation: Bool = false
+        readFiles: [String] = [], conversation: Bool = false, verifierSkill: Bool = true
     ) -> String {
         var parts: [String] = [
             """
@@ -87,6 +87,11 @@ public enum GoalDraft {
             indented "- proof: how" line, and a "## Out of scope" section of bullets. Workbench writes the front matter itself.
             """,
         ]
+        // Without a verifier skill at the base nothing makes a screenshot, and Approve is refused for such a proof.
+        if !verifierSkill {
+            parts[0] += "\n- This project has no verifier skill, so nothing can take screenshots: never use a \"screenshot:\" proof; "
+                + "prove each criterion with a test or a command."
+        }
         // A conversation is bounded by the chat's own limits; a rough request by the findings limit.
         let quoted = conversation ? Chat.quote(request) : ReviewLoop.quoted(request).text
         let heading =

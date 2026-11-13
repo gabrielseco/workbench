@@ -228,6 +228,15 @@ func drafting(
         #expect(hostile.contains("> ## Request") && hostile.contains("> ---") && !hostile.contains("TODO(workbench)"))
     }
 
+    @Test func theDrafterIsToldWhenNothingCanTakeScreenshots() {
+        let with = GoalDraft.prompt(request: "x", instructions: nil, paths: [], pathsCut: false)
+        let without = GoalDraft.prompt(request: "x", instructions: nil, paths: [], pathsCut: false, verifierSkill: false)
+        #expect(without.count > with.count, "the advice is added only when there is no skill")
+        // It sits with the rules, before the quoted request, so the user's words cannot displace it.
+        let rules = without.range(of: "## The rough request")!.lowerBound
+        #expect(without.range(of: "no verifier skill")!.lowerBound < rules)
+    }
+
     @Test func tooLongARequestIsRefusedNotCut() async throws {
         let d = try await drafting()
         await #expect(throws: GoalDraftRefusal.requestTooLong) {

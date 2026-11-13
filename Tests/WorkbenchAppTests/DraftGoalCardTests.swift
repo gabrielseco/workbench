@@ -56,6 +56,8 @@ import WorkbenchCore
         let bothOff = goal { $0.steps = [step("verifier", skipped: true), step("judge", skipped: true)] }
         let off = DraftGoalCard.footer(goal: bothOff, base: "main")
         #expect(off == "Starts a worktree from main with Verifier and Judge off.")
+        let noSkill = goal { $0.steps = [step("verifier", unavailable: "no verifier skill in the base commit"), step("judge")] }
+        #expect(DraftGoalCard.footer(goal: noSkill, base: "main") == "Starts a worktree from main with Judge on, Verifier off.")
         #expect(DraftGoalCard.footer(goal: goal(), base: nil) == "Starts a worktree.", "no steps, no base: nothing more to say")
     }
 
