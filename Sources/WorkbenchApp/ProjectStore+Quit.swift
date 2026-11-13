@@ -1,4 +1,5 @@
 import Foundation
+import WorkbenchCore
 
 /// What a quit says and does when work of this app is still going.
 enum QuitPrompt {
@@ -38,6 +39,12 @@ extension ProjectStore {
 
     /// Every project this app has a run going in.
     var runningProjectPaths: Set<String> { Set(ownedRuns.map(\.project.root.path)) }
+
+    /// Whether a thread run is going in `project` itself: a run in another project must not hold this one's tasks back.
+    func threadRunGoing(in project: Project?) -> Bool {
+        guard let project else { return false }
+        return runningProjectPaths.contains(project.root.path)
+    }
 
     /// Asks every run this app holds, in whichever thread, to end (a quit), all at once: each still ends with a recorded `stopped`.
     func stopOwnedRun() async {

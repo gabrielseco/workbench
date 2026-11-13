@@ -139,7 +139,7 @@ struct TaskButtons: View {
     var body: some View {
         let tasks = store.tasks
         let needsApproval = entry.summary.problem == nil && entry.summary.approval != .approved
-        let off = tasks.runUnavailable(entry, threadRunGoing: store.runningProjectPath != nil)
+        let off = tasks.runUnavailable(entry, threadRunGoing: store.threadRunGoing(in: store.project))
         HStack(spacing: Space.s) {
             if tasks.isRunning(entry.id, in: store.project) {
                 Button("Stop") { Task { await tasks.stopRun() } }
@@ -151,7 +151,7 @@ struct TaskButtons: View {
                         .help("Records the approval: the task then runs on its schedule with nobody watching")
                 }
                 Button("Run now") {
-                    Task { await tasks.beginRun(store.project, entry, threadRunGoing: store.runningProjectPath != nil) }
+                    Task { await tasks.beginRun(store.project, entry, threadRunGoing: store.threadRunGoing(in: store.project)) }
                 }
                     .modifier(PrimaryWhen(!needsApproval, size: .regular)).disabled(off != nil)
                     .help(off ?? "Runs the task now, as a tick would")
