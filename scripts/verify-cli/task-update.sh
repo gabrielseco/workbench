@@ -9,7 +9,9 @@
 # commit it had, origin must hold no `workbench/` branch (the thread's own branch is never pushed) and `gh pr create` must not
 # have been called. A second pull request whose branch and main both changed the same file, with an agent that resolves
 # nothing, must end needs-you (exit 0) naming the file, with the branch on origin where it was. The same unit is not offered
-# again for the same main (nothing-pending). A task that mixes `fix: update` with `labels` or `batch: 2` must be refused.
+# again for the same main (nothing-pending).
+# A third pull request whose conflict the agent resolves to exactly the branch's own content (a tree equal to the branch's) must still
+# land main's history on the branch: pr-opened, and the branch on origin holds main's new commit. A task that mixes `fix: update` with `labels` or `batch: 2` must be refused.
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in agent also write a file main never touched: "the update is pushed", "the branch on
 # origin holds main's new commit and the commit it had" and "the same unit is not offered again" must FAIL, because the guard refuses a resolution that went past what main changed.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
@@ -38,7 +40,8 @@ WRITE=""
 [ "$SABOTAGE" = 1 ] && WRITE="write=update-probe.txt"
 cat >"$BIN/claude" <<STUB
 #!/bin/sh
-FAKE_CLAUDE=$WRITE exec '$FAKE' "\$@"
+R=""; [ -f "$SCRATCH/resolve" ] && R="resolve=keep.txt"
+FAKE_CLAUDE=\$R\${R:+,}$WRITE exec '$FAKE' "\$@"
 STUB
 # A gh that is logged in and knows the open pull requests of feature/pr and feature/clash.
 cat >"$BIN/gh" <<STUB
@@ -51,6 +54,7 @@ case "\$1 \$2" in
 "pr list")
     case "\$head" in
     feature/pr) echo '[{"number":1,"url":"https://github.com/o/r/pull/1","headRefName":"feature/pr","baseRefName":"main","title":"t","body":"b"}]' ;;
+    feature/keep) echo '[{"number":3,"url":"https://github.com/o/r/pull/3","headRefName":"feature/keep","baseRefName":"main","title":"t","body":"b"}]' ;;
     feature/clash) echo '[{"number":2,"url":"https://github.com/o/r/pull/2","headRefName":"feature/clash","baseRefName":"main","title":"t","body":"b"}]' ;;
     *) echo '[]' ;;
     esac
@@ -71,7 +75,10 @@ g -C "$W" checkout -q -b feature/pr origin/main && echo "pr work" >"$W/pr-work.t
     && g -C "$W" push -q origin feature/pr || die "could not make feature/pr"
 g -C "$W" checkout -q -b feature/clash origin/main && echo "branch side" >"$W/clash.txt" && g -C "$W" add clash.txt && g -C "$W" commit -q -m "clash on the branch" \
     && g -C "$W" push -q origin feature/clash || die "could not make feature/clash"
-g -C "$W" checkout -q main && echo "main side" >"$W/clash.txt" && echo "from main" >"$W/from-main.txt" && g -C "$W" add clash.txt from-main.txt \
+g -C "$W" checkout -q -b feature/keep origin/main && echo "keep side" >"$W/keep.txt" && g -C "$W" add keep.txt && g -C "$W" commit -q -m "keep on the branch" \
+    && g -C "$W" push -q origin feature/keep || die "could not make feature/keep"
+g -C "$W" checkout -q main && echo "main side" >"$W/clash.txt" && echo "main keep" >"$W/keep.txt" && echo "from main" >"$W/from-main.txt" \
+    && g -C "$W" add clash.txt keep.txt from-main.txt \
     && g -C "$W" commit -q -m "main moves" && g -C "$W" push -q origin main || die "could not move main"
 MAIN_TIP=$(g -C "$ORIGIN" rev-parse refs/heads/main)
 PR_BEFORE=$(g -C "$ORIGIN" rev-parse refs/heads/feature/pr)
@@ -108,11 +115,13 @@ task() { # <name> <front matter lines> <unit json>
     printf -- '---\n%s\npending: .workbench/tasks/%s/pending.sh\n---\nBring main into the pull request.\n' "$2" "$1" >"$dir/task.md"
 }
 task sync "fix: update" '[{"id":"1-main","title":"a pull request","branch":"feature/pr"}]'
+task keep "fix: update" '[{"id":"3-main","title":"resolved for the branch","branch":"feature/keep"}]'
 task clash "fix: update" '[{"id":"2-main","title":"a clashing pull request","branch":"feature/clash"}]'
 wbp "$SCRATCH/approve1.out" task approve sync
 check "approve warns what an update task does" "exit $RC: $(head -c 300 "$SCRATCH/approve1.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "fix: update" "$2"' _ "$RC" "$SCRATCH/approve1.out"
 wbp "$SCRATCH/approve2.out" task approve clash
+wbp "$SCRATCH/approve3.out" task approve keep
 
 # --- 1. a clean merge --------------------------------------------------------------------------------------
 
@@ -135,7 +144,15 @@ check "a conflict left open ends needs-you and names the file" "exit $RC: $(head
 check "the branch on origin is where it was" "was $CLASH_BEFORE, now $(g -C "$ORIGIN" rev-parse refs/heads/feature/clash)" \
     test "$(g -C "$ORIGIN" rev-parse refs/heads/feature/clash)" = "$CLASH_BEFORE"
 
-# --- 3. what the task file may say -----------------------------------------------------------------------
+# --- 3. a conflict resolved to the branch's own content --------------------------------------------------
+
+touch "$SCRATCH/resolve"
+wbp "$SCRATCH/run3.out" task run keep; shown "$SCRATCH/run3.out"
+rm -f "$SCRATCH/resolve"
+check "a resolution equal to the branch's tree is pushed and carries main's history" "exit $RC: $(head -c 400 "$SCRATCH/run3.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "^keep: pr-opened" "$2" && git -C "$3" merge-base --is-ancestor "$4" refs/heads/feature/keep' _ "$RC" "$SCRATCH/run3.out" "$ORIGIN" "$MAIN_TIP"
+
+# --- 4. what the task file may say -----------------------------------------------------------------------
 
 task bad "fix: update
 batch: 2
