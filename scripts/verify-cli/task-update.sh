@@ -11,7 +11,7 @@
 # nothing, must end needs-you (exit 0) naming the file, with the branch on origin where it was. The same unit is not offered
 # again for the same main (nothing-pending). A task that mixes `fix: update` with `labels` or `batch: 2` must be refused.
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in agent also write a file main never touched: "the update is pushed", "the branch on
-# origin holds main's new commit" must FAIL, because the guard refuses a resolution that went past what main changed.
+# origin holds main's new commit and the commit it had" and "the same unit is not offered again" must FAIL, because the guard refuses a resolution that went past what main changed.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
