@@ -393,6 +393,7 @@ public struct TaskRunner: Sendable {
             return fail(
                 why.reason("the verifier did not pass (\(what)); thread \(id) is left for you"), units: ids, thread: id)
         }
+        if let mergeFrom, let stuck = await finishMerge(id: id, base: mergeFrom, units: ids, explanation: why) { return stuck }
         return await acceptAndShip(
             name: name, id: id, config: config, service: service, units: ids, explanation: why, labels: task.labels,
             update: updating ? UpdateTarget(branch: branch ?? "", mergeFrom: mergeFrom ?? "") : nil)

@@ -3,14 +3,29 @@ import Foundation
 /// Where a `fix: update` run branch is checked: its resolution of a merge may not leave a conflict open, and may not change a file
 /// that main did not change. Both are facts about the tree, not the agent's word.
 enum UpdateGuard {
-    /// The files, of those that conflicted, that still hold a conflict marker line. A file that cannot be read counts as unresolved.
+    /// The biggest conflicted file that is read: the agent wrote it, so it is not trusted to be small. A bigger one counts as unresolved.
+    static let maxFileBytes = 8 << 20
+
+    /// The files, of those that conflicted, that still hold a conflict marker line. A file that is not a regular file inside the
+    /// worktree (a symlink, a FIFO), is too big, or cannot be read counts as unresolved: the agent controls what is there.
     static func unresolved(files: [String], in worktree: URL) -> [String] {
         files.filter { file in
             guard !file.hasPrefix("/"), !file.split(separator: "/").contains(".."),
-                let data = try? Data(contentsOf: worktree.appendingPathComponent(file))
+                let text = readRegularFile(worktree.appendingPathComponent(file))
             else { return true }
-            return hasMarker(String(decoding: data, as: UTF8.self))
+            return hasMarker(text)
         }
+    }
+
+    /// The file's text, only for a regular file (not followed through a link) up to `maxFileBytes`; nil otherwise.
+    static func readRegularFile(_ url: URL) -> String? {
+        var info = stat()
+        guard lstat(url.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size <= maxFileBytes,
+            let handle = try? FileHandle(forReadingFrom: url)
+        else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: maxFileBytes + 1), data.count <= maxFileBytes else { return nil }
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// A line of `<<<<<<< `, `=======` alone or `>>>>>>> ` at the start: what git writes around a conflict.
@@ -18,6 +33,22 @@ enum UpdateGuard {
         text.split(separator: "\n", omittingEmptySubsequences: false).contains {
             $0.hasPrefix("<<<<<<< ") || $0.hasPrefix(">>>>>>> ") || $0 == "=======" || $0 == "<<<<<<<" || $0 == ">>>>>>>"
         }
+    }
+
+    /// Ends the merge `syncBase` left open: the agent's resolution (or none, for a clean merge that stopped before the commit) is staged
+    /// and committed as the merge, even when it equals the branch's own tree, which `accept` would not commit. Nil when it is done or
+    /// there was no merge, else why not.
+    static func concludeMerge(worktree: URL, base: String, git: GitRunner) async -> String? {
+        guard let open = try? await git.run(["rev-parse", "-q", "--verify", "MERGE_HEAD"], in: worktree), open.succeeded else {
+            return nil
+        }
+        let message = "chore: bring \(base) into the branch"
+        for args in [["add", "-A"], ["commit", "-q", "--no-edit", "-m", message]] {
+            guard let done = try? await git.run(args, in: worktree), done.succeeded else {
+                return "the merge could not be committed"
+            }
+        }
+        return nil
     }
 
     /// Nil when everything the update changed relative to the pull request's branch is a file main changed since the branch left it,
@@ -30,6 +61,11 @@ enum UpdateGuard {
         let root = mergeBase.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let mine = await changed, let theirs = await names(["diff", "--name-only", "-z", root, tip], worktree, git) else {
             return "could not list what the update changed"
+        }
+        // What is pushed must carry the base's history: a merge that did not land would report success without it.
+        let ancestor = try? await git.run(["merge-base", "--is-ancestor", tip, "HEAD"], in: worktree)
+        guard ancestor?.succeeded == true else {
+            return "the branch does not contain \(tip) after the update"
         }
         let extra = Set(mine).subtracting(theirs).sorted()
         guard !extra.isEmpty else { return nil }
@@ -77,6 +113,13 @@ extension TaskRunner {
             let note = gone ? "" : "; " + Self.notDiscarded(id)
             return .stop(fail("could not bring \(base) into the branch: \(error)" + note, units: units, thread: id))
         }
+    }
+
+    /// Commits the merge the thread has open (see `UpdateGuard.concludeMerge`); the run's end when it cannot.
+    func finishMerge(id: String, base: String, units: [String], explanation: TaskExplanation) async -> TaskRunResult? {
+        let tree = WorktreeManager(repoRoot: project.root, git: git).path(for: id)
+        guard let why = await UpdateGuard.concludeMerge(worktree: tree, base: base, git: git) else { return nil }
+        return fail(explanation.reason("\(why); thread \(id) is left for you"), units: units, thread: id)
     }
 
     /// A conflict the agent did not resolve is the answer "not safe to do unattended", not a failure: nothing is pushed.

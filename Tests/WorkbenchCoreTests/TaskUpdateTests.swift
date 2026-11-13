@@ -37,6 +37,17 @@ private struct Update {
         _ = try await fx.git.run(["push", "-q", "origin", "main"], in: fx.repo)
     }
 
+    /// The branch and main both change a.txt, differently.
+    func makeConflict() async throws {
+        let scratch = fx.repo.deletingLastPathComponent().appendingPathComponent("edit-\(UUID().uuidString)")
+        _ = try await fx.git.run(["worktree", "add", "-q", "--detach", scratch.path, "origin/feature/pr"], in: fx.repo)
+        try "branch side\n".write(to: scratch.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.git.run(["commit", "-qam", "branch edits a"], in: scratch)
+        _ = try await fx.git.run(["push", "-q", "origin", "HEAD:refs/heads/feature/pr"], in: scratch)
+        _ = try await fx.git.run(["worktree", "remove", "--force", scratch.path], in: fx.repo)
+        try await moveMain(file: "a.txt", text: "main side\n")
+    }
+
     func originTip(_ branch: String) async throws -> String {
         try await fx.git.run(["rev-parse", "refs/heads/\(branch)"], in: origin).stdout
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -81,14 +92,7 @@ private struct Update {
 
     @Test func aConflictTheAgentLeavesOpenIsNeedsYouAndNothingIsPushed() async throws {
         let up = try await Update()
-        // The branch and main both change a.txt, differently.
-        let scratch = up.fx.repo.deletingLastPathComponent().appendingPathComponent("edit-\(UUID().uuidString)")
-        _ = try await up.fx.git.run(["worktree", "add", "-q", "--detach", scratch.path, "origin/feature/pr"], in: up.fx.repo)
-        try "branch side\n".write(to: scratch.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        _ = try await up.fx.git.run(["commit", "-qam", "branch edits a"], in: scratch)
-        _ = try await up.fx.git.run(["push", "-q", "origin", "HEAD:refs/heads/feature/pr"], in: scratch)
-        _ = try await up.fx.git.run(["worktree", "remove", "--force", scratch.path], in: up.fx.repo)
-        try await up.moveMain(file: "a.txt", text: "main side\n")
+        try await up.makeConflict()
         let before = try await up.originTip("feature/pr")
 
         // The fake agent resolves nothing, which is what an agent that sees real logic on both sides does.
@@ -102,6 +106,23 @@ private struct Update {
         // The unit is not tried again for the same main.
         let history = try up.task.log.history()
         #expect(history.openedUnits.contains("PR12-abc"))
+    }
+
+    @Test func aConflictResolvedToExactlyTheBranchsOwnContentStillLandsMainsHistory() async throws {
+        let up = try await Update()
+        try await up.makeConflict()
+        let main = try await up.originTip("main")
+        let before = try await up.originTip("feature/pr")
+
+        // Keeping the branch's side leaves a tree equal to the branch's: `accept` alone would commit nothing and drop the merge.
+        let result = await up.runner("resolve=a.txt").run("bump", trigger: .tick)
+
+        #expect(result.outcome == .prOpened, "\(result.reason ?? "")")
+        let hasMain = try await up.originHas("feature/pr", main)
+        let keepsOld = try await up.originHas("feature/pr", before)
+        #expect(hasMain && keepsOld, "the pushed branch carries main's history")
+        let content = try await up.fx.git.run(["show", "refs/heads/feature/pr:a.txt"], in: up.origin).stdout
+        #expect(content.trimmingCharacters(in: .whitespacesAndNewlines) == "branch side")
     }
 
     @Test func aResolutionThatChangesAFileMainDidNotChangeIsRefusedBeforeThePush() async throws {
@@ -156,6 +177,18 @@ struct TaskUpdateParseTests {
             let json = #"[{"id":"a","title":"t","branch":"\#(bad)"}]"#
             #expect(throws: PendingScriptError.self) { try PendingUnits.parse(Data(json.utf8)) }
         }
+    }
+
+    @Test func aConflictedPathThatIsNotAPlainSmallFileCountsAsUnresolvedAndIsNeverFollowedOrBlockedOn() throws {
+        let dir = try Scratch.directory("guard")
+        try "fine\n".write(to: dir.appendingPathComponent("ok.txt"), atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(
+            at: dir.appendingPathComponent("link.txt"), withDestinationURL: dir.appendingPathComponent("ok.txt"))
+        #expect(mkfifo(dir.appendingPathComponent("pipe.txt").path, 0o644) == 0)
+        try String(repeating: "x", count: UpdateGuard.maxFileBytes + 1).write(
+            to: dir.appendingPathComponent("big.txt"), atomically: true, encoding: .utf8)
+        let found = UpdateGuard.unresolved(files: ["ok.txt", "link.txt", "pipe.txt", "big.txt", "missing.txt", "../x"], in: dir)
+        #expect(found == ["link.txt", "pipe.txt", "big.txt", "missing.txt", "../x"])
     }
 
     @Test func conflictMarkersAreFoundAtTheStartOfALineOnly() {
