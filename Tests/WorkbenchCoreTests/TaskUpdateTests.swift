@@ -139,6 +139,18 @@ private struct Update {
         #expect(after == before)
     }
 
+    @Test func aBranchOnAUnitOfAPrTaskDoesNotMakeItUpdateThatBranch() async throws {
+        let up = try await Update(front: "fix: pr\npending: pending.sh")
+        let before = try await up.originTip("feature/pr")
+        let answer = up.fx.repo.deletingLastPathComponent().appendingPathComponent("answer-\(UUID().uuidString).txt")
+        try #"{"title": "chore: x", "summary": "x", "decisions": [], "deviations": []}"#
+            .write(to: answer, atomically: true, encoding: .utf8)
+        let result = await up.runner("write=a.txt,answer=\(answer.path)").run("bump", trigger: .tick)
+        #expect(result.outcome == .prOpened, "\(result.reason ?? "")")
+        let after = try await up.originTip("feature/pr")
+        #expect(after == before, "a fix: pr run never pushes to the unit's branch")
+    }
+
     @Test func aUnitWithoutABranchFailsBeforeAnyThreadExists() async throws {
         let up = try await Update()
         try up.task.script(#"echo '[{"id":"PR12-abc","title":"no branch"}]'"#)
@@ -188,7 +200,8 @@ struct TaskUpdateParseTests {
         try String(repeating: "x", count: UpdateGuard.maxFileBytes + 1).write(
             to: dir.appendingPathComponent("big.txt"), atomically: true, encoding: .utf8)
         let found = UpdateGuard.unresolved(files: ["ok.txt", "link.txt", "pipe.txt", "big.txt", "missing.txt", "../x"], in: dir)
-        #expect(found == ["link.txt", "pipe.txt", "big.txt", "missing.txt", "../x"])
+        // A deleted file (a modify/delete conflict resolved by deleting it) is resolved, not unreadable.
+        #expect(found == ["link.txt", "pipe.txt", "big.txt", "../x"])
     }
 
     @Test func conflictMarkersAreFoundAtTheStartOfALineOnly() {

@@ -306,7 +306,8 @@ the pull requests, each unit with its `branch`; put the main's short sha in the 
    already has the base ends the run `nothing-to-do`. History is never rewritten.
 3. The agent's one turn is told which cases it may touch: a conflict in a generated or bookkeeping file, or a plain list or export union, it
    resolves; real logic edited on both sides it leaves as it is and says why. A clean merge needs nothing from it. The agent has the same
-   tools as in a `fix: pr` turn and cannot commit, push or abort the merge.
+   tools as in a `fix: pr` turn and is told not to commit, push or abort the merge; nothing below depends on that, because the
+   guards in steps 4 and 6 read the resulting tree and history whoever committed.
 4. A conflict marker left in a file that conflicted ends the run `needs-you` ("not updated, a person has to merge", with the files and the
    agent's reason): nothing is pushed, the branch on origin is as it was, the thread is discarded, and the unit is not tried again for the same
    main. This is decided by reading the files, not by the agent's word.

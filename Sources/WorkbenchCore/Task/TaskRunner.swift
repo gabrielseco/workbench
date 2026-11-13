@@ -298,8 +298,8 @@ public struct TaskRunner: Sendable {
             settings.budgetUSD = task.budgetUSD
             settings.turnTimeoutMin = task.timeoutMin
             id = try await service.newThread(
-                name: TaskPrompt.threadName(task: name, units: units), base: updating ? nil : task.base, updating: branch,
-                config: config,
+                name: TaskPrompt.threadName(task: name, units: units), base: updating ? nil : task.base,
+                updating: updating ? branch : nil, config: config,
                 body: GoalBody(
                     request: prompt, criteria: [],
                     outOfScope: [

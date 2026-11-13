@@ -7,12 +7,15 @@ enum UpdateGuard {
     static let maxFileBytes = 8 << 20
 
     /// The files, of those that conflicted, that still hold a conflict marker line. A file that is not a regular file inside the
-    /// worktree (a symlink, a FIFO), is too big, or cannot be read counts as unresolved: the agent controls what is there.
+    /// worktree (a symlink, a FIFO), is too big, or cannot be read counts as unresolved; a deleted one is resolved: the agent controls what is there.
     static func unresolved(files: [String], in worktree: URL) -> [String] {
         files.filter { file in
-            guard !file.hasPrefix("/"), !file.split(separator: "/").contains(".."),
-                let text = readRegularFile(worktree.appendingPathComponent(file))
-            else { return true }
+            guard !file.hasPrefix("/"), !file.split(separator: "/").contains("..") else { return true }
+            let url = worktree.appendingPathComponent(file)
+            // A file the agent deleted (a modify/delete conflict resolved by deleting) has no marker left to find.
+            var info = stat()
+            if lstat(url.path, &info) != 0, errno == ENOENT { return false }
+            guard let text = readRegularFile(url) else { return true }
             return hasMarker(text)
         }
     }
