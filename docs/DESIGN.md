@@ -189,6 +189,15 @@ field that commits with Return or when it loses focus; blank is the provider's d
 `.error`, a change to the run agent while a coding thread is active shows the `goal approve` note in `.warning`. With no `.workbench/config.toml` the rows
 are not drawn and the card says to run `workbench init`. A chat's footer and the new-thread screen name the goal agent in `.caption`.
 
+## Setting up a new project
+
+A folder that is a git repository with no `.workbench/` opens on the setup screen (`ProjectSetupScreen`), not an empty state: `Set up Workbench in
+<folder>`, what setup writes (`.workbench/config.toml`, `.workbench/` in `.git/info/exclude`) and that the folder's files stay as they are, then a
+`GOAL AGENT` `SegmentedSwitch` (Claude, Codex, None; Claude picked) with a `.caption` on what that agent does, and `Set up Workbench` (primary) beside
+`Not now`. Nothing is written before the press. Setup is `ProjectSetup.initialize`: it never overwrites a config or an agent the config names, and a
+failure removes what it wrote; the screen then shows `Setup failed: <reason>` in `.error` and the button reads `Try again`. After setup with a goal agent
+the window opens on New goal with a `.success` line saying who discusses and drafts. `Not now` shows the empty state with `Set up Workbench…`.
+
 ## Tasks screen
 
 The top bar's `Inbox | Automations` switch changes the centre between the thread screens and the project's scheduled tasks; it

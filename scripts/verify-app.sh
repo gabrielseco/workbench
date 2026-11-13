@@ -273,6 +273,8 @@ SWIFT
     sed -e "s|@EDITOR_STUB@|$dir/bin/editor-stub|g" \
       "$fixture/config.toml" >"$dir/project/.workbench/config.toml"
   fi
+  # A scenario with `no-workbench` is a repository Workbench was never set up in (`new-project`): the window offers to set it up.
+  [[ ! -f "$fixture/no-workbench" ]] || rm -rf "$dir/project/.workbench"
 
   # `gh-stub` is the `gh` the window reads a shipped pull request's CI and merges with (`WORKBENCH_APP_GH`), so a fixture never asks
   # GitHub. Its checks move on with each read: two running, then one passed, then all green; Merge only writes down that it was asked.

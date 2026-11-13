@@ -93,6 +93,9 @@ extension AppScenario {
     }
 
     /// What a scenario ships beside its threads: its config, the pull requests `gh` says are merged, and its repository's files.
+    /// `new-project`'s files: a repository of its own that Workbench was never set up in, whose files setup must leave alone.
+    static let newProjectFiles = ["README.md": "Boat trips\n", "Sources/Trips/Trip.swift": "struct Trip {}\n"]
+
     func writeSideFiles(into target: URL) throws {
         if let config {
             try config.write(to: target.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
@@ -104,6 +107,9 @@ extension AppScenario {
         if !mergedPullRequests.isEmpty {
             let lines = mergedPullRequests.map { "\($0)\n" }.joined()
             try lines.write(to: target.appendingPathComponent("merged-prs"), atomically: true, encoding: .utf8)
+        }
+        if self == .newProject {
+            try "".write(to: target.appendingPathComponent("no-workbench"), atomically: true, encoding: .utf8)
         }
         if let ciChecks {
             try ciChecks.write(to: target.appendingPathComponent("ci-checks"), atomically: true, encoding: .utf8)

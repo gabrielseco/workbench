@@ -17,6 +17,7 @@ extension ProjectStore {
         newThread = false
         actionError = nil
         goalAgentOff = false
+        setup.done = nil
     }
 
     private var newThreadRequest: String { newThreadText.trimmingCharacters(in: .whitespacesAndNewlines) }

@@ -35,7 +35,8 @@ enum AppScenario: String, CaseIterable {
     case threadsAtOnce = "threads-at-once", projectRail = "project-rail"
     case chat
     case chatGoal = "chat-goal"
-    case chatReplying = "chat-replying"
+    /// `new-project`: a git repository with no `.workbench/` at all (a `no-workbench` file tells `verify-app.sh` to leave it out).
+    case chatReplying = "chat-replying", newProject = "new-project"
 
     static let title = "Paginate the contractor invoice list"
 
@@ -72,7 +73,7 @@ enum AppScenario: String, CaseIterable {
     /// The files at the base commit of the scenario's repository, and the files the thread's worktree has on top of them. Only a scenario
     /// with both has a worktree, which `verify-app.sh start` makes (a fixture cannot commit one).
     var repoFiles: [String: String] {
-        guard hasWorktree else { return [:] }
+        guard hasWorktree else { return self == .newProject ? Self.newProjectFiles : [:] }
         return [
             "Sources/Invoices/List.swift": "struct List {\n    func page() -> [Invoice] { all }\n}\n",
             "Sources/Invoices/Totals.swift": "struct Totals {\n    var sum = 0\n}\n",
@@ -202,7 +203,7 @@ enum AppScenario: String, CaseIterable {
         case .corrupt:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
-        case .noThread, .draftGoal, .tasksEmpty: break
+        case .noThread, .draftGoal, .tasksEmpty, .newProject: break
         case .chat, .chatGoal, .chatReplying:
             try writeChat(in: fixture, withGoal: self == .chatGoal, replying: self == .chatReplying)
         case .manyThreads: try await buildManyThreads(in: fixture)

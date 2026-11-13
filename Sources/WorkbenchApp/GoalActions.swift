@@ -52,6 +52,8 @@ struct GoalActions: Sendable {  // swiftlint:disable:this type_body_length
     var quickGoal: @Sendable (Project, String, String, [URL]) async throws -> String
     /// Names the goal agent in the project's config, so a project with none can draft.
     var enableGoalAgent: @Sendable (Project, AgentProviderID) async throws -> Void
+    /// Sets up Workbench in a repository that has no `.workbench/config.toml`, with the goal agent picked (nil: none), as core does it.
+    var initializeProject: @Sendable (Project, AgentProviderID?) async throws -> ProjectSetup.Report
     var openGoal: @Sendable (Project, String) async throws -> Void
     /// Asks the process that holds the thread (a terminal's `workbench run`) to stop; false when nothing holds it.
     var requestStop: @Sendable (Project, String) async -> Bool
@@ -111,6 +113,10 @@ struct GoalActions: Sendable {  // swiftlint:disable:this type_body_length
         draftFromChat: @escaping DraftFromChat = { _, _, _ in throw Unset() },
         quickGoal: @escaping @Sendable (Project, String, String, [URL]) async throws -> String = { _, _, _, _ in throw Unset() },
         enableGoalAgent: @escaping @Sendable (Project, AgentProviderID) async throws -> Void = { _, _ in },
+        // The real one: it only writes the project's own `.workbench/` and its `info/exclude`, so a test that opens a fixture can use it.
+        initializeProject: @escaping @Sendable (Project, AgentProviderID?) async throws -> ProjectSetup.Report = {
+            try await ProjectSetup.initialize($0, goalAgent: $1, git: try GitRunner.discover())
+        },
         openGoal: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
         requestStop: @escaping @Sendable (Project, String) async -> Bool = { _, _ in false },
         openWorktree: @escaping @Sendable (Project, String) async throws -> Void = { _, _ in },
@@ -147,7 +153,7 @@ struct GoalActions: Sendable {  // swiftlint:disable:this type_body_length
         (self.approve, self.makeRun, self.draftGoal, self.openGoal) = (approve, makeRun, draftGoal, openGoal)
         self.editGoal = editGoal
         (self.chat, self.draftFromChat) = (chat, draftFromChat)
-        (self.quickGoal, self.enableGoalAgent) = (quickGoal, enableGoalAgent)
+        (self.quickGoal, self.enableGoalAgent, self.initializeProject) = (quickGoal, enableGoalAgent, initializeProject)
         (self.requestStop, self.openWorktree, self.openDiff) = (requestStop, openWorktree, openDiff)
         (self.herdrFound, self.openInHerdr, self.runGoalInHerdr) = (herdrFound, openInHerdr, runGoalInHerdr)
         (self.loadReview, self.acceptPlan, self.accept) = (loadReview, acceptPlan, accept)
