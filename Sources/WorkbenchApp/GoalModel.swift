@@ -118,9 +118,11 @@ struct GoalModel: Equatable {
         }
 
         var warnings: [ProofWarning] = []
+        var skill = true
         if let config {
             let usesScreenshot = goal.criteria.contains { ScreenshotProof.name(in: $0.proof) != nil }
-            let skill = usesScreenshot ? await verifierSkill(config, goal) : true
+            // The verifier step's footer needs the answer too, so it is asked whenever a verifier is configured.
+            skill = usesScreenshot || config.verifier != nil ? await verifierSkill(config, goal) : true
             warnings = ProofCommands.warnings(goal: goal, config: config, verifierSkillAvailable: skill)
         }
         let rows = goal.criteria.map { criterion in
@@ -148,21 +150,23 @@ struct GoalModel: Equatable {
             turnTimeout: "\(goal.turnTimeoutMin) min per turn",
             allowedTools: config?.effectiveAllowedTools ?? [],
             grantedTools: config.map { GrantLedger(events: events).patternsForNextTurn(tools: $0.tools) } ?? [],
-            readAlso: config?.readAlso ?? [], goalReadAlso: goal.readAlso, steps: steps(goal: goal, config: config),
+            readAlso: config?.readAlso ?? [], goalReadAlso: goal.readAlso,
+            steps: steps(goal: goal, config: config, verifierSkill: skill),
             advice: AutoAdviceSetting.read(goal: goal, config: config), quick: goal.quick, editable: editable, pill: pill,
             blockers: blockers, placeholdersRemain: placeholders)
     }
 
     /// The steps that follow a turn in this project, in the order the pipeline walks them, then any name the goal skips that is
     /// none of them.
-    static func steps(goal: Goal, config: Config?) -> [Step] {
+    static func steps(goal: Goal, config: Config?, verifierSkill: Bool = true) -> [Step] {
         // Only the built-in steps need criteria: a stage that shares a name with one reviews the diff and is never unavailable.
         var steps: [Step] = []
         if config?.verifier != nil {
             steps.append(
                 Step(
                     name: "verifier", label: "Verifier", skipped: goal.skips("verifier"), known: true,
-                    unavailable: goal.unavailable("verifier")))
+                    unavailable: goal.unavailable("verifier")
+                        ?? (verifierSkill ? nil : "no verifier skill in the base commit")))
         }
         steps.append(
             Step(

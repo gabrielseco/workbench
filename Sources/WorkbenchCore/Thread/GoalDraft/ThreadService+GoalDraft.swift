@@ -268,9 +268,12 @@ extension ThreadService {
         // (Claude's `Read`) finds them by name in the one folder it may read, which is otherwise empty.
         let sends = provider.capabilities.imageAttachments
         let names = GoalAttachments.names(images)
+        let skill = await VerifierSkill.isAvailable(config: config, git: git, repo: project.root, ref: base)
         let prompt = GoalDraft.prompt(
             request: text, instructions: context.instructions, paths: context.paths, pathsCut: context.cut,
-            attachments: images.count, readFiles: sends ? [] : names, conversation: conversation)
+            attachments: images.count, readFiles: sends ? [] : names, conversation: conversation,
+            // A project with the verifier off has none either: the same advice holds.
+            verifierSkill: skill)
         let shown: [URL]
         do {
             shown = try GoalAttachments.write(images, into: sends ? root.appendingPathComponent("images") : work)

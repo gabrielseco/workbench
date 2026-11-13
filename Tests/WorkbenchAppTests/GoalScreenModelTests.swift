@@ -159,9 +159,13 @@ private final class SkillProbe: @unchecked Sendable {
         #expect(model.rows[0].warning == nil && model.canApprove)
     }
 
-    @Test func theVerifierSkillIsOnlyReadForAScreenshotProof() async throws {
-        let (model, skill) = try await load(goal: goal(["`swift test` passes"]), config: config)
-        #expect(skill.asks == 0 && model.canApprove)
+    @Test func theVerifierSkillIsReadForTheFooterButAMissingOneOnlyTurnsTheVerifierOff() async throws {
+        let (model, skill) = try await load(
+            goal: goal(["`swift test` passes"]), config: config, skill: SkillProbe(available: false))
+        #expect(skill.asks == 1 && model.canApprove, "no screenshot proof, so approval is not blocked")
+        #expect(model.steps.first { $0.name == "verifier" }?.unavailable != nil)
+        let (present, _) = try await load(goal: goal(["`swift test` passes"]), config: config)
+        #expect(present.steps.first { $0.name == "verifier" }?.unavailable == nil)
     }
 
     @Test func noConfigMeansNoProofIsJudged() async throws {
