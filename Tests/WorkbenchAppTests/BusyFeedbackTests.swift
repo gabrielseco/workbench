@@ -198,6 +198,22 @@ import Testing
         #expect(store.pendingDiscard != nil)
     }
 
+    @Test func aThreadRunHoldsBackTheTasksOfItsOwnProjectOnly() async throws {
+        let running = Gate()
+        let actions = GoalActions(makeRun: { _, _, _ in RunHandle(run: { await running.wait() }, stop: {}) })
+        let (store, a) = try await store(actions, approved: true, turn: false)
+        let other = try await AppFixture()
+        keptBusyFixtures.append(other)
+        try await other.addThread("t1", approved: true)
+
+        await store.approveAndRun()
+        #expect(store.threadRunGoing(in: a.project), "a run in this project holds its tasks back")
+        #expect(!store.threadRunGoing(in: other.project), "a run in another project does not")
+        #expect(!store.threadRunGoing(in: nil))
+        running.open()
+        await store.untilIdle()
+    }
+
     @Test func aThreadWaitingForItsRunStillHoldsTheWindowWhileAnotherProjectIsOnScreen() async throws {
         let running = Gate()
         let actions = GoalActions(makeRun: { _, _, _ in RunHandle(run: { await running.wait() }, stop: {}) })
