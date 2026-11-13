@@ -22,7 +22,7 @@ enum TaskOutcomeStyle {
         // through a tool), there was just no change to ship.
         case .prOpened?, .reported?, .nothingToDo?: .done
         case .nothingPending?, .skippedProjectBusy?, .skippedAlreadyRunning?, .skippedTooManyOpen?: .idle
-        case .staleApproval?: .needsYou
+        case .staleApproval?, .needsYou?: .needsYou
         case .failed?, .budgetExceeded?, .interrupted?: .broken
         }
     }

@@ -46,6 +46,13 @@ extension ThreadService {
         base.hasPrefix("origin/") ? String(base.dropFirst("origin/".count)) : base
     }
 
+    /// A branch name as origin knows it, checked like every name that reaches git.
+    static func checkedBranch(_ name: String) throws -> String {
+        let branch = originBranch(ofBase: name)
+        guard SafeNames.isBranchName(branch) else { throw ThreadStoreError.invalidName(name) }
+        return branch
+    }
+
     private func baseOf(_ id: String) throws -> String {
         guard let text = try? String(contentsOf: project.goalURL(id), encoding: .utf8),
             let goal = try? GoalFile.parse(text).goal
@@ -59,11 +66,11 @@ extension ThreadService {
     /// thread has no worktree or origin has no such branch. With `fetch`, one bounded fetch first and a failure throws (a
     /// stale answer must not be passed off as fresh); without it nothing touches the network and the answer is as old as the
     /// last fetch.
-    public func baseMovement(id: String, fetch: Bool) async throws -> BaseMovement? {
+    public func baseMovement(id: String, fetch: Bool, from: String? = nil) async throws -> BaseMovement? {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         guard manager.exists(id) else { return nil }
-        let base = try baseOf(id)
+        let base = try from.map(Self.checkedBranch) ?? baseOf(id)
         let worktree = manager.path(for: id)
 
         var tip: String
@@ -119,17 +126,20 @@ extension ThreadService {
     /// in the files, for a person or a `send-back` turn to resolve. History is never rewritten, so a branch that was pushed
     /// needs no force-push. Records `base.synced`. The thread's log is held from the first check to the record, so a run cannot
     /// start on the worktree in between.
-    public func syncBase(id: String) async throws -> BaseSyncResult {
+    ///
+    /// `from` names another branch of origin to bring in (`main`, `origin/main`) instead of the goal's base: a thread that updates a
+    /// pull request's branch has that branch as its base and wants the repository's main brought into it.
+    public func syncBase(id: String, from: String? = nil) async throws -> BaseSyncResult {
         guard SafeNames.isThreadID(id) else { throw ThreadStoreError.invalidName(id) }
         do {
-            return try await withLog(id) { log in try await self.sync(id: id, log: log) }
+            return try await withLog(id) { log in try await self.sync(id: id, log: log, from: from) }
         } catch EventLogError.alreadyOpen {
             throw ThreadServiceError.syncRefused(
                 "a run holds this thread (pid \(runnerPID(id: id).map(String.init) ?? "?")): `workbench stop` it first")
         }
     }
 
-    private func sync(id: String, log: EventLogWriter) async throws -> BaseSyncResult {
+    private func sync(id: String, log: EventLogWriter, from: String?) async throws -> BaseSyncResult {
         if let decision = ThreadStore(project: project).state(of: id).decision { throw ThreadServiceError.threadEnded(decision) }
         if let pid = runnerPID(id: id) { throw ThreadServiceError.running(pid: pid) }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
@@ -160,8 +170,9 @@ extension ThreadService {
                 "a merge is already in progress in \(worktree.path): resolve it (or `git merge --abort` there), then try again")
         }
 
-        guard let movement = try await baseMovement(id: id, fetch: true) else {
-            throw ThreadServiceError.syncRefused("origin has no branch '\(try baseOf(id))' to bring in")
+        guard let movement = try await baseMovement(id: id, fetch: true, from: from) else {
+            let name = try from.map(Self.checkedBranch) ?? baseOf(id)
+            throw ThreadServiceError.syncRefused("origin has no branch '\(name)' to bring in")
         }
         guard movement.behind > 0 else { return .upToDate(movement) }
 

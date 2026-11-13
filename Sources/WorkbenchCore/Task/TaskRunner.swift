@@ -31,7 +31,7 @@ public struct TaskRunResult: Sendable, Equatable {
     /// Ended the way a run is meant to: it did what it was asked, or found nothing to do.
     public var isDone: Bool {
         switch outcome {
-        case .prOpened, .reported, .nothingPending, .nothingToDo: true
+        case .prOpened, .needsYou, .reported, .nothingPending, .nothingToDo: true
         default: false
         }
     }
@@ -136,7 +136,7 @@ public struct TaskRunner: Sendable {
         return result
     }
 
-    private func fail(_ reason: String, units: [String] = [], thread: String? = nil) -> TaskRunResult {
+    func fail(_ reason: String, units: [String] = [], thread: String? = nil) -> TaskRunResult {
         TaskRunResult(outcome: .failed, reason: reason, units: units, thread: thread)
     }
 
@@ -156,7 +156,7 @@ public struct TaskRunner: Sendable {
                 outcome: .staleApproval, reason: "the task changed since it was approved: workbench task approve \(name)")
         }
         // Only a task that starts a thread needs the project free: a dry run takes no thread's place.
-        if task.fix == .pr {
+        if task.fix != .report {
             let store = ThreadStore(project: project)
             let cap = (try? Config.load(from: project.configURL))?.maxActiveThreads ?? Config.defaultMaxActiveThreads
             if let full = store.fullThreads(maxActive: cap) { return busy(full.joined(separator: ", "), cap: cap) }
@@ -164,7 +164,7 @@ public struct TaskRunner: Sendable {
         }
 
         // A task that opens pull requests waits for review once it has `max_open` of them open: they would pile up and conflict.
-        if let skip = await tooManyOpen(task, history: history) { return skip }
+        if task.fix == .pr, let skip = await tooManyOpen(task, history: history) { return skip }
 
         var units: [TaskUnit] = []
         if let script = task.pending {
@@ -237,7 +237,7 @@ public struct TaskRunner: Sendable {
         "thread \(id) could not be removed and is left for you (workbench abandon)"
     }
 
-    private func busy(_ what: String, cap: Int) -> TaskRunResult {
+    func busy(_ what: String, cap: Int) -> TaskRunResult {
         let limit = cap == 1 ? "one thread at a time" : "\(cap) threads at most"
         return TaskRunResult(
             outcome: .skippedProjectBusy, reason: "\(what) is still active: finish or abandon it (\(limit))")
@@ -278,24 +278,36 @@ public struct TaskRunner: Sendable {
                 "no check configured: set check_command in .workbench/config.toml, so the work is checked before it is accepted",
                 units: ids)
         }
+        let updating = task.fix == .update
+        // `fix: update` works on one pull request's branch; the unit's `branch` comes from the pending script and was checked as it was read.
+        let branch = units.first?.branch
+        if updating, branch == nil { return fail("the unit has no 'branch': the pending script must give one", units: ids) }
         let prompt: String
         do {
             let inputs = try TaskFiles(project: project).inputs(task.inputs)
-            prompt = try TaskPrompt.build(task: loaded, inputs: inputs, units: units)
+            prompt = try TaskPrompt.build(
+                task: loaded, inputs: inputs, units: units, deliverable: updating ? .mergeBase : .changes)
         } catch { return fail("\(error)", units: ids) }
 
         let service = ThreadService(project: project, git: git)
         if let why = await freshBase(task) { return fail(why, units: ids) }
+        let mergeFrom = updating ? (task.base ?? "origin/main") : nil
         let id: String
         do {
             var settings = GoalSettings(quick: true)
             settings.budgetUSD = task.budgetUSD
             settings.turnTimeoutMin = task.timeoutMin
             id = try await service.newThread(
-                name: TaskPrompt.threadName(task: name, units: units), base: task.base, config: config,
+                name: TaskPrompt.threadName(task: name, units: units), base: updating ? nil : task.base,
+                updating: updating ? branch : nil, config: config,
                 body: GoalBody(
                     request: prompt, criteria: [],
-                    outOfScope: ["Pushing, merging or opening a pull request: Workbench does that after the check passes."]),
+                    outOfScope: [
+                        updating
+                            ? "Pushing, merging or opening a pull request, and any file the merge did not touch: "
+                                + "Workbench pushes after the check passes."
+                            : "Pushing, merging or opening a pull request: Workbench does that after the check passes."
+                    ]),
                 settings: settings, title: TaskPrompt.title(task: name, units: units))
         } catch ThreadStoreError.activeThreadExists(let active) {
             return busy(active, cap: 1)
@@ -303,7 +315,8 @@ public struct TaskRunner: Sendable {
             return busy(active.joined(separator: ", "), cap: cap)
         } catch { return fail("the thread could not be created: \(error)", units: ids) }
 
-        do { _ = try await service.approve(id: id, config: config) } catch {
+        let approvedGoal: GoalFile
+        do { approvedGoal = try await service.approve(id: id, config: config) } catch {
             let gone = await discard(id, service: service)
             return fail(
                 "the task's goal could not be approved: \(error)" + (gone ? "" : "; " + Self.notDiscarded(id)), units: ids)
@@ -330,6 +343,13 @@ public struct TaskRunner: Sendable {
                 "the run could not be recorded, so nothing was started: \(error)" + (gone ? "" : "; " + Self.notDiscarded(id)),
                 units: ids)
         }
+        var conflicts: [String] = []
+        if let mergeFrom {
+            switch await bringBaseIn(id: id, from: mergeFrom, goal: approvedGoal.goal, service: service, units: ids) {
+            case .go(let files): conflicts = files
+            case .stop(let result): return result
+            }
+        }
         // From here the thread is real: when something goes wrong it is left as it is, for a person to look at.
         let progress = TaskProgress(now: now, say: notice)
         let runner = ThreadRunner(project: project, threadID: id, git: git) { progress.notice($0) }
@@ -350,6 +370,10 @@ public struct TaskRunner: Sendable {
         }
         notice("turn \(report.turn) ended: \(report.result.rawValue)")
         let why = explanation(report, id: id, service: service)
+        if updating, report.result == .succeeded {
+            let open = await unresolvedConflicts(conflicts, id: id, service: service, units: ids, explanation: why)
+            if let open { return open }
+        }
         guard report.result == .succeeded else {
             let outcome: TaskOutcome = report.result == .budgetExceeded ? .budgetExceeded : .failed
             // The check runs after a crashed, timed-out or over-budget turn too: if it failed, its output belongs here.
@@ -369,12 +393,14 @@ public struct TaskRunner: Sendable {
             return fail(
                 why.reason("the verifier did not pass (\(what)); thread \(id) is left for you"), units: ids, thread: id)
         }
+        if let mergeFrom, let stuck = await finishMerge(id: id, base: mergeFrom, units: ids, explanation: why) { return stuck }
         return await acceptAndShip(
-            name: name, id: id, config: config, service: service, units: ids, explanation: why, labels: task.labels)
+            name: name, id: id, config: config, service: service, units: ids, explanation: why, labels: task.labels,
+            update: updating ? UpdateTarget(branch: branch ?? "", mergeFrom: mergeFrom ?? "") : nil)
     }
 
     /// The agent's last message, the commands the turn was denied and, for a failed check, the end of its output.
-    private func explanation(_ report: TurnReport, id: String, service: ThreadService) -> TaskExplanation {
+    func explanation(_ report: TurnReport, id: String, service: ThreadService) -> TaskExplanation {
         var denied: [String] = []
         if report.permissionDenials > 0, let candidates = try? service.grantCandidates(id: id) {
             denied = candidates.compactMap(\.input)
@@ -395,7 +421,7 @@ public struct TaskRunner: Sendable {
 
     private func acceptAndShip(
         name: String, id: String, config: Config, service: ThreadService, units: [String], explanation: TaskExplanation,
-        labels: [String]
+        labels: [String], update: UpdateTarget? = nil
     ) async -> TaskRunResult {
         do { _ = try await service.accept(id: id, by: "task:\(name)") } catch ThreadServiceError.nothingToAccept {
             // An expected result, most often for a task that checks something and finds it fine: not a failure, and not a thread
@@ -412,6 +438,9 @@ public struct TaskRunner: Sendable {
         let plan: ShipPlan
         do { plan = try await service.shipPreflight(id: id, gh: gh) } catch {
             return fail(explanation.reason("\(error); \(stranded)"), units: units, thread: id)
+        }
+        if let update {
+            return await shipUpdate(update, id: id, plan: plan, service: service, units: units, explanation: explanation)
         }
         // A description written from the diff, or no pull request: the fallback body is built from the goal's request, which for a task
         // holds its skill and its input files.

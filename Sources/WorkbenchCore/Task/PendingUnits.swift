@@ -5,6 +5,14 @@ public struct TaskUnit: Sendable, Equatable {
     /// Safe to use in a branch name and a path (`SafeNames`).
     public var id: String
     public var title: String
+    /// The branch of the pull request this unit is about, for a `fix: update` task. Checked like a name that reaches git.
+    public var branch: String?
+
+    public init(id: String, title: String, branch: String? = nil) {
+        self.id = id
+        self.title = title
+        self.branch = branch
+    }
 }
 
 public enum PendingScriptError: Error, Equatable, Sendable, CustomStringConvertible {
@@ -85,7 +93,15 @@ public enum PendingUnits {
             }
             guard seen.insert(id).inserted else { throw PendingScriptError.malformed("'\(id)' is listed twice") }
             let title = (item["title"]?.stringValue ?? id).unicodeScalars.filter { $0.value >= 32 }
-            units.append(TaskUnit(id: id, title: String(String.UnicodeScalarView(title).prefix(maxTitleLength))))
+            var branch: String?
+            if let named = item["branch"]?.stringValue {
+                guard SafeNames.isPushTarget(named) else {
+                    throw PendingScriptError.malformed("'\(id)' has a 'branch' that cannot be pushed to: \(named.prefix(80))")
+                }
+                branch = named
+            }
+            units.append(
+                TaskUnit(id: id, title: String(String.UnicodeScalarView(title).prefix(maxTitleLength)), branch: branch))
         }
         return units
     }

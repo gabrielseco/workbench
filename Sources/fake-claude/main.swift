@@ -30,6 +30,8 @@ import Foundation
 //                         exits 1; error-result answers is_error without a reason; proof=<name> first writes that
 //                         file into $WORKBENCH_PROOF_DIR; detached=<pidfile> first leaves a `sleep` that outlives
 //                         this process, re-parented to launchd, with this process's working directory)
+//   resolve=<path>        keep the first side of every conflict block in this file (relative to the working directory), as an
+//                         agent that resolves a merge in favour of the branch would
 //   write=<path>          add a line to this file (relative to the working directory) each run, so a turn leaves a diff
 //   sessions=<dir>        emulate session bookkeeping: --session-id twice, or --resume of an unknown id,
 //                         exits 1 with no output (the first is spike S4; the second message is a guess)
@@ -207,6 +209,25 @@ if let path = d.string("write") {
     let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(path)
     let old = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     try? (old + "fixed \(UUID().uuidString)\n").write(to: url, atomically: true, encoding: .utf8)
+}
+
+if let path = d.string("resolve") {
+    let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(path)
+    var kept: [Substring] = []
+    var side = 0  // 0 outside a block, 1 the first side (kept), 2 the second side (dropped)
+    let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        if line.hasPrefix("<<<<<<< ") {
+            side = 1
+        } else if line == "=======", side == 1 {
+            side = 2
+        } else if line.hasPrefix(">>>>>>> "), side == 2 {
+            side = 0
+        } else if side != 2 {
+            kept.append(line)
+        }
+    }
+    try? kept.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
 }
 
 // MARK: the turn

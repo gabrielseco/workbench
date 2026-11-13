@@ -5,6 +5,9 @@ public enum TaskFix: String, Sendable, Equatable {
     case report
     /// Does the work in a thread and, when the check and the verifier pass, accepts it and opens the pull request.
     case pr
+    /// Brings the base into pull requests that already exist: merges it into each unit's branch, resolves what a merge cannot, and pushes
+    /// to that same branch once the check passes. No pull request is opened and nothing is forced or merged.
+    case update
 }
 
 /// One thing wrong with a task file. Parsing collects all of them, as the goal parser does.
@@ -129,7 +132,7 @@ public struct TaskDefinition: Sendable, Equatable {
             if let fix = TaskFix(rawValue: e.value) {
                 definition.fix = fix
             } else {
-                add(e.lineNumber, "'fix' must be 'report' or 'pr', found '\(e.value)'")
+                add(e.lineNumber, "'fix' must be 'report', 'pr' or 'update', found '\(e.value)'")
             }
         }
         if let e = entry("max_open") {
@@ -205,14 +208,31 @@ public struct TaskDefinition: Sendable, Equatable {
                 definition.inputs = items
             }
         }
+        if definition.fix == .update { updateProblems(definition, entry: entry, add: add) }
         guard problems.isEmpty else { throw TaskParseError(problems: problems.sorted { ($0.line ?? 0) < ($1.line ?? 0) }) }
         return definition
     }
 
-    /// `history: N`, 1 to `maxHistory`, for a report task only: a pr task writes no reports, so the key would do nothing.
+    /// What `fix: update` cannot do: it takes one pull request a run (each has its own branch and its own push), needs the script that
+    /// names them, and opens nothing, so labels and `max_open` would do nothing.
+    private static func updateProblems(
+        _ definition: TaskDefinition, entry: (String) -> FrontMatterLine?, add: (Int?, String) -> Void
+    ) {
+        if definition.pending == nil {
+            add(nil, "'fix: update' needs 'pending': the script that lists the pull requests, each unit with its 'branch'")
+        }
+        if let e = entry("batch"), definition.batch != 1 {
+            add(e.lineNumber, "'batch' must be 1 for 'fix: update': each run updates one pull request's branch")
+        }
+        for key in ["labels", "max_open"] {
+            if let e = entry(key) { add(e.lineNumber, "'\(key)' is for 'fix: pr': 'fix: update' opens no pull request") }
+        }
+    }
+
+    /// `history: N`, 1 to `maxHistory`, for a report task only: a pr or update task writes no reports, so the key would do nothing.
     private static func history(_ e: FrontMatterLine, fix: TaskFix, add: (Int?, String) -> Void) -> Int? {
         guard fix == .report else {
-            add(e.lineNumber, "'history' is for 'fix: report': a 'fix: pr' task writes no reports to compare with")
+            add(e.lineNumber, "'history' is for 'fix: report': only a 'fix: report' task writes reports to compare with")
             return nil
         }
         guard let n = Int(e.value), (1...maxHistory).contains(n) else {

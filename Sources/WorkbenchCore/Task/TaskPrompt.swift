@@ -8,7 +8,7 @@ public enum TaskPrompt {
     public static let maxBytes = 64 << 10
 
     /// What the agent is asked to leave: its changes in the tree (a `fix: pr` run), or a report as its answer (a `fix: report` run).
-    public enum Deliverable: Sendable { case changes, report }
+    public enum Deliverable: Sendable { case changes, report, mergeBase }
 
     public static func build(
         task: LoadedTask, inputs: [TaskInput], units: [TaskUnit], boundary: String = UUID().uuidString.lowercased(),
@@ -43,6 +43,18 @@ public enum TaskPrompt {
             parts.append(
                 "Leave your changes in the working tree. Workbench commits them, runs the project's check and opens the "
                     + "pull request itself: do not push, merge or open one.")
+        case .mergeBase:
+            parts.append(
+                [
+                    "Workbench has already merged the base into this branch. If git stopped on conflicts, the files hold",
+                    "conflict markers (find them with Grep for lines starting with `<<<<<<<`). Resolve a file only when it",
+                    "is generated or bookkeeping (a lockfile, a generated client, version pins, a canary report) or a plain",
+                    "list or export union where you keep both sides. If any conflict is real logic edited on both sides,",
+                    "resolve none of them: leave every marker as it is and say why in your answer. Touch no file that is",
+                    "not in conflict. If there are no markers the merge was clean: change nothing and say so. Do not commit,",
+                    "push, merge or abort the merge: Workbench commits your resolution, runs the project's check and pushes",
+                    "to the pull request's branch itself.",
+                ].joined(separator: " "))
         case .report:
             let reach =
                 task.definition.mcpTools.isEmpty
