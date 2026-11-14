@@ -568,7 +568,7 @@ private extension ProjectStore {
             sessions[session.key] = session
         }
     }
-    /// Whether any session is working: one action at a time holds the window.
+    /// Whether any session is working; `untilIdle` waits on it (an action is held back only by its own thread).
     var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }
     var ownedRun: ThreadSession.OwnedRun? { ownedRuns.first }
 

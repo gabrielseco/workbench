@@ -214,7 +214,7 @@ import Testing
         await store.untilIdle()
     }
 
-    @Test func aThreadWaitingForItsRunStillHoldsTheWindowWhileAnotherProjectIsOnScreen() async throws {
+    @Test func aThreadWaitingForItsRunDoesNotHoldAnActionInAnotherProjectButUntilIdleWaits() async throws {
         let running = Gate()
         let actions = GoalActions(makeRun: { _, _, _ in RunHandle(run: { await running.wait() }, stop: {}) })
         let (store, a) = try await store(actions, approved: true, turn: false)
