@@ -123,6 +123,12 @@ import Testing
         #expect(open.primary?.enabled == false, "criteria are still open")
         let deciding = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true; $0.deciding = true }
         #expect(deciding.primary?.enabled == false)
+        #expect(decision.primary?.title == "Ship", "the press that commits and publishes is called Ship")
+        var judging = shown
+        judging.state.review.judge = Review.Judge(turn: 1, isOpen: true)
+        let waiting = decide(judging) { $0.reviewShown = true; $0.reviewCanDecide = true }
+        #expect(waiting.primary?.enabled == false, "Ship waits for the judge")
+        #expect(waiting.more.first { $0.kind == .accept }?.enabled == false, "so does plain Accept")
         let noFiles = decide(shown) { $0.reviewShown = true; $0.reviewHasFiles = false }
         #expect(noFiles.secondary?.enabled == false)
     }
