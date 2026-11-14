@@ -119,14 +119,15 @@ import WorkbenchCore
         ThreadRow(id: id, title: id, mark: mark, line: "x", finished: true)
     }
 
-    @Test func threadsSortIntoNeedsYouWaitingAndDone() {
+    @Test func threadsSortIntoNeedsYouWorkingWaitingAndDone() {
         let rows = [
             thread("asks", .needsYou), thread("works", .working), finished("over"), thread("broke", .broken),
             thread("drafts", .idle), finished("thrown", .idle),
         ]
         let model = InboxModel.derive(listing: ThreadListing(rows: rows), tasks: nil, doneOpen: true)
         #expect(model.needsYou.map(\.key) == ["asks", "broke"], "a broken thread needs you: it cannot go on without a person")
-        #expect(model.waiting.map(\.key) == ["works", "drafts"])
+        #expect(model.working.map(\.key) == ["works"], "a turn going asks nothing of you")
+        #expect(model.waiting.map(\.key) == ["drafts"])
         #expect(model.done.map(\.key) == ["over", "thrown"] && model.doneHidden == 0)
         #expect(model.listed.map(\.key) == ["asks", "broke", "works", "drafts", "over", "thrown"], "drawn in that order")
         #expect(Set(model.listed.map(\.id)).count == rows.count, "each thread is in exactly one section")

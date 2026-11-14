@@ -1,6 +1,12 @@
 import SwiftUI
 import WorkbenchCore
 
+/// What restarts the settling: the sections the state gives, or the pointer entering or leaving the rail.
+private struct SettleKey: Equatable {
+    var target: [String: InboxSection]
+    var frozen: Bool
+}
+
 /// The rail (design parity 4): one list, *Threads* with a `+`, then *Scheduled* with the project's tasks.
 /// There is no Thread/Tasks switch: choosing a row shows that thread or that task.
 struct PreviewRail: View {
@@ -12,7 +18,8 @@ struct PreviewRail: View {
         let snapshot = store.tasks.snapshot(for: store.project)
         let inbox = InboxModel.derive(
             listing: store.threads.listing, tasks: snapshot, composing: store.newThread, shown: store.railShown,
-            doneOpen: store.doneOpen)
+            doneOpen: store.doneOpen, held: store.inboxRail.hold.shown)
+        let target = InboxModel.sections(listing: store.threads.listing, tasks: snapshot, shown: store.railShown)
         ScrollView {
             VStack(alignment: .leading, spacing: Space.xxs) {
                 if store.allProjects {
@@ -36,6 +43,17 @@ struct PreviewRail: View {
                 } else {
                     move(up: direction == .up, inbox: inbox)
                 }
+            }
+        }
+        .onHover { store.inboxRail.hovered = $0 }
+        // A row changes section only after the new one has held for a few seconds and the pointer is off the rail.
+        .task(id: SettleKey(target: target, frozen: store.inboxRail.hovered)) {
+            var due = store.inboxRail.hold.update(target: target, now: Date(), frozen: store.inboxRail.hovered)
+            while let next = due, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(max(0.05, next.timeIntervalSinceNow)))
+                // A cancelled sleep returns at once: a stale task must not write its old target.
+                if Task.isCancelled { return }
+                due = store.inboxRail.hold.update(target: target, now: Date(), frozen: store.inboxRail.hovered)
             }
         }
         // The tasks are read while the rail is on screen, as the Tasks screen did while it was: the section is never stale for long.

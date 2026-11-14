@@ -1,15 +1,21 @@
 import SwiftUI
 
-/// The project's threads as an inbox (P26): Needs you, Waiting, and Done (collapsed, with how many it holds). A click shows that thread; it
+/// The project's threads as an inbox (P26): Needs you, Working, Waiting, and Done (collapsed, with how many it holds). A click shows that thread; it
 /// starts and stops nothing.
 struct InboxView: View {
     var store: ProjectStore
     var model: InboxModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The screen is what is observed, so the highlight follows it; `currentThread` is not.
     private var shownThread: String? {
         if case .thread(let snapshot) = store.screen { return snapshot.id }
         return nil
+    }
+
+    /// The rows in order and how many each section holds, so a move that keeps the order but changes a header still glides.
+    private var animationKey: String {
+        model.listed.map(\.id).joined(separator: ",") + "|\(model.needsYou.count)/\(model.working.count)/\(model.waiting.count)"
     }
 
     var body: some View {
@@ -18,7 +24,8 @@ struct InboxView: View {
         LazyVStack(alignment: .leading, spacing: Space.xxs) {
             if let composing = model.composing { RailRowView(row: composing, selected: true) {} }
             section(.needsYou, model.needsYou, tone: .amber, shown: shown, selectedHere: selectedHere)
-            section(.waiting, model.waiting, tone: .blue, shown: shown, selectedHere: selectedHere)
+            section(.working, model.working, tone: .blue, shown: shown, selectedHere: selectedHere)
+            section(.waiting, model.waiting, tone: .secondary, shown: shown, selectedHere: selectedHere)
             if model.finishedCount > 0 {
                 InboxSectionHeader(title: InboxSection.done.title, count: model.finishedCount, tone: .secondary)
                 ForEach(model.done) { row in rowView(row, shown: shown, selectedHere: selectedHere) }
@@ -30,6 +37,8 @@ struct InboxView: View {
                     .help(InboxModel.olderHelp(model.older))
             }
         }
+        // A row that changes section fades out and in (each section is its own list) instead of snapping; none with Reduce Motion.
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: animationKey)
         .accessibilityLabel("Inbox")
     }
 

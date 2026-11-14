@@ -155,11 +155,11 @@ extension ProjectStore {
     }
 
     /// Whether the Done section of the project on screen lists every finished thread.
-    var doneOpen: Bool { inboxDoneOpen.contains(project?.root.path ?? "") }
+    var doneOpen: Bool { inboxRail.doneOpen.contains(project?.root.path ?? "") }
 
     /// Opens or closes the Done section of the project on screen.
     func toggleDoneOpen() {
         let key = project?.root.path ?? ""
-        if inboxDoneOpen.contains(key) { inboxDoneOpen.remove(key) } else { inboxDoneOpen.insert(key) }
+        if inboxRail.doneOpen.contains(key) { inboxRail.doneOpen.remove(key) } else { inboxRail.doneOpen.insert(key) }
     }
 }

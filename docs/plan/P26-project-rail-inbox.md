@@ -12,7 +12,7 @@ design and `main`.
 | Area | Design | Today |
 |---|---|---|
 | Project rail | 72 pt column of project tiles (a generated picture, the project's name under it), a selected bar, a count badge (amber needs you, red failed, blue dot running), a top tile for **all projects' inbox** with the summed count, `+` to add a project | One project at a time; a `ProjectPill` in the top bar opens the project card to switch |
-| Inbox | `INBOX · PROJECT` with `+`, sections **Needs you**, **Waiting** (shipped PR, CI running), **Done** (collapsed: "Show 9 finished threads"); a row is a mark, the title, the reason in words, the spend; an automation that needs approval is a row with an `auto` tag | `PreviewRail`: Threads (flat, `Show more`) then Scheduled tasks |
+| Inbox | `INBOX · PROJECT` with `+`, sections **Needs you**, **Working** (a turn is going), **Waiting** (shipped PR, CI running), **Done** (collapsed: "Show 9 finished threads"); a row is a mark, the title, the reason in words, the spend; an automation that needs approval is a row with an `auto` tag | `PreviewRail`: Threads (flat, `Show more`) then Scheduled tasks |
 | Top bar | project name and `base`, an **Inbox / Automations** switch with counts, spend and state pill in the thread view, `New task…` in the automations view | `ProjectPill`, **`AgentsPill`**, base, spend, state pill; no switch (`WindowMode` thread/tasks is reached from the rail) |
 | Thread detail | title, a stage line (Goal, Run, Review, Accept, Ship, PR review, Clean), goal card, activity lines, a **NEXT** card with the action | `FeedScreen` (chat feed) |
 | Automations | its own view: task list (7, with marks) and the detail with "Will it run tonight?", history, `Run now`, `Edit with AI` | `TasksView`, reached from the rail |
@@ -100,7 +100,7 @@ had while open. A log that cannot be read is failed (red), not zero.
 
 ### 4. Inbox (4a, the project's own, built; 4b, all projects, built)
 
-`InboxModel` replaces `RailModel`'s thread section: **Needs you**, **Waiting** (shipped, CI running or waiting on review), **Done** (collapsed, count),
+`InboxModel` replaces `RailModel`'s thread section: **Needs you**, **Working** (a turn is going), **Waiting** (shipped, CI running or waiting on review), **Done** (collapsed, count),
 in that order, the selected thread kept visible. Row = `ThreadMark`, title, reason line, spend (the rows already carry all four). Automations
 needing approval appear in Needs you with the `auto` tag. The `+` stays `beginNewGoal`. The top tile of the rail shows **all projects**: the same
 sections across projects, each row with its project's tile mark, a click selects the project and the thread.
@@ -108,8 +108,8 @@ Tests: sectioning (every `ThreadMark` lands in exactly one section; order stable
 a section change.
 
 As built (4a): `InboxModel` (pure) sorts the thread rows by what they ask of the person: **Needs you** is a thread that asks for something or is
-broken, then the automations that need approval (`auto`, told in words to VoiceOver as well); **Waiting** is everything that is not over (a turn
-going, a draft, accepted and not shipped, a pull request still open); **Done** is what is over (thrown away, abandoned, cleaned, its pull request
+broken, then the automations that need approval (`auto`, told in words to VoiceOver as well); **Working** is a turn going; **Waiting** is the rest that is not over (a
+draft, accepted and not shipped, a pull request still open); **Done** is what is over (thrown away, abandoned, cleaned, its pull request
 merged or closed) and is a `Show N finished threads` link until opened, per project, for the session; the thread on screen is listed whatever
 its section. `ThreadRow` gains `spend` (`$1.88`, `unknown` when the core cannot tell, nothing before a first turn) and `finished`, both from the
 state the list already read. The row is `InboxRowView` (the mark, the title, the reason in the mark's tone, the spend at the right); the three

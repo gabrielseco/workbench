@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The rail's list when the top tile is chosen (P26 slice 4b): every project's threads in the three sections, each row with its project's
+/// The rail's list when the top tile is chosen (P26 slice 4b): every project's threads in the four sections, each row with its project's
 /// initials. A click opens that project and shows the thread (or the automation's task).
 struct AllInboxView: View {
     var store: ProjectStore
@@ -16,7 +16,8 @@ struct AllInboxView: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: Space.xxs) {
             section(.needsYou, model.needsYou, tone: .amber)
-            section(.waiting, model.waiting, tone: .blue)
+            section(.working, model.working, tone: .blue)
+            section(.waiting, model.waiting, tone: .secondary)
             if model.finishedCount > 0 {
                 InboxSectionHeader(title: InboxSection.done.title, count: model.finishedCount, tone: .secondary)
                 ForEach(model.done) { rowView($0) }

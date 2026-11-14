@@ -32,27 +32,30 @@ struct InboxRow: Equatable, Identifiable {
     }
 }
 
-/// The three sections of the inbox, in the order they are drawn (P26): what needs you first, then what waits on something else, then what is over.
+/// The four sections of the inbox, in the order they are drawn: what needs you first, then what a turn is doing, then what waits on
+/// something else, then what is over.
 enum InboxSection: String, CaseIterable, Equatable {
-    case needsYou, waiting, done
+    case needsYou, working, waiting, done
 
     var title: String {
         switch self {
         case .needsYou: "NEEDS YOU"
+        case .working: "WORKING"
         case .waiting: "WAITING"
         case .done: "DONE"
         }
     }
 
     /// The section a thread's row belongs to, and only one: a thread that asks for something (or is broken) needs you; one that is over is
-    /// done; the rest, working or drafting or with a pull request open, waits.
+    /// done; one whose turn is going is working (nothing for you to do); the rest, drafting or with a pull request open, waits.
     static func of(_ row: ThreadRow) -> InboxSection { of(mark: row.mark, finished: row.finished) }
 
     static func of(_ row: InboxRow) -> InboxSection { of(mark: row.mark, finished: row.finished) }
 
     private static func of(mark: ThreadMark, finished: Bool) -> InboxSection {
         if mark == .needsYou || mark == .broken { return .needsYou }
-        return finished ? .done : .waiting
+        if finished { return .done }
+        return mark == .working ? .working : .waiting
     }
 }
 
@@ -62,6 +65,7 @@ struct InboxModel: Equatable {
     /// The thread being started on the new-thread screen: a row of its own at the top, selected, until something is chosen.
     var composing: RailRow?
     var needsYou: [InboxRow]
+    var working: [InboxRow]
     var waiting: [InboxRow]
     /// The finished threads listed now: all of them when the section is open, else only the one on screen (so what is selected is seen).
     var done: [InboxRow]
@@ -76,11 +80,14 @@ struct InboxModel: Equatable {
     /// - Parameters:
     ///   - doneOpen: the Done section is open: every finished thread is listed.
     ///   - shown: the thread on screen, which is always listed, so what is selected can be seen.
+    ///   - held: the section each thread's row is drawn in while its real one is not yet settled (`InboxSectionHold`); a row not in it
+    ///     goes to the section its state gives.
     static func derive(
-        listing: ThreadListing, tasks: TasksSnapshot?, composing: Bool = false, shown: String? = nil, doneOpen: Bool = false
+        listing: ThreadListing, tasks: TasksSnapshot?, composing: Bool = false, shown: String? = nil, doneOpen: Bool = false,
+        held: [String: InboxSection] = [:]
     ) -> InboxModel {
         let rows = split(listing.rows, tasks: tasks, shown: shown)
-        let sorted = Dictionary(grouping: rows, by: InboxSection.of)
+        let sorted = Dictionary(grouping: rows) { held[InboxRow.thread($0.id)] ?? InboxSection.of($0) }
         let finished = (sorted[.done] ?? []).map(InboxRow.init(thread:))
         let listed = doneOpen ? finished : finished.filter { $0.key == shown }
         // An automation that waits for approval is something to decide, so it is among the ones that need you (after the threads).
@@ -88,6 +95,7 @@ struct InboxModel: Equatable {
         return InboxModel(
             composing: composing ? composingRow : nil,
             needsYou: (sorted[.needsYou] ?? []).map(InboxRow.init(thread:)) + automations,
+            working: (sorted[.working] ?? []).map(InboxRow.init(thread:)),
             waiting: (sorted[.waiting] ?? []).map(InboxRow.init(thread:)), done: listed,
             doneHidden: finished.count - listed.count, older: listing.older)
     }
@@ -107,6 +115,12 @@ struct InboxModel: Equatable {
         }
     }
 
+    /// The section each thread's row belongs to by its state now, by row id: what `InboxSectionHold` settles towards.
+    static func sections(listing: ThreadListing, tasks: TasksSnapshot?, shown: String? = nil) -> [String: InboxSection] {
+        let rows = split(listing.rows, tasks: tasks, shown: shown)
+        return Dictionary(uniqueKeysWithValues: rows.map { (InboxRow.thread($0.id), InboxSection.of($0)) })
+    }
+
     /// Every row of a project that is not the open one, read from its folders: its threads (the finished ones too) and the tasks that
     /// need approval, for the inbox of all projects. Pure.
     static func rows(listing: ThreadListing, entries: [TaskEntry]?, shown: String? = nil) -> [InboxRow] {
@@ -116,7 +130,7 @@ struct InboxModel: Equatable {
     }
 
     /// Every row listed, in the order they are drawn.
-    var listed: [InboxRow] { needsYou + waiting + done }
+    var listed: [InboxRow] { needsYou + working + waiting + done }
 
     /// The threads among them (the arrow keys move over these and the tasks, an automation row opening its task).
     var threadRows: [InboxRow] { listed.filter { !$0.isAutomation } }
