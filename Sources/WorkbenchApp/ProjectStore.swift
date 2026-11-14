@@ -318,16 +318,15 @@ struct RecentProject: Equatable, Identifiable {
     }
 
     /// Runs `body` with `text` shown as what the app is doing, and clears it after, whatever happened.
-    /// One at a time: a second click while the first is still working is ignored, so the first one's end cannot take the line
-    /// down while the second is still going.
+    /// One at a time per thread: a second click while the first is still working is ignored, so the first one's end cannot take
+    /// the line down while the second is still going. Another thread's work (a Codex review of its pull request) does not hold this one.
     func working(_ text: String, _ body: () async -> Void) async {
         guard let project else { return }
-        let doing = busy ?? sessions.values.lazy.compactMap(\.busyText).first
-        if let doing { return actionError = "Still busy: \(doing)" }
         let mine = session(project, currentThread)
+        if let doing = mine.busyText { return actionError = "Still busy: \(doing)" }
         setBusy(text, in: mine)
         defer { if !mine.awaitingRun { setBusy(nil, in: mine) } }
-        await body()
+        await Self.$workingSession.withValue(mine) { await body() }
     }
 
     // MARK: Goal actions
@@ -569,7 +568,7 @@ private extension ProjectStore {
             sessions[session.key] = session
         }
     }
-    /// Whether any session is working: one action at a time holds the window.
+    /// Whether any session is working; `untilIdle` waits on it (an action is held back only by its own thread).
     var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }
     var ownedRun: ThreadSession.OwnedRun? { ownedRuns.first }
 

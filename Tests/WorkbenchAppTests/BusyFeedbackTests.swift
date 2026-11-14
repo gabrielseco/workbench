@@ -214,7 +214,7 @@ import Testing
         await store.untilIdle()
     }
 
-    @Test func aThreadWaitingForItsRunStillHoldsTheWindowWhileAnotherProjectIsOnScreen() async throws {
+    @Test func aThreadWaitingForItsRunDoesNotHoldAnActionInAnotherProjectButUntilIdleWaits() async throws {
         let running = Gate()
         let actions = GoalActions(makeRun: { _, _, _ in RunHandle(run: { await running.wait() }, stop: {}) })
         let (store, a) = try await store(actions, approved: true, turn: false)
@@ -227,7 +227,7 @@ import Testing
         #expect(store.busy == nil && store.runningProjectPath == a.project.root.path, "the run is not hidden, only its line")
         var ran = false
         await store.working("Opening the worktree…") { ran = true }
-        #expect(!ran, "one action at a time, whichever thread it is for")
+        #expect(ran, "another thread's work does not hold this one")
         var idle = false
         let waiter = Task { await store.untilIdle(); idle = true }
         try await Task.sleep(for: .milliseconds(100))
@@ -235,8 +235,26 @@ import Testing
         running.open()
         await waiter.value
         #expect(idle && store.runningProjectPath == nil)
+        ran = false
         await store.working("Opening the worktree…") { ran = true }
         #expect(ran)
+    }
+
+    @Test func aMovedOnLineBelongsToTheThreadThatSaidIt() async throws {
+        let (store, a) = try await store(GoalActions())
+        let other = try await AppFixture()
+        keptBusyFixtures.append(other)
+        try await other.addThread("t1", approved: true)
+        let hold = Gate()
+        let first = Task { await store.working("Reviewing…") { await hold.wait() } }
+        try await until("the review is working") { store.busy == "Reviewing…" }
+        await store.switchTo(other.project.root.path)
+        await store.working("Checking…") { store.nowWorking("Accepting…") }
+        #expect(store.busy == nil)
+        await store.switchTo(a.project.root.path)
+        #expect(store.busy == "Reviewing…", "the other thread's line was not rewritten")
+        hold.open()
+        await first.value
     }
 
     @Test func anActionThatFailsStopsSayingItIsWorking() async throws {

@@ -42,8 +42,12 @@ extension ProjectStore {
     /// The project and thread on screen, as one value to compare.
     var currentScope: String? { project.map { "\($0.root.path)|\(currentThread ?? "")" } }
 
+    /// The session of the `working` call this task is inside, so `nowWorking` updates its own thread's line and not another's.
+    @TaskLocal static var workingSession: ThreadSession?
+
     /// Says what a `working` body moved on to, such as from reading a plan to doing it; nothing when no work is going on.
     func nowWorking(_ text: String) {
-        sessions.values.first { $0.busyText != nil }?.busyText = text
+        guard let session = Self.workingSession, session.busyText != nil else { return }
+        session.busyText = text
     }
 }
