@@ -4,13 +4,16 @@ import Foundation
 /// `workbench open`. It supplies a few keys and nothing else; a project's own `.workbench/config.toml` is still the
 /// only thing a run reads, so a global file can never change what an existing project does.
 public struct GlobalConfig: Sendable, Equatable {
-    public static let allowedKeys: [String] = ["claude_path", "editor", "herdr", "projects_dir"]
+    public static let allowedKeys: [String] = ["claude_path", "claude_config_dir", "editor", "herdr", "projects_dir"]
     /// The one table it may have, and its one key: the coding model a new project starts with.
     static let runTable = "agents.run"
 
     /// Where `workbench new <name>` puts the project when no location is given. Absolute, `~` expanded.
     public var projectsDirectory: URL?
     public var claudePath: String?
+    /// Claude Code's config folder (what `CLAUDE_CONFIG_DIR` names when its shell sets it), where `goal draft
+    /// --from-claude-session` looks first for this project's sessions. Absolute, `~` expanded.
+    public var claudeConfigDirectory: URL?
     /// `[agents.run] model`, written into a new project's `[agents.run]`.
     public var model: String?
     /// What `workbench open` starts when neither `--editor` nor the project names one.
@@ -113,6 +116,13 @@ public struct GlobalConfig: Sendable, Equatable {
         }
         if let (value, line) = string("editor") { result.editor = Config.editorValue(value, line: line, fail: fail) }
         if let (value, line) = string("herdr") { result.herdr = Config.herdrValue(value, line: line, fail: fail) }
+        if let (value, line) = string("claude_config_dir") {
+            if let url = expandedDirectory(value, home: home) {
+                result.claudeConfigDirectory = url
+            } else {
+                fail(.invalidValue, line, "'claude_config_dir' must be an absolute path or start with ~/")
+            }
+        }
         if let (value, line) = string("projects_dir") {
             if let url = expandedDirectory(value, home: home) {
                 result.projectsDirectory = url

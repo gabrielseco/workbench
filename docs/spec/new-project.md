@@ -46,18 +46,20 @@ removed; a directory that was already there is emptied of what `new` wrote).
 
 `~/.workbench/config.toml`, next to where each project keeps its own `.workbench/`. Optional. If `~` is
 itself a git repository (a dotfiles setup), that directory is also the repository's project directory, so
-the two share it; the global file is only ever read by `new`, `open` (its `editor`) and `doctor` (to show that `editor`).
+the two share it; the global file is only ever read by `new`, `open` (its `editor`) and `doctor` (to show that `editor`), and
+`goal draft --from-claude-session` (its `claude_config_dir`).
 
 ```toml
 projects_dir = "~/code"   # absolute, or starting with ~/
 claude_path  = "claude"   # written into new projects' config
 editor       = "cursor"   # `workbench open` when neither --editor nor the project names one
+claude_config_dir = "~/.claude-personal"  # where `goal draft --from-claude-session` looks first for the project's sessions
 
 [agents.run]
 model = "opus"            # written into new projects' config as their [agents.run] model
 ```
 
-Only these three keys and `[agents.run]` with only `model`. Anything else (including `check_command`, `setup_command`,
+Only these keys (and `herdr`) and `[agents.run]` with only `model`. Anything else (including `check_command`, `setup_command`,
 `[tools]`, another table or another key in `[agents.run]`) is an `invalid-config` error naming the file and the key,
 because those depend on the stack and belong to the project. A root `model`, which this file used to take, is refused
 with a message that says it is now `model` in `[agents.run]`. A run reads the project's own config, so editing the global file never changes an existing project;

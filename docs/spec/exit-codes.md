@@ -95,6 +95,8 @@ meanwhile. They are allowed while a thread is active; changing `agents.run` says
 
 `goal draft --from-chat <name-or-id>` drafts from a chat's conversation into the same thread; it exits as above, and refuses (6, nothing spent or written) a thread that is not a chat, a chat that has a goal already (use `--replace`), a chat with no finished exchange, a chat that has ended or that another command holds, and `doctor` running. A failed draft (exit 1, also when the agent timed out as for any draft; 3 stopped) leaves the chat as it was.
 
+`goal draft <name> --from-claude-session [<session-id>]` drafts from a Claude Code session of this project into a new draft thread, as a draft from a rough request does (it combines with `--base`; `--request`, `--request-file`, `--from-chat` and `--replace` with it are `usage`, 2). The session is the one named, or the newest file in `<config>/projects/<folder>/`, where `<folder>` is the project's absolute path with every character but an ASCII letter or digit made `-`, and `<config>` is tried in order: `claude_config_dir` in `~/.workbench/config.toml`, `CLAUDE_CONFIG_DIR`, `~/.claude`. Only the person's messages and the assistant's text are kept (no tool calls or results, thinking, attachments or file snapshots; a malformed line is skipped), bounded to 128 KiB by leaving out the oldest messages after the person's first, whole, with a line saying how many. It refuses (6, nothing spent or written) with no `[agents.goal]`, an id that is not letters, digits and `-`, an id no place holds, no session in any place (the message lists each place and says to set `claude_config_dir`), a session with no message of the person's, and a first message over 128 KiB.
+
 ### `chat`
 
 | Code | Kind | When |

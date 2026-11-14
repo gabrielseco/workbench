@@ -6,6 +6,18 @@ extension Commands {
     /// a goal from a rough request. Read-only; it approves nothing and runs nothing. A draft that does not produce a valid
     /// goal writes nothing.
     static func goalDraft(_ args: [String]) async throws -> Int32 {
+        // `--from-claude-session [<session-id>]`: the id is optional, so it is taken here, before the name is.
+        var args = args
+        var fromSession = false
+        var sessionID: String?
+        if let i = args.firstIndex(of: "--from-claude-session") {
+            fromSession = true
+            if i + 1 < args.count, !args[i + 1].hasPrefix("-") {
+                sessionID = args[i + 1]
+                args.remove(at: i + 1)
+            }
+            args.remove(at: i)
+        }
         var a = Arguments(args)
         let text = try a.value("--request")
         let path = try a.value("--request-file")
@@ -18,7 +30,15 @@ extension Commands {
         let usage =
             "usage: workbench goal draft <name> (--request \"<text>\" | --request-file <path>) [--base <branch>] [--replace]"
                 + "   or: workbench goal draft --from-chat <name-or-id> [--base <branch>]"
-        if fromChat {
+                + "   or: workbench goal draft <name> --from-claude-session [<session-id>] [--base <branch>]"
+        if fromSession {
+            if text != nil || path != nil || replace || fromChat {
+                let why =
+                    "--from-claude-session drafts from the session: no --request, --request-file, --from-chat or --replace. "
+                throw CLIError.usage(why + usage)
+            }
+            guard named != nil else { throw CLIError.usage(usage) }
+        } else if fromChat {
             if text != nil || path != nil || replace {
                 let why = "--from-chat drafts from the conversation: no --request, --request-file or --replace. "
                 throw CLIError.usage(why + usage)
@@ -38,7 +58,21 @@ extension Commands {
             FileManager.default.fileExists(atPath: ctx.project.configURL.path)
             ? try Config.load(from: ctx.project.configURL) : nil
         let target: GoalDraftTarget
-        if fromChat, let named {
+        if fromSession, let named {
+            // Refused as --from-chat is, before the session is read: nothing to draft with.
+            guard config?.resolvedGoalAgent != nil else { throw CLIError.refused("\(GoalDraftRefusal.noGoalAgent)") }
+            let session: ClaudeSession.Rendered
+            do { session = try loadClaudeSession(sessionID, project: ctx.project.root) } catch let error as ClaudeSessionRefusal {
+                throw CLIError.refused("\(error)")
+            }
+            out("from Claude Code session \(session.id) (\(session.file.path))")
+            if session.dropped > 0 {
+                out(
+                    "the session is over \(ClaudeSession.limit / 1024) KiB: its \(session.dropped) oldest message(s) after "
+                        + "the first were left out")
+            }
+            target = .fromClaudeSession(name: named, base: base, session: session)
+        } else if fromChat, let named {
             // The id, or the name the chat was started under.
             guard case .existing(let id) = resolve(named, in: ctx) else { throw CLIError.notFound("no chat '\(named)'") }
             target = .fromChat(id: id, base: base)
@@ -81,6 +115,16 @@ extension Commands {
         out("edit:    \(ctx.project.goalURL(id).path)")
         out("then:    read it, edit what is wrong, workbench goal approve")
         return 0
+    }
+
+    /// The Claude Code session named, or this project's newest, looked for where `ClaudeSession.places` says.
+    static func loadClaudeSession(_ id: String?, project root: URL) throws -> ClaudeSession.Rendered {
+        let environment = ProcessInfo.processInfo.environment
+        let home = environment["HOME"] ?? NSHomeDirectory()
+        let global = try GlobalConfig.load(from: GlobalConfig.defaultURL(environment: environment), home: home)
+        let places = ClaudeSession.places(
+            configured: global.claudeConfigDirectory, environment: environment, home: home)
+        return try ClaudeSession.load(id: id, project: root, places: places)
     }
 
     /// The rough request from a file: a regular file of at most `GoalDraft.requestLimit` bytes.

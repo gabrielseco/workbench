@@ -392,6 +392,10 @@ Event version stays 1: new kinds and fields only; a log with no `chat.*` events 
   thread stays a chat. The thread's `thread.created` still says `kind: "chat"` (it began as one), so a chat has a goal exactly when `goal.md`
   exists, and then takes no more messages (`chat` is refused). The drafter is given the conversation, quoted line by line with who said each
   message, in place of the rough request (up to the chat's own 128 KiB, not the 16 KiB of a rough request).
+- **From a Claude Code session:** `workbench goal draft <name> --from-claude-session [<id>]` makes a new thread as a draft from a rough
+  request does (told after the fact), with the session's conversation in place of the request, quoted as a chat's is, and
+  `from_claude_session: "<id>"` on its `goal.draft.started`. The session file is only read; nothing of it but the rendered conversation
+  reaches the drafter, and it is not copied into the thread.
 - **The repository:** a chat turn's folder holds a copy of the repository for the turn (`chat_reads_repo`, on by default): the tracked regular
   files at the base commit, in `repo/`, checked out by a scratch repository of its own that only borrows this repository's objects, so the repository's own index, branches,
   worktrees, files, config and `info/attributes` are not touched or read. Not in it: what the commit does not have (an uncommitted edit, an untracked or ignored file such as `.env.local`), links,

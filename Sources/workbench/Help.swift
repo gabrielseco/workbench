@@ -40,7 +40,8 @@ enum Help {
             changes:
                 "goal new: creates a thread and a draft goal; goal draft: runs the goal agent read-only and creates a "
                 + "draft thread (or, with --replace, rewrites an existing goal and returns it to draft; with --from-chat, "
-                + "writes the goal into the chat's own thread); goal approve: "
+                + "writes the goal into the chat's own thread; with --from-claude-session, drafts a new thread from a Claude "
+                + "Code session of this project, which it only reads); goal approve: "
                 + "records the approval in the thread's log",
             example: "workbench goal new add-retry && workbench goal approve"),
         "chat": Extra(
