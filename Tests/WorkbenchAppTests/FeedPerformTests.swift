@@ -144,6 +144,16 @@ import Testing
         #expect(!calls.all.contains("ship"), "the thread on screen is not the one that was accepted")
     }
 
+    @Test func acceptAndShipKeepsTheWindowOnTheThreadItAccepted() async throws {
+        let calls = Calls()
+        let store = try await store(calls, threads: ["t1", "t2"])
+        #expect(store.selectedThread == nil, "nothing was picked by hand: the window follows the active thread")
+        let pressed = store.currentThread
+        await store.perform(.acceptAndShip)
+        #expect(store.selectedThread == pressed, "so accepting it cannot move the window to another active thread before Ship")
+        #expect(calls.all.last == "ship")
+    }
+
     @Test func acceptAndShipDoesNotShipAThreadOfTheSameNameInAnotherProject() async throws {
         let calls = Calls()
         let gate = Gate()

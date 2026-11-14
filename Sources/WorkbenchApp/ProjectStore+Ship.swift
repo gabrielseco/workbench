@@ -37,7 +37,14 @@ extension ProjectStore {
     /// accepted thread that did not ship is the ordinary "accepted, not shipped yet" state with its Ship button.
     func acceptAndShip() async {
         let (pressed, session, mine) = (currentThread, current, generation)
-        guard await accept() else { return }
+        // With no thread picked the window follows the active one: accepting ends it, and with another thread active the window would
+        // jump there before Ship, which then refuses ("you left the thread"). Pin what the press was made on.
+        let pinned = selectedThread == nil
+        if pinned { selectedThread = pressed }
+        guard await accept() else {
+            if pinned, selectedThread == pressed { selectedThread = nil }
+            return
+        }
         // Ship reads the thread on screen: if the person moved on while the commit was made, shipping would publish another thread.
         // Neither the thread nor the project (`generation` moves per open) may have changed: the same name elsewhere is not it.
         guard currentThread == pressed, generation == mine else {

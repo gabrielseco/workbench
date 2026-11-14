@@ -93,15 +93,20 @@ enum FeedActions {
                 secondary: open, more: more)
         }
         if c.reviewShown {
+            // The judge's note is part of what a person reads before deciding, so neither press is offered while it is still running.
+            let judging = s.state.review.judge?.isOpen == true
+            let canDecide = c.reviewCanDecide && !judging && !c.deciding && !c.busy
             let accept = FeedAction(
-                kind: .accept, title: "Accept work", help: "Commits the work on its branch",
-                enabled: c.reviewCanDecide && !c.deciding && !c.busy)
+                kind: .accept, title: "Accept work",
+                help: judging ? "Waits for the judge to finish" : "Commits the work on its branch", enabled: canDecide)
             // The press that publishes: Accept commits, then Ship pushes and opens the pull request, one after the other. Plain Accept
             // stays in the menu for a person who wants the commit without the push.
             let acceptAndShip = FeedAction(
-                kind: .acceptAndShip, title: "Accept and ship",
-                help: "Commits the work on its branch, then pushes it and opens the pull request",
-                enabled: c.reviewCanDecide && !c.deciding && !c.busy)
+                kind: .acceptAndShip, title: "Ship",
+                help: judging
+                    ? "Waits for the judge to finish"
+                    : "Commits the work on its branch, then pushes it and opens the pull request",
+                enabled: canDecide)
             let writing = !c.guidance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let send = FeedAction(
                 kind: .sendGuidance, title: "Send to agent", help: "Starts the next turn with what you wrote",
