@@ -94,16 +94,16 @@ public enum ClaudeSession {
                     continue
                 }
                 guard let names = try? fm.contentsOfDirectory(atPath: folder.path) else { continue }
-                var newest: (id: String, file: URL, date: Date)?
+                var newest: (picked: (id: String, file: URL), date: Date)?
                 for name in names where name.hasSuffix(".jsonl") {
                     let stem = String(name.dropLast(".jsonl".count))
                     let file = folder.appendingPathComponent(name)
                     guard isSessionID(stem), isRegularFile(file) else { continue }
                     let date = (try? fm.attributesOfItem(atPath: file.path)[.modificationDate] as? Date) ?? .distantPast
                     if let known = newest, known.date >= date { continue }
-                    newest = (stem, file, date)
+                    newest = ((stem, file), date)
                 }
-                if let newest { return (newest.id, newest.file) }
+                if let newest { return newest.picked }
             }
         }
         if let id { throw ClaudeSessionRefusal.unknownID(id, looked: looked) }
