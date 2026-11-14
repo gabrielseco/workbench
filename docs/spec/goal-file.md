@@ -492,8 +492,9 @@ Notes:
   dollar cap, so `tools` or `budget_usd` beside `provider = "codex"` is refused (a conflict) rather than run without
   them; such a verifier is bounded by `timeout_min`. The Agents card and `workbench config set verifier.provider|model`
   write these two keys. A Codex verifier is one `codex exec --json -s workspace-write` run whose working directory
-  (`-C`) is the turn's proof folder, the only place it may write besides a temporary folder of its own; it reads the
-  checkout, which its prompt names, has no network, ignores the user's Codex config and rules, approves nothing, writes
+  (`-C`) is the worktree: Codex has no per-command allowlist, so the skill's helpers (a build under the checkout's `.build`)
+  run inside its sandbox and need to write there, as a coding turn's commands do (`.git` stays read-only). Besides the
+  worktree it may write only the turn's proof folder and a temporary folder of its own; it has no network, ignores the user's Codex config and rules, approves nothing, writes
   its last message to a file outside the proof folder (`-o`), and reports no cost. A missing `codex` is refused by
   `workbench verifier` and skipped, with the reason, after a turn: Claude never stands in. The skill is read from the thread's base commit, never the
   worktree, as a regular file: a symlink, or a path through one (this repository's `.claude/skills/<name>` points

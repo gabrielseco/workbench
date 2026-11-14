@@ -64,13 +64,16 @@ public enum Verifier {
         return args
     }
 
-    /// The argv of a Codex verifier, prompt last. It works in the proof directory, the one place it may write (with its
-    /// own temporary directory): the checkout it looks at is read-only to it, as the Claude verifier's is to all but its
-    /// helpers. No network, nothing the user's own Codex setup could allow or approve, and no dollar cap: `timeout_min`
-    /// bounds it, which is why the config refuses `budget_usd` and `tools` beside `provider = "codex"`. Its last message
-    /// is written to `answerFile`, outside the proof directory so it is never taken for proof.
+    /// The argv of a Codex verifier, prompt last. Codex has no per-command allowlist, so the project's helpers (a skill's
+    /// `scripts/verify-app.sh`, which builds under the checkout's `.build`) run inside its sandbox, not beside it as the
+    /// Claude verifier's allowed `Bash` patterns do. Its workspace is therefore the worktree, writable as a coding turn's
+    /// is (`.git` stays read-only), so those helpers can build; the proof directory and its own temporary directory are
+    /// the other places it may write. No network, nothing the user's own Codex setup could allow or approve, and no
+    /// dollar cap: `timeout_min` bounds it, which is why the config refuses `budget_usd` and `tools` beside
+    /// `provider = "codex"`. Its last message is written to `answerFile`, outside the proof directory so it is never
+    /// taken for proof.
     public static func codexArguments(
-        verifier: VerifierConfig, prompt: String, proofDirectory: URL, scratch: URL, answerFile: URL
+        verifier: VerifierConfig, prompt: String, worktree: URL, proofDirectory: URL, scratch: URL, answerFile: URL
     ) -> [String] {
         var args = ["exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral"]
         if let model = verifier.model { args += ["-m", model] }
@@ -78,19 +81,21 @@ public enum Verifier {
         args += ["-c", "sandbox_workspace_write.network_access=false"]
         args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
         args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
-        args += ["-c", "sandbox_workspace_write.writable_roots=[\(CodexProvider.tomlString(scratch.path))]"]
-        args += ["-s", "workspace-write", "-C", proofDirectory.path, "-o", answerFile.path, "--", prompt]
+        let roots = [proofDirectory, scratch].map { CodexProvider.tomlString($0.path) }.joined(separator: ", ")
+        args += ["-c", "sandbox_workspace_write.writable_roots=[\(roots)]"]
+        args += ["-s", "workspace-write", "-C", worktree.path, "-o", answerFile.path, "--", prompt]
         return args
     }
 
     /// The argv of the configured provider, as `verifier.started` records it (the prompt left out by the caller).
     static func arguments(
-        provider: AgentProviderID, config: Config, verifier: VerifierConfig, prompt: String, proofDirectory: URL,
-        scratch: URL, answerFile: URL, sessionID: UUID
+        provider: AgentProviderID, config: Config, verifier: VerifierConfig, prompt: String, worktree: URL,
+        proofDirectory: URL, scratch: URL, answerFile: URL, sessionID: UUID
     ) -> [String] {
         if provider == .codex {
             return codexArguments(
-                verifier: verifier, prompt: prompt, proofDirectory: proofDirectory, scratch: scratch, answerFile: answerFile)
+                verifier: verifier, prompt: prompt, worktree: worktree, proofDirectory: proofDirectory, scratch: scratch,
+                answerFile: answerFile)
         }
         return arguments(
             config: config, verifier: verifier, prompt: prompt, proofDirectory: proofDirectory, sessionID: sessionID)
@@ -119,9 +124,9 @@ public enum Verifier {
         ]
         var environment = environmentLines(proofDirectory, threadID, goalPath, app: app)
         if let checkout {
-            // A Codex verifier starts in the proof directory, so the work it looks at is named.
-            environment += "\n- The checkout to verify, read-only to you, is \(checkout.path); "
-                + "your working directory is the proof directory."
+            // A Codex verifier runs the project's helpers inside its sandbox, so where it may write is said.
+            environment += "\n- The checkout to verify is your working directory, \(checkout.path). Do not edit its files; "
+                + "the project's helpers may build in it. Screenshots go in the proof directory."
         }
         parts.append("## Environment\n\n" + environment)
         if app != nil {
@@ -273,12 +278,30 @@ public enum Verifier {
 
     // MARK: Recovery
 
-    /// Ends what a verifier left behind (the app, also detached) and closes its `verifier.started`. Run by every
-    /// command that opens the log, so the next one of any kind finds it closed. Returns whether there was one.
+    /// Every directory a verifier or its helpers may run in: the worktree, the thread's proof folders (a Codex verifier's
+    /// helpers may work in one) and the verifier's own folder (its temporary directory). An orphan is looked for in each.
+    static func executionDirectories(worktree: URL, threadDirectory: URL) -> [URL] {
+        [
+            worktree, threadDirectory.appendingPathComponent("proof", isDirectory: true),
+            threadDirectory.appendingPathComponent("verifier", isDirectory: true),
+        ]
+    }
+
+    /// SIGKILLs the orphans found in any of the verifier's execution directories and returns their pids.
     @discardableResult
-    static func recoverOrphan(log: EventLogWriter, worktree: URL) async throws -> Bool {
+    static func sweepOrphans(worktree: URL, threadDirectory: URL) -> [pid_t] {
+        executionDirectories(worktree: worktree, threadDirectory: threadDirectory).flatMap {
+            OrphanSweeper.sweep(inside: $0)
+        }
+    }
+
+    /// Ends what a verifier left behind (the app, also detached, and a helper working outside the worktree) and closes its
+    /// `verifier.started`. Run by every command that opens the log, so the next one of any kind finds it closed. Returns
+    /// whether there was one.
+    @discardableResult
+    static func recoverOrphan(log: EventLogWriter, worktree: URL, threadDirectory: URL) async throws -> Bool {
         guard await log.hasOpenVerifier else { return false }
-        OrphanSweeper.sweep(inside: worktree)
+        sweepOrphans(worktree: worktree, threadDirectory: threadDirectory)
         try await log.recoverOrphanedVerifier()
         return true
     }

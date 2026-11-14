@@ -33,10 +33,12 @@ public enum VerifierRefusal: Error, Equatable, Sendable, CustomStringConvertible
 }
 
 extension ThreadService {
-    /// Closes a verifier left open by a process that died, and ends what it left running in the worktree.
+    /// Closes a verifier left open by a process that died, and ends what it left running in the worktree, its proof
+    /// folders and its own folder.
     func closeOrphanedVerifier(id: String, log: EventLogWriter) async throws {
         try await Verifier.recoverOrphan(
-            log: log, worktree: WorktreeManager(repoRoot: project.root, git: git).path(for: id))
+            log: log, worktree: WorktreeManager(repoRoot: project.root, git: git).path(for: id),
+            threadDirectory: project.threadDirectory(id))
     }
 
     /// Runs the verifier on the latest turn and records `verifier.started` and `verifier.ended`. A separate `claude`

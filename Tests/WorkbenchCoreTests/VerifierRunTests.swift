@@ -411,6 +411,37 @@ private func pid(in path: String) throws -> pid_t {
         #expect(kinds == ["verifier.started", "verifier.ended"])
         #expect(try v.fx.contents(v.id).isHealthy)
     }
+
+    /// A verifier whose Workbench died while a detached helper worked in the proof folder, or in the verifier's own
+    /// temporary folder, outside the worktree: the recovery that closes the verifier ends those helpers too, so none goes on
+    /// changing the proof. The verifier is off, so only the recovery can have ended them.
+    @Test func helpersADeadVerifierLeftOutsideTheWorktreeAreEndedByRecovery() async throws {
+        let v = try await VerifierFixture(verifier: "enabled = false")
+        let proof = v.fx.project.proofDirectory(v.id, turn: 1)
+        let scratch = v.fx.project.threadDirectory(v.id).appendingPathComponent("verifier/tmp", isDirectory: true)
+        var left: [pid_t] = []
+        for directory in [proof, scratch] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let pidFile = FakeClaude.scratch("verifier-helper")
+            defer { try? FileManager.default.removeItem(atPath: pidFile) }
+            let script = "use POSIX; my $p = fork(); if ($p == 0) { POSIX::setsid(); exec '/bin/sleep', '300' } "
+                + "open(F, '>', $ARGV[0]); print F $p; close F;"
+            try await runOutsideTheProcessLayer("/usr/bin/perl", ["-e", script, pidFile], in: directory)
+            left.append(try pid(in: pidFile))
+        }
+        defer { for helper in left { kill(helper, SIGKILL) } }
+        #expect(left.allSatisfy(alive))
+
+        let log = try EventLogWriter.open(at: v.fx.project.eventsURL(v.id))
+        try await log.append(.verifierStarted, turn: 1, data: ["argv": ["codex"]])
+        await log.close()
+        _ = try await v.fx.runner(v.id).run(v.fx.options("write=a.txt", feedback: "once more"))
+
+        let events = try v.verifierEvents()
+        #expect(events.map(\.kind.rawValue) == ["verifier.started", "verifier.ended"])
+        #expect(events.last?.data["reason"]?.stringValue == "interrupted")
+        for helper in left { #expect(await waitUntilGone(helper), "helper \(helper) is still running") }
+    }
 }
 
 /// A process to stop from the test, kept if the stop arrives first.

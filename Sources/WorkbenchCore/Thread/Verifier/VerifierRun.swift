@@ -37,8 +37,8 @@ struct VerifierRun {
         let answerFile = threadDirectory.appendingPathComponent("verifier/answer-turn-\(turn).txt")
         func arguments(_ prompt: String) -> [String] {
             Verifier.arguments(
-                provider: provider, config: config, verifier: verifier, prompt: prompt, proofDirectory: proofDirectory,
-                scratch: scratch, answerFile: answerFile, sessionID: sessionID)
+                provider: provider, config: config, verifier: verifier, prompt: prompt, worktree: worktree,
+                proofDirectory: proofDirectory, scratch: scratch, answerFile: answerFile, sessionID: sessionID)
         }
         var shown = arguments("")
         if provider == .codex, let end = shown.firstIndex(of: "--") { shown = Array(shown[..<end]) }
@@ -49,8 +49,8 @@ struct VerifierRun {
             try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         }
 
-        // A `claude` or an app a killed verifier left is found by the worktree it ran in, and ended first.
-        OrphanSweeper.sweep(inside: worktree)
+        // A `claude`, a `codex`, a helper or an app a killed verifier left is found by the directory it ran in, and ended first.
+        Verifier.sweepOrphans(worktree: worktree, threadDirectory: threadDirectory)
         try? FileManager.default.createDirectory(at: proofDirectory, withIntermediateDirectories: true)
         let before = Self.snapshot(proofDirectory, threadDirectory)
 
@@ -111,10 +111,8 @@ struct VerifierRun {
         if let app { appEnd = await app.stop() }
         if let app, let appEnd { try await recordRunEnd(app: app, end: appEnd, turn: turn, log: log) }
 
-        // The run ended; whatever it started and left (the app, also in a new session) goes with it.
-        // A Codex verifier works in the proof directory, so what it left is looked for there too.
-        var swept = OrphanSweeper.sweep(inside: worktree)
-        if provider == .codex { swept += OrphanSweeper.sweep(inside: proofDirectory) }
+        // The run ended; whatever it started and left (the app, also in a new session) goes with it, wherever it ran.
+        let swept = Verifier.sweepOrphans(worktree: worktree, threadDirectory: threadDirectory)
 
         var answer = Verifier.Answer(text: nil, costUSD: nil, failure: startError)
         if startError == nil {
