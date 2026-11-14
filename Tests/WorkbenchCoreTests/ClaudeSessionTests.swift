@@ -153,6 +153,39 @@ struct SessionHome {
         }
     }
 
+    /// Two large messages of the person's with a tool-only reply between them stay two messages: the first is kept and the
+    /// second left out, not joined into one first message that is then refused.
+    @Test func personMessagesStaySeparate() throws {
+        let big = String(repeating: "p", count: 70 << 10)
+        let lines = [SessionLines.person("ONE " + big)] + SessionLines.noise.prefix(3) + [SessionLines.person("TWO " + big)]
+        let messages = ClaudeSession.messages(Data(lines.joined(separator: "\n").utf8))
+        #expect(messages == [.init(.person, "ONE " + big), .init(.person, "TWO " + big)])
+        let (text, dropped) = try ClaudeSession.bounded(messages)
+        #expect(dropped == 1 && text.hasPrefix("The person said:\nONE ") && !text.contains("TWO "))
+        #expect(text.utf8.count <= ClaudeSession.limit)
+    }
+
+    /// A first message that fits only alone: every later message is left out, and so is the line saying so, since it does
+    /// not fit either. One that leaves just room for the line keeps it.
+    @Test func noticeAtTheLimit() throws {
+        let header = ClaudeSession.render(.init(.person, "")).utf8.count
+        // Longer than the line that says it was left out, so that line fits where the reply does not.
+        let reply = ClaudeSession.Message(.assistant, String(repeating: "r", count: 200))
+        let exact = ClaudeSession.Message(.person, String(repeating: "z", count: ClaudeSession.limit - header))
+        let full = try ClaudeSession.bounded([exact, reply])
+        #expect(full.dropped == 1 && full.text == ClaudeSession.render(exact), "the first message alone, nothing over")
+        #expect(full.text.utf8.count == ClaudeSession.limit)
+
+        let room = ClaudeSession.limit - header - 2 - ClaudeSession.omitted(1).utf8.count
+        let fits = ClaudeSession.Message(.person, String(repeating: "z", count: room))
+        let noted = try ClaudeSession.bounded([fits, reply])
+        #expect(noted.dropped == 1 && noted.text.hasSuffix(ClaudeSession.omitted(1)))
+        #expect(noted.text.utf8.count == ClaudeSession.limit)
+        let tight = ClaudeSession.Message(.person, String(repeating: "z", count: room + 1))
+        let unnoted = try ClaudeSession.bounded([tight, reply])
+        #expect(unnoted.dropped == 1 && unnoted.text == ClaudeSession.render(tight))
+    }
+
     @Test func untrusted() throws {
         let unsafe = ["../x", "..", "a/b", "/etc/passwd", "", "-rf", "a b", "a.jsonl", "a\0b", "ü"]
         for bad in unsafe + [String(repeating: "a", count: 200)] {

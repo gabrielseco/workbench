@@ -117,13 +117,15 @@ public enum ClaudeSession {
 
     // MARK: What was said
 
-    /// The conversation in a session file's lines: the person's messages and the assistant's text, consecutive messages of
-    /// one side joined. Anything else is left out, and a line that is not a JSON object is skipped.
+    /// The conversation in a session file's lines: the person's messages and the assistant's text, consecutive lines of the
+    /// assistant's joined into one reply. Each of the person's messages stays its own, so the first is never grown by the next
+    /// (and bounding can keep it while leaving later ones out). Anything else is left out, and a line that is not a JSON
+    /// object is skipped.
     public static func messages(_ data: Data) -> [Message] {
         var out: [Message] = []
         for line in data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true) {
             guard line.count <= lineLimit, let message = message(Data(line)) else { continue }
-            if let last = out.last, last.role == message.role {
+            if message.role == .assistant, let last = out.last, last.role == .assistant {
                 out[out.count - 1].text += "\n\n" + message.text
             } else {
                 out.append(message)
@@ -178,7 +180,8 @@ public enum ClaudeSession {
     }
 
     /// The conversation as one text of at most `limit` bytes, from the person's first message. When it is longer, the oldest
-    /// messages after that first one are left out, whole, and a line says how many; a message is never cut.
+    /// messages after that first one are left out, whole, and a line says how many; a message is never cut. When even that
+    /// line does not fit beside the first message, it is left out too (`dropped` still counts what was).
     public static func bounded(_ messages: [Message], limit: Int = limit) throws -> (text: String, dropped: Int) {
         guard let start = messages.firstIndex(where: { $0.role == .person }) else { throw ClaudeSessionRefusal.empty }
         let first = render(messages[start])
@@ -188,14 +191,12 @@ public enum ClaudeSession {
         // sizes[k]: what rest[k...] takes, each with the separator before it.
         var sizes = [Int](repeating: 0, count: rest.count + 1)
         for k in stride(from: rest.count - 1, through: 0, by: -1) { sizes[k] = sizes[k + 1] + separator + rest[k].utf8.count }
+        func note(_ count: Int) -> Int { count > 0 ? separator + omitted(count).utf8.count : 0 }
         var from = 0
-        while from < rest.count {
-            let note = from > 0 ? separator + omitted(from).utf8.count : 0
-            if first.utf8.count + note + sizes[from] <= limit { break }
-            from += 1
-        }
+        while from < rest.count, first.utf8.count + note(from) + sizes[from] > limit { from += 1 }
         var parts = [first]
-        if from > 0 { parts.append(omitted(from)) }
+        // Stopping before the end means it fitted with the line; with every later message left out, it is checked here.
+        if from > 0, first.utf8.count + note(from) <= limit { parts.append(omitted(from)) }
         parts += rest[from...]
         return (parts.joined(separator: "\n\n"), from)
     }
