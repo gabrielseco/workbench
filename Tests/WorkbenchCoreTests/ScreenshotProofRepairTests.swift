@@ -17,6 +17,7 @@ struct ScreenshotProofRepairTests {
         #expect(ScreenshotProof.repaired("test: FooTests/bar") == "test: FooTests/bar")
         #expect(ScreenshotProof.repaired("screenshot: ???") == "screenshot: ???")
         #expect(ScreenshotProof.repaired("screenshot: home screen, !!!") == "screenshot: home screen, !!!")
+        #expect(ScreenshotProof.repaired("screenshot: Home Screen, home-screen") == "screenshot: Home Screen, home-screen")
         let many = (1...17).map { "shot \($0)" }.joined(separator: ", ")
         #expect(ScreenshotProof.repaired("screenshot: " + many) == "screenshot: " + many)
     }
