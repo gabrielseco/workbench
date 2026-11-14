@@ -53,7 +53,7 @@ One table per command: the codes it can return. Any command can also exit 1 for 
 
 ### `config set`, `config unset`
 
-`config set <key> <value>` and `config unset <key>` change one `agents.<role>.<provider|model|reasoning_effort>` line of `.workbench/config.toml`
+`config set <key> <value>` and `config unset <key>` change one `agents.<role>.<provider|model|reasoning_effort>` or `verifier.<provider|model>` line of `.workbench/config.toml`
 (`ConfigEdit`): they keep every other line and comment, parse the result as a config before writing, and do not overwrite a change made
 meanwhile. They are allowed while a thread is active; changing `agents.run` says the thread's approval may need `goal approve` again.
 

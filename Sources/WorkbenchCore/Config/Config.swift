@@ -564,6 +564,7 @@ public struct Config: Sendable, Equatable {
         # [verifier]                       # on by default: runs the project's skill after a passing check
         # enabled = false                  # turn it off; with no skill file at the base it is skipped anyway
         # skill = ".claude/skills/verify/SKILL.md"  # read from the base commit
+        # provider = "claude"              # or "codex" (no tools or budget_usd then); unset = claude
 
         [tools]
         # Built-in tools that exist at all. File tools are confined to the worktree (--restricted).

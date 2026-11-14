@@ -14,9 +14,14 @@ extension Commands {
         let id = try ctx.threadIDForActing(named)
         let config = try Config.load(from: ctx.project.configURL)
         guard let verifier = config.verifier else { throw CLIError.refused("\(VerifierRefusal.notConfigured)") }
-        let cap = NSDecimalNumber(decimal: verifier.budgetUSD).stringValue
-        out("verifying \(id) (advisory; up to $\(cap) and \(verifier.timeoutMin) min)...")
-        // Ctrl-C stops the verifier's `claude` instead of leaving it running on its own budget.
+        let agent = AgentSetup.name(verifier.resolvedProvider) + (verifier.model.map { " · \($0)" } ?? "")
+        if verifier.resolvedProvider == .claude {
+            let cap = NSDecimalNumber(decimal: verifier.budgetUSD).stringValue
+            out("verifying \(id) on \(agent) (advisory; up to $\(cap) and \(verifier.timeoutMin) min)...")
+        } else {
+            out("verifying \(id) on \(agent) (advisory; no dollar cap, up to \(verifier.timeoutMin) min)...")
+        }
+        // Ctrl-C stops the verifier's process instead of leaving it running on its own budget.
         let holder = RunHolder()
         let signals = installStopHandlers(what: "the verifier") { holder.stop() }
         defer { signals.forEach { $0.cancel() } }

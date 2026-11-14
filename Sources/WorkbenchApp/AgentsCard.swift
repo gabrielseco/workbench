@@ -2,7 +2,7 @@ import SwiftUI
 import WorkbenchCore
 
 /// Each agent role of the project the card was opened for and what it is set to, with a provider, an effort and a model to change (written to
-/// `.workbench/config.toml` through `ConfigEdit`, as `workbench config set` does). The verifier's model is read-only here.
+/// `.workbench/config.toml` through `ConfigEdit`, as `workbench config set` does). The verifier's provider and model go to `[verifier]`.
 struct AgentsCard: View {
     var store: ProjectStore
 
@@ -17,8 +17,8 @@ struct AgentsCard: View {
             if let setup = store.cardAgentSetup {
                 VStack(alignment: .leading, spacing: Space.m) {
                     ForEach(setup.rows) { row in
-                        // The verifier's model is not an agent key; a key a stage decides is locked in its row.
-                        AgentRow(row: row, edit: row.role == .verifier ? nil : edit)
+                        // A verifier turned off in the config only reads; a key a stage decides is locked in its row.
+                        AgentRow(row: row, edit: row.role == .verifier && row.source == .off ? nil : edit)
                     }
                 }
             } else if store.cardAgentConfig == .missing {
@@ -36,7 +36,9 @@ struct AgentsCard: View {
                 Text(note).role(.warning).fixedSize(horizontal: false, vertical: true)
             }
             Divider()
-            Text("Changes are written to .workbench/config.toml, under [agents.<role>]; the rest of the file is left as it is.")
+            Text(
+                "Changes are written to .workbench/config.toml, under [agents.<role>] (the verifier under [verifier]); the rest "
+                    + "of the file is left as it is.")
                 .role(.caption).fixedSize(horizontal: false, vertical: true)
         }
         // What an edit said is for the card: it is not left on the screen behind it.

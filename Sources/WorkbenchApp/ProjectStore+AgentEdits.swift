@@ -6,9 +6,11 @@ extension ProjectStore {
     /// in the card; either way the card reads the config again, so the pickers show what the file has.
     @discardableResult
     func setAgent(_ role: AgentSetup.Role, _ field: ConfigEdit.Field, to value: String?) async -> Bool {
-        guard let agentRole = AgentRole(rawValue: role.rawValue) else { return false }
+        let agentRole = AgentRole(rawValue: role.rawValue)
+        guard agentRole != nil || role == .verifier else { return false }
         return await edit(role: agentRole) { project in
-            let key = ConfigEdit.Key(role: agentRole, field: field)
+            // The verifier is not an `[agents.<role>]` table: its keys are in `[verifier]`.
+            let key = try agentRole.map { ConfigEdit.Key(role: $0, field: field) } ?? ConfigEdit.Key.verifier(field)
             if let value { _ = try ConfigEdit.set(key, to: value, in: project) } else { try Self.remove(key, in: project) }
         }
     }
@@ -25,7 +27,7 @@ extension ProjectStore {
     }
 
     /// True when the edit was written (or was already what the file said).
-    private func edit(role: AgentRole, _ work: @escaping @Sendable (Project) throws -> Void) async -> Bool {
+    private func edit(role: AgentRole?, _ work: @escaping @Sendable (Project) throws -> Void) async -> Bool {
         // The card edits the project it was opened for; without a card (a chat's "enable the goal agent") it is the open one.
         guard let project = agentsProjectValue ?? project else { return false }
         // One at a time and in the order they were made, off the main thread; the note reads the thread logs, so it is made there too.

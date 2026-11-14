@@ -117,7 +117,7 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
         #expect(found.first?.message.contains("'skill' must be a path without '.' parts") == true)
     }
 
-    @Test(arguments: ["provider", "allowed_tools", "skills"])
+    @Test(arguments: ["allowed_tools", "skills"])
     func anUnknownKeyIsRefusedWithItsName(key: String) {
         let found = problems("[verifier]\nskill = \"s.md\"\n\(key) = \"codex\"")
         #expect(found.map(\.code) == [.unknownKey])

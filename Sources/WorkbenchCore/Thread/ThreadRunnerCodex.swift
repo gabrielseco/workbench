@@ -56,11 +56,13 @@ extension ThreadRunner {
         return (nil, output)
     }
 
-    /// The `claude` the automatic verifier runs on: the coding executable when that is Claude, else `claude_path`, which may
-    /// be missing (the verifier is then skipped, with the reason).
-    func verifierClaude(config: Config, executable: URL, options: RunOptions) -> URL? {
-        guard config.resolvedRunAgent().provider != .claude else { return executable }
-        return ExecutableResolver.resolve(config.claudePath, searchPath: options.parentEnvironment["PATH"])
+    /// The executable the automatic verifier runs on, of its own provider (`[verifier] provider`, Claude when unset): the
+    /// coding executable when that is the same provider, else that provider's executable, which may be missing (the verifier is
+    /// then skipped, with the reason; no other provider stands in).
+    func verifierExecutable(config: Config, executable: URL, options: RunOptions) -> URL? {
+        let provider = config.verifier?.resolvedProvider ?? .claude
+        guard config.resolvedRunAgent().provider != provider else { return executable }
+        return ExecutableResolver.resolve(config.executable(for: provider), searchPath: options.parentEnvironment["PATH"])
     }
 
     /// What a turn's end record says about the session and the refusals. A Codex turn has no session to resume and reports

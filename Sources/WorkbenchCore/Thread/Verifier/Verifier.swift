@@ -64,10 +64,43 @@ public enum Verifier {
         return args
     }
 
+    /// The argv of a Codex verifier, prompt last. It works in the proof directory, the one place it may write (with its
+    /// own temporary directory): the checkout it looks at is read-only to it, as the Claude verifier's is to all but its
+    /// helpers. No network, nothing the user's own Codex setup could allow or approve, and no dollar cap: `timeout_min`
+    /// bounds it, which is why the config refuses `budget_usd` and `tools` beside `provider = "codex"`. Its last message
+    /// is written to `answerFile`, outside the proof directory so it is never taken for proof.
+    public static func codexArguments(
+        verifier: VerifierConfig, prompt: String, proofDirectory: URL, scratch: URL, answerFile: URL
+    ) -> [String] {
+        var args = ["exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral"]
+        if let model = verifier.model { args += ["-m", model] }
+        args += ["--ignore-user-config", "--ignore-rules", "-c", "approval_policy=\"never\""]
+        args += ["-c", "sandbox_workspace_write.network_access=false"]
+        args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
+        args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
+        args += ["-c", "sandbox_workspace_write.writable_roots=[\(CodexProvider.tomlString(scratch.path))]"]
+        args += ["-s", "workspace-write", "-C", proofDirectory.path, "-o", answerFile.path, "--", prompt]
+        return args
+    }
+
+    /// The argv of the configured provider, as `verifier.started` records it (the prompt left out by the caller).
+    static func arguments(
+        provider: AgentProviderID, config: Config, verifier: VerifierConfig, prompt: String, proofDirectory: URL,
+        scratch: URL, answerFile: URL, sessionID: UUID
+    ) -> [String] {
+        if provider == .codex {
+            return codexArguments(
+                verifier: verifier, prompt: prompt, proofDirectory: proofDirectory, scratch: scratch, answerFile: answerFile)
+        }
+        return arguments(
+            config: config, verifier: verifier, prompt: prompt, proofDirectory: proofDirectory, sessionID: sessionID)
+    }
+
     /// What the verifier is told: its role, the skill as the project wrote it, the goal's criteria, and where to
     /// leave the proof. The paths are real here (the model needs them), unlike in the judge's brief.
     public static func prompt(
-        skill: VerifierSkill, goal: Goal, proofDirectory: URL, threadID: String, goalPath: String, app: RunningApp? = nil
+        skill: VerifierSkill, goal: Goal, proofDirectory: URL, threadID: String, goalPath: String, app: RunningApp? = nil,
+        checkout: URL? = nil
     ) -> String {
         var parts: [String] = [
             """
@@ -84,7 +117,13 @@ public enum Verifier {
             saw. Your words are a note for the person reviewing; they decide nothing.
             """
         ]
-        parts.append("## Environment\n\n" + environmentLines(proofDirectory, threadID, goalPath, app: app))
+        var environment = environmentLines(proofDirectory, threadID, goalPath, app: app)
+        if let checkout {
+            // A Codex verifier starts in the proof directory, so the work it looks at is named.
+            environment += "\n- The checkout to verify, read-only to you, is \(checkout.path); "
+                + "your working directory is the proof directory."
+        }
+        parts.append("## Environment\n\n" + environment)
         if app != nil {
             parts.append(
                 """
@@ -204,19 +243,31 @@ public enum Verifier {
         return kept.isEmpty ? marker : kept + "\n" + marker
     }
 
-    /// Why a `claude` run produced no answer to read, nil when it ended on its own with status 0.
-    static func processProblem(_ exit: ProcessExit?, timeout: TimeInterval) -> String? {
-        guard let exit else { return "claude did not report how it ended" }
+    /// Why a Codex verifier left no answer: its answer file, bounded, or the failure. Codex reports tokens, not dollars, so
+    /// there is no cost.
+    static func codexAnswer(answerFile: URL, sawCapacity: Bool) -> Answer {
+        guard let text = ThreadService.readAnswer(answerFile) else {
+            return Answer(
+                text: nil, costUSD: nil,
+                failure: sawCapacity ? "codex's model is at capacity" : "codex left no answer")
+        }
+        return Answer(text: text, costUSD: nil, failure: nil)
+    }
+
+    /// Why a verifier run (`name` is its executable, as said) produced no answer to read, nil when it ended on its own
+    /// with status 0.
+    static func processProblem(_ exit: ProcessExit?, timeout: TimeInterval, name: String = "claude") -> String? {
+        guard let exit else { return "\(name) did not report how it ended" }
         switch exit.cause {
         case .stopped: return "the verifier was stopped"
-        case .timedOut: return "claude did not finish within \(Int(timeout))s"
+        case .timedOut: return "\(name) did not finish within \(Int(timeout))s"
         case .natural: break
         }
         switch exit.termination {
         case .exited(0): return nil
-        case .exited(let code): return "claude exited with status \(code)"
-        case .signaled(let signal): return "claude was ended by signal \(signal)"
-        case .lost: return "claude ended in a way that was not recorded"
+        case .exited(let code): return "\(name) exited with status \(code)"
+        case .signaled(let signal): return "\(name) was ended by signal \(signal)"
+        case .lost: return "\(name) ended in a way that was not recorded"
         }
     }
 

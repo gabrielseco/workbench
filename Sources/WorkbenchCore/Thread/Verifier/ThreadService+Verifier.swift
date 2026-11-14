@@ -8,6 +8,8 @@ public enum VerifierRefusal: Error, Equatable, Sendable, CustomStringConvertible
     case skill(String)
     case noWorktree
     case claudeNotFound(String)
+    /// The configured verifier provider's executable is missing; no other provider stands in for it.
+    case providerNotFound(provider: String, name: String)
     case busy
 
     public var description: String {
@@ -22,6 +24,9 @@ public enum VerifierRefusal: Error, Equatable, Sendable, CustomStringConvertible
         case .noWorktree:
             "the thread has no worktree to drive (it was shipped, accepted or discarded); the verifier runs on the work in it."
         case .claudeNotFound(let name): "`\(name)` was not found"
+        case .providerNotFound(let provider, let name):
+            "the verifier is set to \(provider) ([verifier] provider), and `\(name)` was not found; it does not run on "
+                + "another provider instead. Install it, set [providers.\(provider)] executable, or change [verifier] provider."
         case .busy: "another command is using this thread (a run, a send-back or another verifier); try again when it ends."
         }
     }
@@ -78,8 +83,11 @@ extension ThreadService {
         } catch { throw VerifierRefusal.goalUnreadable("\(error)") }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         guard manager.exists(id) else { throw VerifierRefusal.noWorktree }
-        guard let claude = ExecutableResolver.resolve(config.claudePath, searchPath: environment["PATH"]) else {
-            throw VerifierRefusal.claudeNotFound(config.claudePath)
+        let provider = verifier.resolvedProvider
+        guard let executable = Self.verifierExecutable(config: config, verifier: verifier, environment: environment) else {
+            let name = config.executable(for: provider)
+            if provider == .claude { throw VerifierRefusal.claudeNotFound(name) }
+            throw VerifierRefusal.providerNotFound(provider: provider.rawValue, name: name)
         }
         let recorded = events.last { $0.kind == .worktreeCreated }?.data["base_commit"]?.stringValue
         let base: String
@@ -103,13 +111,19 @@ extension ThreadService {
             config: config, verifier: verifier, run: config.run, skill: skill, goal: goal, threadID: id,
             goalPath: project.goalURL(id).path, worktree: manager.path(for: id),
             proofDirectory: project.proofDirectory(id, turn: turn), threadDirectory: project.threadDirectory(id),
-            claude: claude, environment: environment, timeout: timeout, killGrace: killGrace,
+            executable: executable, environment: environment, timeout: timeout, killGrace: killGrace,
             identity: await ProofIdentity.of(worktree: manager.path(for: id), git: git, attributesFrom: base))
         return try await run.run(turn: turn, log: log, attach: attach)
     }
 }
 
 extension ThreadService {
+    /// The executable of the verifier's own provider (`[verifier] provider`, Claude when unset), or nil when it is not
+    /// found. Never the executable of another provider.
+    static func verifierExecutable(config: Config, verifier: VerifierConfig, environment: [String: String]) -> URL? {
+        ExecutableResolver.resolve(config.executable(for: verifier.resolvedProvider), searchPath: environment["PATH"])
+    }
+
     /// Whether a turn of this thread will be followed by a verifier: it is on and its skill is in the base commit.
     /// `log -f` waits for the verifier only then.
     public func verifierWillRun(id: String, config: Config) async -> Bool {
@@ -134,7 +148,7 @@ extension ThreadRunner {
     /// unless it runs. After a failed turn or check it is silent: a follower of the log knows from those.
     func runVerifier(
         after report: TurnReport, check: CheckReport?, config: Config, goal: Goal, worktree: URL, log: EventLogWriter,
-        claude: URL?, options: RunOptions
+        executable: URL?, options: RunOptions
     ) async throws -> VerifierReport? {
         guard let verifier = config.verifier, report.result == .succeeded else { return nil }
         if let check, check.result != .passed { return nil }
@@ -157,14 +171,20 @@ extension ThreadRunner {
         guard await hasChange(worktree: worktree, base: base) else {
             return try await skip("the turn left no change to look at", turn: turn, log: log)
         }
-        guard let claude else {
-            return try await skip("claude was not found (claude_path), and the verifier runs on it", turn: turn, log: log)
+        guard let executable else {
+            if verifier.resolvedProvider == .claude {
+                return try await skip("claude was not found (claude_path), and the verifier runs on it", turn: turn, log: log)
+            }
+            let provider = verifier.resolvedProvider.rawValue
+            return try await skip(
+                "\(provider) was not found ([providers.\(provider)] executable), and the verifier is set to run on it",
+                turn: turn, log: log)
         }
         let run = VerifierRun(
             config: config, verifier: verifier, run: config.run, skill: skill, goal: goal, threadID: threadID,
             goalPath: project.goalURL(threadID).path, worktree: worktree,
             proofDirectory: project.proofDirectory(threadID, turn: turn), threadDirectory: project.threadDirectory(threadID),
-            claude: claude, environment: options.parentEnvironment,
+            executable: executable, environment: options.parentEnvironment,
             timeout: options.verifierTimeoutOverride ?? TimeInterval(verifier.timeoutMin) * 60, killGrace: options.killGrace,
             identity: await ProofIdentity.of(worktree: worktree, git: git, attributesFrom: base))
         notify(.verifierStarted(turn: turn, skill: skill.path))

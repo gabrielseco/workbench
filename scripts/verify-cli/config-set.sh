@@ -8,9 +8,11 @@
 # else; `unset agents.goal.provider` takes the table out again and doctor's goal line says none; a provider with no adapter
 # and a key that is not an agent key are each refused (exit 6) with the file byte for byte as it was; with a thread active
 # `set agents.run.model` still works and says the approval may need binding again; `config --help` names `config set`.
+# The verifier: doctor says claude when `[verifier]` names no provider; `set verifier.provider codex` and `verifier.model` write a
+# `[verifier]` table doctor reads back; a provider with no verifier adapter is refused with the file untouched; unset takes it out.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
-# VERIFY_CLI_SABOTAGE=1 sends a provider that exists and a key that is an agent key to the two refusals, so the two "refused"
-# steps and the "file untouched" step must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# VERIFY_CLI_SABOTAGE=1 sends a provider that exists and a key that is an agent key to the two refusals, and claude to the
+# verifier's refusal, so the two "refused" steps, the "file untouched" step and the verifier's "refused" step must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -92,6 +94,36 @@ wbp "$SCRATCH/r2.out" config set "$KEY" make
 shown "$SCRATCH/r2.out"
 check "a key that is not an agent key is refused (exit 6)" "workbench exited $RC" test "$RC" = 6
 check "the refused edits left the file byte for byte as it was" "the config changed" cmp -s "$CFG" "$SCRATCH/pre-refusal"
+cp "$SCRATCH/pre-refusal" "$CFG"
+
+# --- 4b. the verifier's provider and model -----------------------------------------------------------------
+
+wbp "$SCRATCH/v0.out" doctor --base "$BASE"
+check "verifier: with no provider set, doctor says claude, the default" "no '  provider: claude (not set: the default)' line" \
+    grep -q "^  provider: claude (not set: the default)" "$SCRATCH/v0.out"
+wbp "$SCRATCH/v1.out" config set verifier.provider codex
+shown "$SCRATCH/v1.out"
+check "verifier: set provider codex, old and new said" "exit $RC: $(head -c 200 "$SCRATCH/v1.out")" \
+    bash -c 'test "$1" = 0 && grep -q "verifier.provider: (not set) -> codex" "$2"' _ "$RC" "$SCRATCH/v1.out"
+wbp "$SCRATCH/v2.out" config set verifier.model gpt-6.1-terra
+check "verifier: set its model" "exit $RC: $(head -c 200 "$SCRATCH/v2.out")" test "$RC" = 0
+check "verifier: both keys are in a [verifier] table" "no [verifier] provider and model at the end" \
+    bash -c 'tail -3 "$1" | tr "\n" "|" | grep -q "^\[verifier\]|provider = \"codex\"|model = \"gpt-6.1-terra\"|$"' _ "$CFG"
+wbp "$SCRATCH/v3.out" doctor --base "$BASE"
+check "verifier: doctor reads the selection back" "no '  provider: codex' and '  model:  gpt-6.1-terra' lines" \
+    bash -c 'grep -qx "  provider: codex" "$1" && grep -qx "  model:  gpt-6.1-terra" "$1"' _ "$SCRATCH/v3.out"
+cp "$CFG" "$SCRATCH/pre-verifier-refusal"
+VPROVIDER=gemini
+[ "$SABOTAGE" = 1 ] && VPROVIDER=claude
+wbp "$SCRATCH/v4.out" config set verifier.provider "$VPROVIDER"
+shown "$SCRATCH/v4.out"
+check "verifier: a provider with no verifier adapter is refused (exit 6), file untouched" "exit $RC, or the config changed" \
+    bash -c 'test "$1" = 6 && cmp -s "$2" "$3"' _ "$RC" "$CFG" "$SCRATCH/pre-verifier-refusal"
+cp "$SCRATCH/pre-verifier-refusal" "$CFG"
+wbp "$SCRATCH/v5.out" config unset verifier.model
+wbp "$SCRATCH/v6.out" config unset verifier.provider
+check "verifier: unset both, the table goes" "exit $RC, or [verifier] is still in the config" \
+    bash -c 'test "$1" = 0 && ! grep -q "^\[verifier\]" "$2"' _ "$RC" "$CFG"
 cp "$SCRATCH/pre-refusal" "$CFG"
 
 # --- 5. allowed with a thread active, and the help -------------------------------------------------------

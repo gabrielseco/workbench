@@ -317,7 +317,7 @@ public actor ThreadRunner {
             let checked = report?.check
             report?.verifier = try await runVerifier(
                 after: result.report, check: checked, config: config, goal: goal, worktree: worktree, log: log,
-                claude: verifierClaude(config: config, executable: executable, options: options), options: options)
+                executable: verifierExecutable(config: config, executable: executable, options: options), options: options)
             break
         }
         // The loop above runs at least once and assigns `report` on every pass.
