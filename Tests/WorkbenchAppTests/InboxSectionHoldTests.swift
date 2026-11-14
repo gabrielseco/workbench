@@ -35,6 +35,17 @@ import Testing
         #expect(hold.shown["a"] == .working)
     }
 
+    @Test func aNewDestinationRestartsTheDelay() {
+        var hold = InboxSectionHold()
+        hold.update(target: ["a": .waiting], now: t0)
+        hold.update(target: ["a": .working], now: at(0))
+        hold.update(target: ["a": .needsYou], now: at(2.9))
+        hold.update(target: ["a": .needsYou], now: at(InboxSectionHold.delay))
+        #expect(hold.shown["a"] == .waiting, "needs you has held for 0.1 s, not 3")
+        hold.update(target: ["a": .needsYou], now: at(2.9 + InboxSectionHold.delay))
+        #expect(hold.shown["a"] == .needsYou)
+    }
+
     @Test func aFrozenRailKeepsRowsPutButLetsNewOnesAndGoneOnesThrough() {
         var hold = InboxSectionHold()
         hold.update(target: ["a": .working, "gone": .waiting], now: t0)

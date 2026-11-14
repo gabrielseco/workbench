@@ -13,6 +13,11 @@ struct InboxView: View {
         return nil
     }
 
+    /// The rows in order and how many each section holds, so a move that keeps the order but changes a header still glides.
+    private var animationKey: String {
+        model.listed.map(\.id).joined(separator: ",") + "|\(model.needsYou.count)/\(model.working.count)/\(model.waiting.count)"
+    }
+
     var body: some View {
         let shown = shownThread
         let selectedHere = store.mode == .thread && !store.newThread
@@ -33,7 +38,7 @@ struct InboxView: View {
             }
         }
         // A row that changes section glides there instead of snapping; with Reduce Motion it just moves.
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: model.listed.map(\.id))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: animationKey)
         .accessibilityLabel("Inbox")
     }
 
