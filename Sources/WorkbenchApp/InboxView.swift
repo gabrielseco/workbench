@@ -37,7 +37,7 @@ struct InboxView: View {
                     .help(InboxModel.olderHelp(model.older))
             }
         }
-        // A row that changes section glides there instead of snapping; with Reduce Motion it just moves.
+        // A row that changes section fades out and in (each section is its own list) instead of snapping; none with Reduce Motion.
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: animationKey)
         .accessibilityLabel("Inbox")
     }

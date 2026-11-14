@@ -51,6 +51,8 @@ struct PreviewRail: View {
             var due = store.inboxRail.hold.update(target: target, now: Date(), frozen: store.inboxRail.hovered)
             while let next = due, !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(max(0.05, next.timeIntervalSinceNow)))
+                // A cancelled sleep returns at once: a stale task must not write its old target.
+                if Task.isCancelled { return }
                 due = store.inboxRail.hold.update(target: target, now: Date(), frozen: store.inboxRail.hovered)
             }
         }
