@@ -5,7 +5,7 @@ import WorkbenchCore
 /// step screens read (`canShip`, `canMerge`, the goal's `canApprove`, `RunModel.stoppable`) and only picks which one is the next press.
 struct FeedAction: Equatable, Identifiable {
     enum Kind: String {
-        case approveAndRun, run, stopTurn, stopAdvice, accept, ship, reviewPR, reviewAgain, merge, newGoal
+        case approveAndRun, run, stopTurn, stopAdvice, accept, acceptAndShip, ship, reviewPR, reviewAgain, merge, newGoal
         case discard, sendGuidance, openDiff, openWorktree, openHerdr, runAgain, refreshReview, reviewDetails
         case showFindings, refreshCI, openPR, fixChecks
     }
@@ -96,6 +96,12 @@ enum FeedActions {
             let accept = FeedAction(
                 kind: .accept, title: "Accept work", help: "Commits the work on its branch",
                 enabled: c.reviewCanDecide && !c.deciding && !c.busy)
+            // The press that publishes: Accept commits, then Ship pushes and opens the pull request, one after the other. Plain Accept
+            // stays in the menu for a person who wants the commit without the push.
+            let acceptAndShip = FeedAction(
+                kind: .acceptAndShip, title: "Accept and ship",
+                help: "Commits the work on its branch, then pushes it and opens the pull request",
+                enabled: c.reviewCanDecide && !c.deciding && !c.busy)
             let writing = !c.guidance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let send = FeedAction(
                 kind: .sendGuidance, title: "Send to agent", help: "Starts the next turn with what you wrote",
@@ -108,6 +114,7 @@ enum FeedActions {
                 FeedAction(
                     kind: .discard, title: "Discard…", help: "Shows what would be removed, and asks first", enabled: !c.busy,
                     destructive: true))
+            more.append(accept)
             let diff = FeedAction(
                 kind: .openDiff, title: "Open diff", help: "Each changed file against the base, in your editor",
                 enabled: !c.busy && c.reviewHasFiles)
@@ -116,9 +123,11 @@ enum FeedActions {
             // Writing turns the primary into the send; Accept stays beside it and Open diff goes in the menu.
             if writing {
                 more.insert(diff, at: 0)
-                return FeedDecision(primary: send, secondary: accept, more: more, title: "Accept the work", takesGuidance: true)
+                return FeedDecision(
+                    primary: send, secondary: acceptAndShip, more: more, title: "Accept the work", takesGuidance: true)
             }
-            return FeedDecision(primary: accept, secondary: diff, more: more, title: "Accept the work", takesGuidance: true)
+            return FeedDecision(
+                primary: acceptAndShip, secondary: diff, more: more, title: "Accept the work", takesGuidance: true)
         }
         if let run = s.run {
             worktree()

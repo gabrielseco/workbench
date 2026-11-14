@@ -41,11 +41,15 @@ import Testing
             pullRequest: nil),
         description: nil, title: "feat: it", body: "Body.", note: nil)
 
-    private func store(_ calls: Calls, gate: Gate? = nil) async throws -> ProjectStore {
+    private func store(
+        _ calls: Calls, gate: Gate? = nil, acceptGate: Gate? = nil, acceptError: Error? = nil, threads: [String] = ["t1"]
+    ) async throws -> ProjectStore {
         let fixture = try await AppFixture()
         keptPerformFixtures.append(fixture)
-        try await fixture.addThread("t1", approved: true)
-        try fixture.turn("t1", 1)
+        for name in threads {
+            try await fixture.addThread(name, approved: true)
+            try fixture.turn(name, 1)
+        }
         let actions = GoalActions(
             approve: { _, _ in calls.add("approve") },
             makeRun: { _, _, _ in
@@ -72,6 +76,8 @@ import Testing
             },
             accept: { _, _, _, _ in
                 calls.add("accept")
+                if let acceptGate { await acceptGate.wait() }
+                if let acceptError { throw acceptError }
                 return AcceptResult(branch: "b", commit: "c", committedNow: true)
             },
             discardPlan: { _, _ in
@@ -103,6 +109,7 @@ import Testing
     @Test func eachButtonRunsTheActionTheStepScreenRuns() async throws {
         let table: [(FeedAction.Kind, [String])] = [
             (.approveAndRun, ["approve", "makeRun"]), (.stopTurn, ["requestStop"]), (.accept, ["acceptPlan", "accept"]),
+            (.acceptAndShip, ["acceptPlan", "accept", "shipPreview", "ship"]),
             (.ship, ["shipPreview", "ship"]), (.reviewPR, ["prReview"]), (.discard, ["discardPlan"]),
             (.openDiff, ["openDiff"]), (.openWorktree, ["openWorktree"]), (.openHerdr, ["openInHerdr"]), (.runAgain, ["makeRun"]),
         ]
@@ -112,6 +119,46 @@ import Testing
             await store.perform(kind)
             #expect(calls.all == expected, "\(kind.rawValue) ran \(calls.all)")
         }
+    }
+
+    @Test func acceptAndShipStopsAtAnAcceptThatFailed() async throws {
+        let calls = Calls()
+        let store = try await store(calls, acceptError: PerformError.stop)
+        await store.perform(.acceptAndShip)
+        #expect(calls.all == ["acceptPlan", "accept"], "nothing is shipped from a thread that was not accepted")
+        #expect(store.actionError != nil && store.notice == nil)
+    }
+
+    @Test func acceptAndShipDoesNotShipAnotherThreadWhenTheWindowMovedOn() async throws {
+        let calls = Calls()
+        let gate = Gate()
+        let store = try await store(calls, gate: gate, threads: ["t1", "t2"])
+        await store.select(thread: "t1")
+        let pressed = Task { await store.perform(.acceptAndShip) }
+        for _ in 0..<400 where calls.all != ["acceptPlan"] { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(calls.all == ["acceptPlan"], "the accept never started")
+        await store.select(thread: "t2")
+        #expect(store.currentThread == "t2", "the window is on t2 before the accept ends")
+        await gate.open()
+        await pressed.value
+        #expect(!calls.all.contains("ship"), "the thread on screen is not the one that was accepted")
+    }
+
+    @Test func acceptAndShipDoesNotShipAThreadOfTheSameNameInAnotherProject() async throws {
+        let calls = Calls()
+        let gate = Gate()
+        let store = try await store(calls, acceptGate: gate)
+        let other = try await AppFixture()
+        keptPerformFixtures.append(other)
+        try await other.addThread("t1", approved: true)
+        try other.turn("t1", 1)
+        let pressed = Task { await store.perform(.acceptAndShip) }
+        for _ in 0..<400 where calls.all != ["acceptPlan", "accept"] { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(calls.all == ["acceptPlan", "accept"], "the commit never started")
+        #expect(await store.open(other.root))
+        await gate.open()
+        await pressed.value
+        #expect(!calls.all.contains("ship"), "the other project's t1 was never accepted")
     }
 
     @Test func openPROpensTheThreadsPullRequestAndNothingElse() async throws {

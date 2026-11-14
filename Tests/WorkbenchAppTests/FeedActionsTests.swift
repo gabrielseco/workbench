@@ -109,11 +109,11 @@ import Testing
         #expect(decide(failed).primary?.kind == .runAgain)
     }
 
-    @Test func aTurnAwaitingReviewIsAcceptedAndTheRestIsInTheMenu() throws {
+    @Test func aTurnAwaitingReviewIsAcceptedAndShippedAndTheRestIsInTheMenu() throws {
         let shown = try snapshot(.needsYou)
         let decision = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true; $0.reviewHasFiles = true }
-        #expect(decision.primary?.kind == .accept && decision.primary?.enabled == true)
-        #expect(kinds(decision.more).prefix(2) == [.reviewDetails, .discard])
+        #expect(decision.primary?.kind == .acceptAndShip && decision.primary?.enabled == true)
+        #expect(kinds(decision.more).prefix(3) == [.reviewDetails, .discard, .accept], "commit without pushing is still there")
         #expect(!kinds(decision.more).contains(.sendGuidance) && decision.takesGuidance)
         #expect(decision.secondary?.kind == .openDiff, "what changed is one plain button beside Accept, not in the menu")
         #expect(!kinds(decision.more).contains(.openDiff))
@@ -200,11 +200,11 @@ import Testing
         }
         for blank in ["", "  \n"] {
             let empty = review(blank)
-            #expect(empty.primary?.kind == .accept && empty.secondary?.kind == .openDiff && empty.takesGuidance)
+            #expect(empty.primary?.kind == .acceptAndShip && empty.secondary?.kind == .openDiff && empty.takesGuidance)
         }
         let writing = review("handle the empty list")
         #expect(writing.primary?.kind == .sendGuidance && writing.primary?.enabled == true)
-        #expect(writing.secondary?.kind == .accept, "the decision is still there beside the send")
+        #expect(writing.secondary?.kind == .acceptAndShip, "the decision is still there beside the send")
         #expect(kinds(writing.more).contains(.openDiff) && writing.takesGuidance)
         #expect(review("go on", grants: true).primary?.enabled == false, "a send waits for a grant being saved")
         // Not in review (a turn running, accepted): no field.

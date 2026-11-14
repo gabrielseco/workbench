@@ -98,6 +98,7 @@ extension ProjectStore {
         case .approveAndRun, .run: await approveAndRun()
         case .stopTurn, .stopAdvice: await stopTurn()
         case .accept: await accept()
+        case .acceptAndShip: await acceptAndShip()
         case .ship: await ship()
         case .reviewPR, .reviewAgain: await reviewPullRequest()
         case .merge: await mergePullRequest()

@@ -166,7 +166,8 @@ this PR (the "Layout" section describes a 220 pt spine rail and per-step screens
 Cut in two: **4a** (core and CLI) is `[review] auto_advance` and the goal's `auto_advance:` key, one switch for the advice the core already runs
 by itself with `[review] auto` (the check and the verifier already run after every turn); **4b** is the app's switch in the Run settings. It is
 `[review]`, not the `[run]` this section first said: `[run]` is the table that starts the verifier's app. Decided with the user: no
-auto-accept, no one-press accept-and-ship. The text below is the first plan and is superseded where it differs.
+auto-accept, and nothing that accepts or ships without a press of the person's. (Later, also decided with the user: the review's one press may be
+**Accept and ship**, which is still a press; plain Accept is in the menu.) The text below is the first plan and is superseded where it differs.
 
 
 `[run] auto_advance` (default `false`) plus a per-goal override. When on, a passing turn goes to check, verify and judge without a
