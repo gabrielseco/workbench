@@ -240,6 +240,23 @@ import Testing
         #expect(ran)
     }
 
+    @Test func aMovedOnLineBelongsToTheThreadThatSaidIt() async throws {
+        let (store, a) = try await store(GoalActions())
+        let other = try await AppFixture()
+        keptBusyFixtures.append(other)
+        try await other.addThread("t1", approved: true)
+        let hold = Gate()
+        let first = Task { await store.working("Reviewing…") { await hold.wait() } }
+        try await until("the review is working") { store.busy == "Reviewing…" }
+        await store.switchTo(other.project.root.path)
+        await store.working("Checking…") { store.nowWorking("Accepting…") }
+        #expect(store.busy == nil)
+        await store.switchTo(a.project.root.path)
+        #expect(store.busy == "Reviewing…", "the other thread's line was not rewritten")
+        hold.open()
+        await first.value
+    }
+
     @Test func anActionThatFailsStopsSayingItIsWorking() async throws {
         struct Refused: Error, CustomStringConvertible { var description: String { "refused" } }
         let actions = GoalActions(acceptPlan: { _, _ in throw Refused() }, discardPlan: { _, _ in throw Refused() })

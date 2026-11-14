@@ -326,7 +326,7 @@ struct RecentProject: Equatable, Identifiable {
         if let doing = mine.busyText { return actionError = "Still busy: \(doing)" }
         setBusy(text, in: mine)
         defer { if !mine.awaitingRun { setBusy(nil, in: mine) } }
-        await body()
+        await Self.$workingSession.withValue(mine) { await body() }
     }
 
     // MARK: Goal actions
