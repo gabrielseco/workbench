@@ -35,8 +35,8 @@ struct RecentProject: Equatable, Identifiable {
     var mode: WindowMode = .thread
     /// The Tasks screen's data, read from the core while that screen is shown.
     let tasks = TasksModel()
-    /// The projects whose Done section is open in the inbox (by path); closed unless the person opened it.
-    var inboxDoneOpen: Set<String> = []
+    /// What the inbox keeps for the session: which Done sections are open, where rows are drawn while they settle.
+    let inboxRail = InboxRailState()
     /// The rail lists the inbox of every project (the top tile), not the open project's own; and whether its Done section is open.
     var allProjects = false
     var railFocused = false

@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// The project's threads as an inbox (P26): Needs you, Waiting, and Done (collapsed, with how many it holds). A click shows that thread; it
+/// The project's threads as an inbox (P26): Needs you, Working, Waiting, and Done (collapsed, with how many it holds). A click shows that thread; it
 /// starts and stops nothing.
 struct InboxView: View {
     var store: ProjectStore
     var model: InboxModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The screen is what is observed, so the highlight follows it; `currentThread` is not.
     private var shownThread: String? {
@@ -18,7 +19,8 @@ struct InboxView: View {
         LazyVStack(alignment: .leading, spacing: Space.xxs) {
             if let composing = model.composing { RailRowView(row: composing, selected: true) {} }
             section(.needsYou, model.needsYou, tone: .amber, shown: shown, selectedHere: selectedHere)
-            section(.waiting, model.waiting, tone: .blue, shown: shown, selectedHere: selectedHere)
+            section(.working, model.working, tone: .blue, shown: shown, selectedHere: selectedHere)
+            section(.waiting, model.waiting, tone: .secondary, shown: shown, selectedHere: selectedHere)
             if model.finishedCount > 0 {
                 InboxSectionHeader(title: InboxSection.done.title, count: model.finishedCount, tone: .secondary)
                 ForEach(model.done) { row in rowView(row, shown: shown, selectedHere: selectedHere) }
@@ -30,6 +32,8 @@ struct InboxView: View {
                     .help(InboxModel.olderHelp(model.older))
             }
         }
+        // A row that changes section glides there instead of snapping; with Reduce Motion it just moves.
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: model.listed.map(\.id))
         .accessibilityLabel("Inbox")
     }
 

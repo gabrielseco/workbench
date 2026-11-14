@@ -23,10 +23,11 @@ struct AllInboxRow: Equatable, Identifiable {
 
 extension ProjectInboxRows: Identifiable { var id: String { path } }
 
-/// The inbox of every project on the rail (P26 slice 4b): the same three sections as one project's, with the rows of all of them. Within a
+/// The inbox of every project on the rail (P26 slice 4b): the same four sections, with the rows of all of them. Within a
 /// section the projects keep the rail's order and each its own order (newest first), so the list is stable between reads. Pure.
 struct AllInboxModel: Equatable {
     var needsYou: [AllInboxRow]
+    var working: [AllInboxRow]
     var waiting: [AllInboxRow]
     /// The finished threads listed now: all of them when Done is open, else only the one on screen.
     var done: [AllInboxRow]
@@ -48,7 +49,8 @@ struct AllInboxModel: Equatable {
         let finished = sections[.done] ?? []
         let listed = doneOpen ? finished : finished.filter { isShown($0, shown) }
         return AllInboxModel(
-            needsYou: sections[.needsYou] ?? [], waiting: sections[.waiting] ?? [], done: listed,
+            needsYou: sections[.needsYou] ?? [], working: sections[.working] ?? [],
+            waiting: sections[.waiting] ?? [], done: listed,
             doneHidden: finished.count - listed.count, older: projects.reduce(0) { $0 + $1.older })
     }
 
@@ -58,11 +60,11 @@ struct AllInboxModel: Equatable {
     }
 
     /// Every row listed, in the order they are drawn.
-    var listed: [AllInboxRow] { needsYou + waiting + done }
+    var listed: [AllInboxRow] { needsYou + working + waiting + done }
 
     /// The id the arrow keys start from: the thread on screen, in its project.
     static func id(project: String, thread: String) -> String { project + "|" + InboxRow.thread(thread) }
 
     var finishedCount: Int { done.count + doneHidden }
-    var isEmpty: Bool { needsYou.isEmpty && waiting.isEmpty && finishedCount == 0 }
+    var isEmpty: Bool { needsYou.isEmpty && working.isEmpty && waiting.isEmpty && finishedCount == 0 }
 }

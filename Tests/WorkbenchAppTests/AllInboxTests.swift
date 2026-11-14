@@ -45,10 +45,11 @@ import WorkbenchCore
         let web = project("web", [row("w1", .broken), row("w2", .idle), row("w3", .idle, finished: true)])
         let model = AllInboxModel.derive([api, web], doneOpen: true)
         #expect(model.needsYou.map(\.row.key) == ["a1", "w1"], "a broken thread needs you; projects in the rail's order")
-        #expect(model.waiting.map(\.row.key) == ["a2", "w2"])
+        #expect(model.working.map(\.row.key) == ["a2"] && model.waiting.map(\.row.key) == ["w2"])
         #expect(model.done.map(\.row.key) == ["a3", "w3"] && model.doneHidden == 0)
         #expect(model.needsYou.map(\.initials) == ["AP", "WE"], "each row says whose it is")
-        #expect(Set((model.needsYou + model.waiting + model.done).map(\.id)).count == 6, "one row each, ids that never meet")
+        let every = model.needsYou + model.working + model.waiting + model.done
+        #expect(Set(every.map(\.id)).count == 6, "one row each, ids that never meet")
     }
 
     @Test func doneIsOneCountUntilItIsOpened() {
