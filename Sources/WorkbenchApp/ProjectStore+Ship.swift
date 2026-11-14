@@ -34,10 +34,11 @@ extension ProjectStore {
     /// Accept, then Ship, for the thread the press was made on. Stops at the first step that does not work (the error is shown), so an
     /// accepted thread that did not ship is the ordinary "accepted, not shipped yet" state with its Ship button.
     func acceptAndShip() async {
-        let (pressed, session) = (currentThread, current)
+        let (pressed, session, mine) = (currentThread, current, generation)
         guard await accept() else { return }
         // Ship reads the thread on screen: if the person moved on while the commit was made, shipping would publish another thread.
-        guard currentThread == pressed else {
+        // Neither the thread nor the project (`generation` moves per open) may have changed: the same name elsewhere is not it.
+        guard currentThread == pressed, generation == mine else {
             session.notice = "Accepted. Not shipped, since you left the thread: ship it from there."
             return
         }
