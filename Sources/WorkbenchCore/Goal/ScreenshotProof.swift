@@ -35,5 +35,27 @@ public enum ScreenshotProof {
         return trimmed.lowercased().hasPrefix("screenshot:") && names(in: trimmed) == nil
     }
 
+    /// A drafter's `screenshot:` proof whose names are phrases ("category edit screen") with each turned into one valid
+    /// token ("category-edit-screen"); any other proof, and a usable one, comes back as it was.
+    public static func repaired(_ proof: String) -> String {
+        guard isMalformed(proof), let colon = proof.firstIndex(of: ":") else { return proof }
+        var unique: [String] = []
+        var sources: [String: String] = [:]
+        for part in proof[proof.index(after: colon)...].split(separator: ",", omittingEmptySubsequences: false) {
+            let mapped = part.lowercased().map { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) ? $0 : "-" }
+            let words = String(mapped).split(separator: "-", omittingEmptySubsequences: true)
+            let slug = String(words.joined(separator: "-").prefix(64))
+            // One name that cannot be repaired leaves the proof as it was, so it is refused, not shortened.
+            guard isValidName(slug) else { return proof }
+            // Two different phrases that become one token would drop a screenshot, so refuse.
+            let original = part.trimmingCharacters(in: .whitespaces)
+            if let seen = sources[slug], seen != original { return proof }
+            sources[slug] = original
+            if !unique.contains(slug) { unique.append(slug) }
+        }
+        let fixed = "screenshot: " + unique.joined(separator: ", ")
+        return names(in: fixed) == nil ? proof : fixed
+    }
+
     public static func fileName(for name: String) -> String { "\(name).png" }
 }

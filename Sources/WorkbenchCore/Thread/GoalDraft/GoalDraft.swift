@@ -74,7 +74,9 @@ public enum GoalDraft {
             - title: a few words, one line, at most \(titleLimit) characters.
             - request: what should change, in a few sentences, in the user's terms. No headings.
             - criteria: 1 to \(criteriaLimit) outcomes someone can check. "text" says what is observable; "proof" says how it \
-            will be shown (a test as "test: <Suite>/<name>", a command, or "screenshot: <name>"). Do not number them.
+            will be shown (a test as "test: <Suite>/<name>", a command, or "screenshot: <name>"). Do not number them. \
+            A screenshot name is one token of letters, digits, '.', '_' or '-' (no spaces), such as "category-edit"; several are \
+            separated by commas.
             - out_of_scope: what this task deliberately does not do, one sentence each. [] if nothing.
             - Workbench owns the thread id, base branch, model, budget, timeout, approval and the decision to run. \
             Do not include any of them, and do not say the goal is approved.
@@ -164,7 +166,7 @@ public enum GoalDraft {
             criteria.append(
                 GoalBody.Criterion(
                     id: "c\(index + 1)", text: try line(rawText, "criterion \(index + 1) text", limit: criterionLimit),
-                    proof: try line(rawProof, "criterion \(index + 1) proof", limit: proofLimit)))
+                    proof: ScreenshotProof.repaired(try line(rawProof, "criterion \(index + 1) proof", limit: proofLimit))))
         }
         let scope = try rawScope.map { try line($0, "an out-of-scope item", limit: bulletLimit) }
         let proposal = GoalProposal(title: title, body: GoalBody(request: request, criteria: criteria, outOfScope: scope))

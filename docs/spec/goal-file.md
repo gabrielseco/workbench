@@ -183,7 +183,9 @@ Add exponential retry with jitter to `SyncClient.fetch`, max 5 attempts.
   `out_of_scope`; an answer that sets anything else (`id`, `base`, `model`, `budget_usd`, `spend_policy`,
   `turn_timeout_min`, `push_to`, `status`, `approved…`) is refused, not trimmed. Workbench numbers the criteria `c1`…, and
   the answer must read back through `GoalFile.parse` as the same words (no criterion without a proof, no heading or
-  `TODO(workbench)` in the text, no code fence). The goal is written through `goal new`'s creation path: `status: draft`,
+  `TODO(workbench)` in the text, no code fence). A `screenshot:` proof whose names are phrases is repaired first, each name
+  lowercased into one token (`Category edit screen` -> `category-edit-screen`); if any name cannot be, or there are more than 16,
+  the draft is refused as before. A goal file is never repaired. The goal is written through `goal new`'s creation path: `status: draft`,
   `base` from `--base` or the default, the config's default budget, 30 minutes, no `model`. The drafting model is never the
   goal's coding `model`. A draft that is not a valid goal (failed, timed out, stopped, malformed) creates no thread and no
   file, prints `no draft (cost): reason. Nothing was written.` and exits 1 (3 when stopped); the agent is not retried. The
