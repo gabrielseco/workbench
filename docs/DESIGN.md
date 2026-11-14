@@ -113,8 +113,8 @@ ships, and the mockup gets fixed.
   broken (a failed or timed-out turn, a failed check or verify, a damaged log), grey everything else. Every row also says it in a
   symbol and words, never by colour alone.
 - **The decision card** is the last row: the step and why, from the spine and attention, and **one** prominent button for the next press
-  (Approve and run, Run, Stop turn, Accept work, Ship, Review PR, Merge…, New goal…). While a thread is in review a **guidance field** sits under the card (kept per thread): with text in it the
-  primary reads `Send to agent` and Accept work stays beside it. The other actions of the step (Discard…, Open diff, Open worktree, Open in Herdr, Refresh; Open worktree and Open in Herdr stay after Accept and Ship, as on the
+  (Approve and run, Run, Stop turn, Accept and ship, Ship, Review PR, Merge…, New goal…). While a thread is in review a **guidance field** sits under the card (kept per thread): with text in it the
+  primary reads `Send to agent` and Accept and ship stays beside it. `Accept and ship` commits, then pushes and opens the pull request, and stops at the first step that fails (a thread that was accepted but not shipped then shows `Ship`). Plain `Accept work`, the commit without the push, is in the menu with Discard…. The other actions of the step (Open diff, Open worktree, Open in Herdr, Refresh; Open worktree and Open in Herdr stay after Accept and Ship, as on the
   the old step screens' own) are in a borderless `…` menu beside it, Discard in red, each disabled for
   the same reason as on the step screen. The card decides nothing: `FeedActions.derive` reads `canShip`, `canMerge`, the goal's
   `canApprove` and `RunModel.stoppable`, and picks which one is next. Discard and Merge keep their confirmation; guidance is the field under the card.
