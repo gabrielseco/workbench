@@ -77,7 +77,8 @@ extension ShipError {
         case .pushRejected, .remoteDiverged, .branchMoved: .pushRejected
         case .running, .worktreeMissing, .wrongBranch, .uncommitted, .noOrigin, .ghMissing, .ghNotAuthenticated,
             .notPushed, .changedSinceShown, .changedAfterPush, .goalUnreadable, .pushDestinationDiffers, .notShipped,
-            .pushTargetMissing, .noPullRequest, .pullRequestTextChanged, .baseNotOnOrigin:
+            .pushTargetMissing, .noPullRequest, .pullRequestMerged, .pullRequestMergedWithoutThisWork,
+            .pullRequestTextChanged, .baseNotOnOrigin:
             .refused
         case .invalidName: .usage
         case .remoteUnreachable, .gitFailed, .ghFailed, .pullRequestBehind, .ghEditFailed: .failed

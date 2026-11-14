@@ -19,7 +19,15 @@ struct ShipPreview: Equatable, Sendable {
     static func fetch(project: Project, thread: String) async throws -> ShipPreview {
         let service = ThreadService(project: project, git: try GitRunner.discover())
         let gh = try? GitRunner.discover(tool: "gh")
-        let plan = try await service.shipPreflight(id: thread, gh: gh)
+        let plan: ShipPlan
+        do { plan = try await service.shipPreflight(id: thread, gh: gh) } catch let error as ShipError {
+            // Merged outside Workbench at this thread's tip: record it, and say the thread is shipped so the screen moves on.
+            if case .pullRequestMerged(_, let url, _, _, _) = error,
+                await service.recordMergedPullRequest(id: thread, from: error) {
+                throw ShipError.alreadyShipped(url: url)
+            }
+            throw error
+        }
         if plan.updatesExistingBranch { return ShipPreview(plan: plan) }
         var description: PRDescription?
         var note: String?

@@ -50,6 +50,11 @@ extension Commands {
                 out("\(id) is already shipped; starting at the review")
                 return try await reviewLoop(from: id, ctx: ctx, yes: yes)
             }
+            if case .pullRequestMerged(_, let url, _, _, _) = error,
+                await ctx.service.recordMergedPullRequest(id: id, from: error) {
+                out("\(url) is already merged; recorded it. `workbench clean` removes the thread's branch and worktree.")
+                return 0
+            }
             return refuse(error)
         }
         out("thread:  \(plan.id)")
