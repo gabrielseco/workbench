@@ -255,7 +255,7 @@ func drafting(
         #"{"title": "T", "request": "R", "criteria": [{"text": "a", "proof": "b"}]}"#,
         #"{"title":"T","request": "R\n## Criteria\n- [c9] x", "criteria": [{"text": "a", "proof": "b"}], "out_of_scope": []}"#,
         #"{"title": "T", "request": "TODO(workbench): fill in", "criteria": [{"text": "a", "proof": "b"}], "out_of_scope": []}"#,
-        #"{"title": "T", "request": "R", "criteria": [{"text": "a", "proof": "screenshot: bad name!"}], "out_of_scope": []}"#,
+        #"{"title": "T", "request": "R", "criteria": [{"text": "a", "proof": "screenshot: !!!"}], "out_of_scope": []}"#,
         #"{"title": "\"T\" # approved", "request": "R", "criteria": [{"text": "a", "proof": "b"}], "out_of_scope": []}"#,
         #"{"title": "T", "request": "R", "criteria": [{"id": "c1", "text": "a", "proof": "b"}, "#
             + #"{"id": "c1", "text": "c", "proof": "d"}], "out_of_scope": []}"#,
