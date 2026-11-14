@@ -8,9 +8,9 @@ extension ProjectStore {
     @discardableResult func ship() async -> Bool {
         guard let project, let thread = currentThread, !deciding, busy == nil else { return false }
         // Set before the first await, so a second click while this one is going starts nothing.
-        deciding = true
-        defer { deciding = false }
         let session = current
+        setDeciding(true, in: session)
+        defer { setDeciding(false, in: session) }
         (session.actionError, session.notice) = (nil, nil)
         let mine = generation
         var shipped = false

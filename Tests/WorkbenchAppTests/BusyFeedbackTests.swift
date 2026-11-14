@@ -211,7 +211,7 @@ import Testing
         #expect(!store.threadRunGoing(in: other.project), "a run in another project does not")
         #expect(!store.threadRunGoing(in: nil))
         running.open()
-        await store.untilIdle()
+        await store.untilIdle(nil)
     }
 
     @Test func aThreadWaitingForItsRunDoesNotHoldAnActionInAnotherProjectButUntilIdleWaits() async throws {
@@ -229,12 +229,13 @@ import Testing
         await store.working("Opening the worktree…") { ran = true }
         #expect(ran, "another thread's work does not hold this one")
         var idle = false
-        let waiter = Task { await store.untilIdle(); idle = true }
+        let waiter = Task { await store.untilIdle("t1"); idle = true }
         try await Task.sleep(for: .milliseconds(100))
-        #expect(!idle, "untilIdle waits while the other project's thread still holds the window")
+        #expect(idle, "untilIdle waits only for its own thread, which has nothing going")
         running.open()
         await waiter.value
-        #expect(idle && store.runningProjectPath == nil)
+        try await until("the run has ended") { store.runningProjectPath == nil }
+        #expect(idle)
         ran = false
         await store.working("Opening the worktree…") { ran = true }
         #expect(ran)

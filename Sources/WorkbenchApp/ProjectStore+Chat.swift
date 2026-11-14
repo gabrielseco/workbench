@@ -23,14 +23,14 @@ extension ProjectStore {
         return shown.state.chat?.open == true
     }
 
-    /// A chat turn is going, in any thread: core allows one at a time.
+    /// A chat turn is going, in any thread: what a quit has to end.
     var chatReplying: Bool { sessions.values.contains(where: \.replying) }
 
     /// Says what is in the composer in the chat on screen. The text leaves the composer at once and comes back if core refuses the
     /// message (empty, too long, over a limit, no goal agent, the thread held, ended), so a refusal never loses what was typed. The
     /// screenshots staged for the chat go with it, and stay staged when it is refused.
     @discardableResult func sendChat() async -> Bool {
-        guard let project, let thread = currentThread, !chatReplying, !drafting else { return false }
+        guard let project, let thread = currentThread, !replyingHere, !drafting else { return false }
         let mine = threadSession(project, thread)
         let text = mine.chatDraft
         mine.chatDraft = ""
@@ -46,7 +46,7 @@ extension ProjectStore {
     /// the branch and saves uncommitted work); a thread that is running refuses and the refusal is shown. A refusal returns false, so the card keeps the text. `attachments` are the screenshots sent
     /// with it; the caller clears what it staged when this returns true.
     @discardableResult func startChat(_ message: String, attachments: [URL] = []) async -> Bool {
-        guard let project, !chatReplying, !drafting else { return false }
+        guard let project, !replyingHere, !drafting else { return false }
         // A chat with no thread yet is held under no thread; its errors are shown where the person is.
         let held = threadSession(project, nil)
         let shown = current
@@ -100,15 +100,16 @@ extension ProjectStore {
         return true
     }
 
-    /// Asks the chat turn that is going, in any thread, to end. It still ends with a recorded `stopped`.
+    /// Asks the chat turn of the thread on screen to end. It still ends with a recorded `stopped`.
     func stopChat() {
-        sessions.values.first { $0.replying }?.chatStop?.stop()
+        if current.replying { return current.chatStop?.stop() ?? () }
+        if let project { sessions[ThreadSession.Key(project: project, thread: nil)]?.chatStop?.stop() }
     }
 
     /// Stops the chat turn and waits until it has ended, at most `timeout`.
     func stopChatAndWait(timeout: Duration = .seconds(8)) async {
         guard chatReplying else { return }
-        stopChat()
+        sessions.values.filter(\.replying).forEach { $0.chatStop?.stop() }
         let deadline = ContinuousClock.now + timeout
         while chatReplying, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
     }
@@ -116,7 +117,7 @@ extension ProjectStore {
     /// Has the goal agent draft a goal from the conversation of the chat on screen, into that same thread. A draft that does not
     /// come out leaves the chat and its conversation as they were, with the reason shown.
     @discardableResult func makeChatGoal() async -> Bool {
-        guard let project, let thread = currentThread, !drafting, !chatReplying else { return false }
+        guard let project, let thread = currentThread, !drafting, !replyingHere else { return false }
         let held = threadSession(project, thread)
         held.actionError = nil
         let stop = DraftStop()

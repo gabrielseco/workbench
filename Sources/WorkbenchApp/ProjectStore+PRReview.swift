@@ -79,7 +79,7 @@ extension ProjectStore {
             ciFixStopped(round, "its turn did not finish, so nothing was pushed. Open \(round.thread) to see why and Run again.")
             return
         }
-        await untilIdle()
+        await untilIdle(round.thread)
         guard let project, round.generation == generation, currentThread == round.thread,
             case .thread(let shown) = screen
         else {
