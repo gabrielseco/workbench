@@ -1,4 +1,4 @@
-// The drafter, its three targets (a new thread, a replacement, a chat made into a goal) and their refusals share this file's private types.
+// The drafter, its targets (a new thread, a replacement, a chat or a Claude Code session made into a goal) and their refusals share this file's private types.
 // swiftlint:disable file_length
 import Foundation
 
@@ -8,6 +8,8 @@ public enum GoalDraftTarget: Sendable, Equatable {
     case replace(id: String)
     /// The goal is drafted from a chat thread's conversation and written into that same thread (P22 slice 6b).
     case fromChat(id: String, base: String?)
+    /// The goal is drafted from a Claude Code session of this project, rendered and bounded (`ClaudeSession`), into a new thread.
+    case fromClaudeSession(name: String, base: String?, session: ClaudeSession.Rendered)
 }
 
 extension GoalDraftTarget {
@@ -15,7 +17,7 @@ extension GoalDraftTarget {
     var threadID: String? {
         switch self {
         case .replace(let id), .fromChat(let id, _): id
-        case .newThread: nil
+        case .newThread, .fromClaudeSession: nil
         }
     }
 
@@ -170,6 +172,9 @@ extension ThreadService {
         case .newThread(let name, _):
             return try await newDraft(
                 name: name, prepared: prepared, config: config, abandonActive: abandonActive, attach: attach)
+        case .fromClaudeSession(let name, _, let session):
+            return try await newDraft(
+                name: name, prepared: prepared, config: config, abandonActive: abandonActive, session: session.id, attach: attach)
         }
     }
 
@@ -183,10 +188,18 @@ extension ThreadService {
         guard let config, let agent = config.resolvedGoalAgent else { throw GoalDraftRefusal.noGoalAgent }
         var text = rough.trimmingCharacters(in: .whitespacesAndNewlines)
         var conversation = false
+        var fromSession = false
         if case .fromChat(let id, _) = target {
             // The request is the conversation, bounded by the chat's own limits, not the 16 KiB of a rough request.
             text = try chatTranscript(id)
             conversation = true
+        } else if case .fromClaudeSession(_, _, let session) = target {
+            // Rendered and bounded to the chat's limit already; still checked here, since the target is public.
+            text = session.text
+            guard !text.isEmpty else { throw GoalDraftRefusal.emptyRequest }
+            guard text.utf8.count <= ClaudeSession.limit, !text.contains("\0") else { throw GoalDraftRefusal.requestTooLong }
+            conversation = true
+            fromSession = true
         } else {
             guard !text.isEmpty else { throw GoalDraftRefusal.emptyRequest }
             guard text.utf8.count <= GoalDraft.requestLimit, !text.contains("\0") else { throw GoalDraftRefusal.requestTooLong }
@@ -212,7 +225,7 @@ extension ThreadService {
         var existing: GoalFile?
         var activeAtStart: String?
         switch target {
-        case .newThread(let name, let named):
+        case .newThread(let name, let named), .fromClaudeSession(let name, let named, _):
             guard SafeNames.isThreadID(name) else { throw GoalDraftRefusal.invalidName(name) }
             // With `abandonActive` the active thread is abandoned once the draft is good, not before: a failed draft changes nothing.
             activeAtStart = try ThreadStore(project: project).blockingThread(maxActive: config.maxActiveThreads)
@@ -271,7 +284,7 @@ extension ThreadService {
         let skill = await VerifierSkill.isAvailable(config: config, git: git, repo: project.root, ref: base)
         let prompt = GoalDraft.prompt(
             request: text, instructions: context.instructions, paths: context.paths, pathsCut: context.cut,
-            attachments: images.count, readFiles: sends ? [] : names, conversation: conversation,
+            attachments: images.count, readFiles: sends ? [] : names, conversation: conversation, session: fromSession,
             // A project with the verifier off has none either: the same advice holds.
             verifierSkill: skill)
         let shown: [URL]
@@ -532,7 +545,7 @@ extension ThreadService {
     // MARK: A new thread
 
     private func newDraft(
-        name: String, prepared: PreparedDraft, config: Config?, abandonActive: Bool,
+        name: String, prepared: PreparedDraft, config: Config?, abandonActive: Bool, session: String? = nil,
         attach: @Sendable (AgentExecution) -> Void
     ) async throws -> GoalDraftResult {
         let agent = prepared.agent
@@ -584,8 +597,9 @@ extension ThreadService {
                 let reference = try self.keepProposal(proposal, id: id)
                 let attempts = AttemptLog(log: log, role: "goal", turn: 0, agent: agent)
                 let attempt = try await attempts.start()
-                try await log.append(
-                    .goalDraftStarted, data: .object(Self.agentFields(agent, ["attempt": .string(attempt)])))
+                var started = Self.agentFields(agent, ["attempt": .string(attempt)])
+                if let session { started["from_claude_session"] = .string(session) }
+                try await log.append(.goalDraftStarted, data: .object(started))
                 try await attempts.end(attempt, run.attemptOutcome, reason: run.attemptReason)
                 var finished = Self.agentFields(
                     agent, ["ok": true, "proposal_ref": .string(reference), "attempt": .string(attempt)])
