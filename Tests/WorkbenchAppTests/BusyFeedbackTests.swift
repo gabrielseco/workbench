@@ -227,7 +227,7 @@ import Testing
         #expect(store.busy == nil && store.runningProjectPath == a.project.root.path, "the run is not hidden, only its line")
         var ran = false
         await store.working("Opening the worktree…") { ran = true }
-        #expect(!ran, "one action at a time, whichever thread it is for")
+        #expect(ran, "another thread's work does not hold this one")
         var idle = false
         let waiter = Task { await store.untilIdle(); idle = true }
         try await Task.sleep(for: .milliseconds(100))
@@ -235,6 +235,7 @@ import Testing
         running.open()
         await waiter.value
         #expect(idle && store.runningProjectPath == nil)
+        ran = false
         await store.working("Opening the worktree…") { ran = true }
         #expect(ran)
     }
