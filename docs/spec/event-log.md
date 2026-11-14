@@ -38,7 +38,7 @@ derived from it. If the app crashes, replaying the log gives back the thread's s
 | `branch.ahead` | `workbench ship`, before pushing, found commits added after `accept` | `accepted`, `head`, `commits` |
 | `base.synced` | `workbench sync` merged the base into the thread's branch, or stopped on conflicts | `result`, `base`, `tip`, `behind`, `overlapping`, `head` or `conflicts`, `saved_work` |
 | `pr.opened` | `workbench ship` opened the pull request (P2.5) | `url`, `number`, `branch`, `base`, `head_sha` |
-| `pr.merged` | GitHub said the shipped pull request merged, and a reader that asked wrote it down (the app, when its poll or the thread screen reads the pull request) | `number`, `head_sha` |
+| `pr.merged` | GitHub said the shipped pull request merged, and a reader that asked wrote it down (the app, when its poll or the thread screen reads the pull request; also `workbench ship`, which writes it right after a `pr.opened` for a continued branch's pull request that was merged by hand at this thread's tip) | `number`, `head_sha` |
 | `pr.closed` | GitHub said the shipped pull request was closed without merging, and a reader that asked wrote it down (the app, as for `pr.merged`) | `number`, `head_sha` |
 | `pr.described` | `workbench ship` ran the read-only describing turn for the PR title and body | `ok`, `argv` (without the prompt), `title` when `ok`, `reason` when not (the goal-based body was used) |
 | `pr.refreshed` | `workbench ship` proposed (`stage: proposed`) or applied (`stage: applied`) an update to the text of the pull request a thread continues | `stage`, `ok`, `number`, `title_changed`, `sections` (headings), `argv` and `reason` when a proposal failed |

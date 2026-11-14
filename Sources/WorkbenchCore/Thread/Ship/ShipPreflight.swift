@@ -26,6 +26,10 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
     case pushTargetMissing(String)
     case branchMoved(branch: String, sha: String)
     case noPullRequest(String)
+    /// The branch's pull request merged with exactly this thread's tip: nothing is left to ship (`recordMergedPullRequest` logs it).
+    case pullRequestMerged(branch: String, url: String, number: Int, base: String, head: String)
+    /// The branch's pull request merged without this thread's latest work, which is on no pull request.
+    case pullRequestMergedWithoutThisWork(branch: String, url: String)
     case pullRequestBehind(pr: String)
     case pullRequestTextChanged
     case ghEditFailed(String)
@@ -83,6 +87,11 @@ public enum ShipError: Error, Equatable, Sendable, CustomStringConvertible {
         case .noPullRequest(let branch):
             "origin has \(branch) but no open pull request uses it, and shipping a thread that continues a branch "
                 + "never opens one. Nothing was recorded."
+        case .pullRequestMerged(let branch, let url, _, _, _):
+            "the pull request for \(branch) is already merged (\(url)), so there is nothing left to ship."
+        case .pullRequestMergedWithoutThisWork(let branch, let url):
+            "the pull request for \(branch) was merged (\(url)) without this thread's latest commits, so they are on no "
+                + "pull request. Nothing was pushed or recorded. Start a new thread from the branch's tip to continue."
         case .pullRequestBehind(let pr):
             "GitHub still shows the pull request at \(pr.prefix(12)), not at the commit that was pushed, so it was not "
                 + "recorded. Run `workbench ship` again in a moment; nothing is pushed twice."
@@ -234,6 +243,15 @@ extension ThreadService {
             environment["GH_REPO"] = nil
             let reader = GitRunner(executable: gh.executable, environment: environment, timeout: Self.prTimeout)
             guard let found = try await existingPR(branch: remoteBranch, runner: reader, worktree: worktree) else {
+                if let merged = try await existingPR(
+                    branch: remoteBranch, runner: reader, worktree: worktree, state: "merged") {
+                    guard let mergedHead = merged.head, mergedHead == head else {
+                        throw ShipError.pullRequestMergedWithoutThisWork(branch: remoteBranch, url: merged.url)
+                    }
+                    throw ShipError.pullRequestMerged(
+                        branch: remoteBranch, url: merged.url, number: merged.number, base: merged.base ?? base,
+                        head: mergedHead)
+                }
                 throw ShipError.noPullRequest(remoteBranch)
             }
             pullRequest = ShipPlan.ExistingPR(number: found.number, url: found.url, text: found.text)

@@ -1,6 +1,11 @@
 import Foundation
 import WorkbenchCore
 
+/// The thread's branch's pull request was merged outside Workbench and is now recorded: nothing to ship, and not a failure.
+struct MergedRecorded: Error, Equatable {
+    var url: String
+}
+
 /// What a ship would do, fetched before anything is pushed. `plan` and `description` go back to core exactly as read,
 /// and core refuses them when the branch or the target moved since.
 struct ShipPreview: Equatable, Sendable {
@@ -19,7 +24,15 @@ struct ShipPreview: Equatable, Sendable {
     static func fetch(project: Project, thread: String) async throws -> ShipPreview {
         let service = ThreadService(project: project, git: try GitRunner.discover())
         let gh = try? GitRunner.discover(tool: "gh")
-        let plan = try await service.shipPreflight(id: thread, gh: gh)
+        let plan: ShipPlan
+        do { plan = try await service.shipPreflight(id: thread, gh: gh) } catch let error as ShipError {
+            // Merged outside Workbench at this thread's tip: record it, and say the thread is shipped so the screen moves on.
+            if case .pullRequestMerged(_, let url, _, _, _) = error,
+                await service.recordMergedPullRequest(id: thread, from: error) {
+                throw MergedRecorded(url: url)
+            }
+            throw error
+        }
         if plan.updatesExistingBranch { return ShipPreview(plan: plan) }
         var description: PRDescription?
         var note: String?

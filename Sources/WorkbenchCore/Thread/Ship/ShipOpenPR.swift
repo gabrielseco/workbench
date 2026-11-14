@@ -115,9 +115,11 @@ extension ThreadService {
         var text: PRText?
     }
 
-    func existingPR(branch: String, runner: GitRunner, worktree: URL) async throws -> FoundPR? {
+    func existingPR(
+        branch: String, runner: GitRunner, worktree: URL, state: String = "open"
+    ) async throws -> FoundPR? {
         let args = [
-            "pr", "list", "--head", branch, "--state", "open", "--limit", "10",
+            "pr", "list", "--head", branch, "--state", state, "--limit", "10",
             "--json", "number,url,headRefName,baseRefName,headRefOid,title,body",
         ]
         let result = try await ghRun(args, runner: runner, worktree: worktree)

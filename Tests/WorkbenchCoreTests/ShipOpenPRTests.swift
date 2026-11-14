@@ -35,6 +35,7 @@ struct FakeGH {
               exit 0 ;;
             "pr list")
               f="$d/list"
+              case "$*" in *"--state merged"*) f="$d/list_merged" ;; esac
               case "$*" in *"--json headRefName --limit"*)
                 f="$d/list_open"
                 if [ -f "$d/list_open_fail_once" ]; then

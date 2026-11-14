@@ -144,3 +144,29 @@ extension ThreadService {
         } catch { return .failed }
     }
 }
+
+extension ThreadService {
+    /// A thread that continues a branch whose pull request was merged outside Workbench never got a `pr.opened`, so nothing could
+    /// ever record the merge. When ship found that pull request merged at exactly this thread's tip, writes `pr.opened` and
+    /// `pr.merged` (once, under the log's lock) so the thread goes on to clean. True when the log now says merged.
+    @discardableResult
+    public func recordMergedPullRequest(id: String, from error: ShipError) async -> Bool {
+        guard case .pullRequestMerged(let branch, let url, let number, let base, let head) = error,
+            SafeNames.isThreadID(id)
+        else { return false }
+        do {
+            return try await withLog(id) { log in
+                let events = (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? []
+                guard !events.contains(where: { $0.kind == .prOpened }) else { return false }
+                _ = try await log.append(
+                    .prOpened,
+                    data: [
+                        "url": .string(url), "number": .int(number), "branch": .string(branch),
+                        "base": .string(base), "head_sha": .string(head),
+                    ])
+                _ = try await log.append(.prMerged, data: ["number": .int(number), "head_sha": .string(head)])
+                return true
+            }
+        } catch { return false }
+    }
+}

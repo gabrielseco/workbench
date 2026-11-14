@@ -142,6 +142,53 @@ func runShip(
         #expect(!(try fx.kinds(thread.id)).contains("pr.opened"))
     }
 
+    @Test func aMergedPullRequestIsNamedAndNothingIsPushedOrRecorded() async throws {
+        let fx = try await RunnerFixture()
+        let thread = try await acceptedUpdateThread(fx)
+        let gh = try FakeGH(in: fx)
+        let url = "https://github.com/o/r/pull/7"
+        try """
+            [{"number":7,"url":"\(url)","headRefName":"feature/pr","baseRefName":"main",
+              "headRefOid":"\(String(repeating: "a", count: 40))","title":"t","body":"b"}]
+            """.write(to: gh.dir.appendingPathComponent("list_merged"), atomically: true, encoding: .utf8)
+        let before = try await remoteRef(thread.bare, "refs/heads/feature/pr", fx)
+
+        do {
+            _ = try await fx.service.shipPush(id: thread.id, gh: gh.runner)
+            Issue.record("expected a refusal")
+        } catch let error as ShipError {
+            #expect(error == .pullRequestMergedWithoutThisWork(branch: "feature/pr", url: url))
+            #expect(await fx.service.recordMergedPullRequest(id: thread.id, from: error) == false)
+        }
+        #expect(try await remoteRef(thread.bare, "refs/heads/feature/pr", fx) == before)
+        #expect(!(try fx.kinds(thread.id)).contains("pr.opened"))
+    }
+
+    @Test func aPullRequestMergedAtTheThreadsTipIsRecordedAsOpenedAndMerged() async throws {
+        let fx = try await RunnerFixture()
+        let thread = try await acceptedUpdateThread(fx)
+        let gh = try FakeGH(in: fx)
+        let tip = try await fx.git.run(["rev-parse", "HEAD"], in: thread.worktree)
+            .stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = "https://github.com/o/r/pull/7"
+        try """
+            [{"number":7,"url":"\(url)","headRefName":"feature/pr","baseRefName":"main",
+             "headRefOid":"\(tip)","title":"t","body":"b"}]
+            """.write(to: gh.dir.appendingPathComponent("list_merged"), atomically: true, encoding: .utf8)
+
+        do {
+            _ = try await fx.service.shipPreflight(id: thread.id, gh: gh.runner)
+            Issue.record("expected a refusal")
+        } catch let error as ShipError {
+            #expect(await fx.service.recordMergedPullRequest(id: thread.id, from: error))
+            #expect(await fx.service.recordMergedPullRequest(id: thread.id, from: error) == false)
+        }
+        #expect(try fx.kinds(thread.id).suffix(2) == ["pr.opened", "pr.merged"])
+        do { _ = try await fx.service.shipPreflight(id: thread.id, gh: gh.runner) } catch let error as ShipError {
+            #expect(error == .alreadyShipped(url: url))
+        }
+    }
+
     @Test func theCommandRefusesWithExitSixAndLeavesTheBranchAloneWhenNoPullRequestIsOpen() async throws {
         let fx = try await RunnerFixture()
         let thread = try await acceptedUpdateThread(fx)
