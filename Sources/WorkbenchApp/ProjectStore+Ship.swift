@@ -25,6 +25,8 @@ extension ProjectStore {
                 session.notice = (["Shipped as PR #\(outcome.pr.number): \(outcome.pr.url)"] + [preview.note].compactMap { $0 })
                     .joined(separator: " ")
                 if let failure = outcome.refreshFailure { session.actionError = "\(failure)" }
+            } catch let merged as MergedRecorded {
+                session.notice = "Its pull request was already merged, so nothing was shipped: \(merged.url)"
             } catch { session.actionError = "\(error)" }
             if mine == generation { await reload() }
         }

@@ -1,6 +1,11 @@
 import Foundation
 import WorkbenchCore
 
+/// The thread's branch's pull request was merged outside Workbench and is now recorded: nothing to ship, and not a failure.
+struct MergedRecorded: Error, Equatable {
+    var url: String
+}
+
 /// What a ship would do, fetched before anything is pushed. `plan` and `description` go back to core exactly as read,
 /// and core refuses them when the branch or the target moved since.
 struct ShipPreview: Equatable, Sendable {
@@ -24,7 +29,7 @@ struct ShipPreview: Equatable, Sendable {
             // Merged outside Workbench at this thread's tip: record it, and say the thread is shipped so the screen moves on.
             if case .pullRequestMerged(_, let url, _, _, _) = error,
                 await service.recordMergedPullRequest(id: thread, from: error) {
-                throw ShipError.alreadyShipped(url: url)
+                throw MergedRecorded(url: url)
             }
             throw error
         }

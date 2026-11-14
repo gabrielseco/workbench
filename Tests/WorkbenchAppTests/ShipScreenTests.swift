@@ -78,6 +78,15 @@ private actor Gate {
         #expect(store.notice == "Shipped as PR #7: https://example.test/pull/7")
     }
 
+    @Test func aPullRequestMergedOutsideWorkbenchIsANoticeNotAnErrorAndPublishesNothing() async throws {
+        let recorder = Recorder()
+        let store = try await store(recorder, previewError: MergedRecorded(url: "https://example.test/pull/7"))
+        await store.ship()
+        #expect(recorder.log == ["preview"])
+        #expect(store.actionError == nil)
+        #expect(store.notice == "Its pull request was already merged, so nothing was shipped: https://example.test/pull/7")
+    }
+
     @Test func aPreviewNoteIsShownWithTheShip() async throws {
         let fixture = try await accepted()
         var noted = Self.preview
