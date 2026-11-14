@@ -104,7 +104,7 @@ struct NewThreadScreen: View {
     @State private var panelWidth: CGFloat = FeedLayout.maxColumn
     private var composerWidth: CGFloat { max(0, panelWidth - 2 * 14 - 12) }
 
-    private var busy: Bool { store.drafting || store.chatReplying }
+    private var busy: Bool { store.drafting || store.replyingHere }
 
     /// What the heading says about the agent: nil until the config is read, `.some(nil)` when the project has no goal agent.
     private var headingAgent: String?? {
@@ -134,7 +134,7 @@ struct NewThreadScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onExitCommand { if !busy { store.closeNewThread() } }
         .screenshotDrop(staging, allowed: !busy)
-        .pastesScreenshots({ staging }, allowed: { [store] in !store.drafting && !store.chatReplying })
+        .pastesScreenshots({ staging }, allowed: { [store] in !store.drafting && !store.replyingHere })
         .onDisappear { staging.clear() }
         .task {
             try? await Task.sleep(for: .milliseconds(40))

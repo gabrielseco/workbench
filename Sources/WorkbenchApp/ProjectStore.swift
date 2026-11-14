@@ -58,19 +58,18 @@ struct RecentProject: Equatable, Identifiable {
     /// How long an action waits for goal edits already made before it says they did not finish; tests make it short.
     @ObservationIgnored var goalEditWait: Duration = .seconds(10)
     @ObservationIgnored var openExternal: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
-    /// Callers of `untilIdle`, resumed once no action is working and no decision is being recorded.
+    /// Callers of `untilIdle`, resumed whenever a session's work changes.
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
 
-    /// Returns once no other action holds the window (an "Open in Herdr" still going, a decision being recorded), so work the
-    /// app does on its own is not refused for a click that was already in progress.
-    func untilIdle() async {
-        while anyBusy || deciding {
+    /// Returns once nothing is working or being decided in `thread`, so work the app does on its own is not refused for a click
+    /// that was already in progress. Another thread's work does not hold it.
+    func untilIdle(_ thread: String?) async {
+        while let project, case let mine = session(project, thread), mine.busyText != nil || mine.deciding {
             await withCheckedContinuation { idleWaiters.append($0) }
         }
     }
 
     private func resumeIdleWaiters() {
-        guard !anyBusy, !deciding, !idleWaiters.isEmpty else { return }
         let waiting = idleWaiters
         idleWaiters = []
         waiting.forEach { $0.resume() }
@@ -124,7 +123,8 @@ struct RecentProject: Equatable, Identifiable {
     var ciFix: CIFixProgress?
     /// The shipped pull request's CI as last read, and how often it is read again; the snapshot shows it only for its scope.
     @ObservationIgnored var prCI: PullRequestCIState
-    var deciding = false { didSet { resumeIdleWaiters() } }
+    /// A decision is being recorded in the thread on screen (another thread's does not count).
+    var deciding: Bool { current.deciding }
     @ObservationIgnored let preferences: Preferences
     /// The Run settings inspector is shown beside the feed (or over it, in a narrow window). Set by `setRunSettings`.
     var runSettingsOn: Bool
@@ -568,13 +568,10 @@ private extension ProjectStore {
             sessions[session.key] = session
         }
     }
-    /// Whether any session is working; `untilIdle` waits on it (an action is held back only by its own thread).
-    var anyBusy: Bool { sessions.values.contains { $0.busyText != nil } }
     var ownedRun: ThreadSession.OwnedRun? { ownedRuns.first }
 
     func setBusy(_ text: String?, in session: ThreadSession) {
-        session.busyText = text
-        sessions[session.key] = session
+        (session.busyText, sessions[session.key]) = (text, session)
         settled()
     }
 
@@ -589,6 +586,10 @@ extension ProjectStore {
     /// The session of a thread (or of a chat with no thread yet), the one on screen or the one the store keeps for it.
     func threadSession(_ project: Project, _ thread: String?) -> ThreadSession { session(project, thread) }
 
+    func setDeciding(_ on: Bool, in session: ThreadSession) {
+        (session.deciding, sessions[session.key]) = (on, session)
+        settled()
+    }
     /// Marks a chat turn as going (or over) in `session`, which the store keeps while it replies, wherever the window is.
     func setReplying(_ on: Bool, in session: ThreadSession, stop: DraftStop? = nil) {
         session.replying = on

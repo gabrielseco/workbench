@@ -56,6 +56,8 @@ import WorkbenchCore
     var replying = false
     /// What ends the chat turn this session holds.
     @ObservationIgnored var chatStop: DraftStop?
+    /// A decision (accept, ship, merge, discard) is being recorded in this thread.
+    var deciding = false
     /// An approval is going through.
     var starting = false
     /// A turn the user is stopping: set from Stop until the log says it ended.
@@ -78,7 +80,7 @@ import WorkbenchCore
 
     var awaitingRun: Bool { awaitingAfterTurn != nil }
     /// Nothing is going on for the thread: the session can be dropped.
-    var isIdle: Bool { busyText == nil && awaitingAfterTurn == nil && ownedRun == nil && !replying }
+    var isIdle: Bool { busyText == nil && !deciding && awaitingAfterTurn == nil && ownedRun == nil && !replying }
     /// The thread has said something that is still up (an error, a note, a decision's outcome): going back to it shows it again.
     var hasMessages: Bool {
         actionError != nil || actionNote != nil || notice != nil || goalEditError != nil || pendingDiscard != nil

@@ -79,8 +79,8 @@ extension ProjectStore {
         else { return }
         let session = current
         (session.actionError, session.notice) = (nil, nil)
-        deciding = true
-        defer { deciding = false }
+        setDeciding(true, in: session)
+        defer { setDeciding(false, in: session) }
         var merged = false
         await working("Merging PR #\(status.number)…") {
             do {

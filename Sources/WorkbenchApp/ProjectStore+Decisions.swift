@@ -9,10 +9,10 @@ extension ProjectStore {
     @discardableResult func accept(message: String? = nil) async -> Bool {
         guard let project, let thread = currentThread, !deciding, busy == nil else { return false }
         // Set before the first await, so a second click while this one is going starts nothing.
-        deciding = true
-        defer { deciding = false }
         // What the action says belongs to the thread it was started in, wherever the window is when it ends.
         let session = current
+        setDeciding(true, in: session)
+        defer { setDeciding(false, in: session) }
         (session.actionError, session.notice) = (nil, nil)
         let mine = generation
         var accepted = false
@@ -53,9 +53,9 @@ extension ProjectStore {
 
     func confirmDiscard() async {
         guard let project, let thread = currentThread, let plan = pendingDiscard, !deciding else { return }
-        deciding = true
-        defer { deciding = false }
         let session = current
+        setDeciding(true, in: session)
+        defer { setDeciding(false, in: session) }
         session.pendingDiscard = nil
         await working("Discarding: removing the worktree and branch…") {
             do { try await actions.discard(project, thread, plan) } catch { session.actionError = "\(error)" }
