@@ -65,12 +65,18 @@ public enum ClaudeSession {
         text.wholeMatch(of: #/[A-Za-z0-9][A-Za-z0-9-]{0,127}/#) != nil
     }
 
-    /// The project's session folders in `place`: under its path as given and as resolved (`/tmp` is `/private/tmp`).
+    /// The project's session folders in `place`: under its real path first, as Claude Code names it from its working folder
+    /// (`/tmp` is `/private/tmp`; Foundation's `resolvingSymlinksInPath` would turn that back), then under the path as given.
     static func folders(project root: URL, in place: Place) -> [URL] {
         let projects = place.directory.appendingPathComponent("projects")
-        var names = [projectFolderName(root.standardizedFileURL.path)]
-        let resolved = projectFolderName(root.resolvingSymlinksInPath().path)
-        if resolved != names[0] { names.append(resolved) }
+        let given = root.standardizedFileURL.path
+        var names: [String] = []
+        if let real = realpath(given, nil) {
+            names.append(projectFolderName(String(cString: real)))
+            free(real)
+        }
+        let plain = projectFolderName(given)
+        if !names.contains(plain) { names.append(plain) }
         return names.map { projects.appendingPathComponent($0) }
     }
 

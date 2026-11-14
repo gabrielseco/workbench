@@ -48,6 +48,13 @@ struct SessionHome {
 
     func configDir(_ name: String) -> URL { root.appendingPathComponent(name) }
 
+    /// The project's real path, as Claude Code sees its working folder (`/var` is `/private/var` on macOS).
+    var realProject: String {
+        guard let real = realpath(project.path, nil) else { return project.path }
+        defer { free(real) }
+        return String(cString: real)
+    }
+
     func place(_ name: String) -> ClaudeSession.Place {
         ClaudeSession.Place(directory: configDir(name), source: name)
     }
@@ -55,7 +62,7 @@ struct SessionHome {
     @discardableResult
     func write(_ id: String, _ lines: [String], in config: String = "claude", age: TimeInterval = 0) throws -> URL {
         let folder = configDir(config).appendingPathComponent("projects")
-            .appendingPathComponent(ClaudeSession.projectFolderName(project.standardizedFileURL.path))
+            .appendingPathComponent(ClaudeSession.projectFolderName(realProject))
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent("\(id).jsonl")
         try (lines.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
@@ -184,6 +191,12 @@ struct SessionHome {
         #expect(try ClaudeSession.load(id: nil, project: h.project, places: ordered).text.contains("from the third place"))
         try h.write("55555555", [SessionLines.person("from the first place")], in: "configured", age: 9_999)
         #expect(try ClaudeSession.load(id: nil, project: h.project, places: ordered).text.contains("from the first place"))
+        // A project reached through a symlink (macOS's /var is /private/var): Claude Code names the folder from the real path.
+        let link = h.root.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: h.project)
+        let viaLink = try ClaudeSession.pick(id: nil, project: link, places: ordered)
+        #expect(viaLink.file.path.contains(ClaudeSession.projectFolderName(h.realProject)), "\(viaLink.file.path)")
+        #expect(h.realProject.hasSuffix("/my repo.x/work") && !h.realProject.hasSuffix("/link"))
         // None holds one: every place is listed, and the refusal says to set claude_config_dir.
         let empty = [h.place("a"), h.place("b")]
         do {

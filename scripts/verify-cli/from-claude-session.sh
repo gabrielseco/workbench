@@ -45,7 +45,7 @@ echo "==> clone at $P, base $BASE"
 
 H="$SCRATCH/home"
 CC="$SCRATCH/claude-config"
-ID=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee
+SID=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee
 SESSIONS="$CC/projects/$(folder_of "$P")"
 mkdir -p "$H/.workbench" "$SESSIONS" "$SCRATCH/empty-config"
 SAID="PERSON-MARKER-$$ please make retries back off"
@@ -54,7 +54,7 @@ TOOL="TOOL-RESULT-MARKER-$$"
 { cat "$REAL"; echo
   python3 -I -c 'import json,sys; print(json.dumps({"type":"user","toolUseResult":{"stdout":sys.argv[1]},"message":{"role":"user","content":[{"type":"tool_result","content":sys.argv[1]}]}}))' "$TOOL"
   python3 -I -c 'import json,sys; print(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}}))' "$SAID"
-} >"$SESSIONS/$ID.jsonl"
+} >"$SESSIONS/$SID.jsonl"
 # An older session beside it: without an id the newest is the one drafted from.
 echo '{"type":"user","message":{"role":"user","content":"OLDER-SESSION"}}' >"$SESSIONS/11111111-2222-3333-4444-555555555555.jsonl"
 touch -t 202001010000 "$SESSIONS/11111111-2222-3333-4444-555555555555.jsonl"
@@ -107,7 +107,7 @@ shown "$SCRATCH/ok.out" 10
 THREAD=$(sed -n 's/^drafted \([^ ]*\) .*/\1/p' "$SCRATCH/ok.out")
 check "a draft thread from the newest session" "exit $RC, thread '$THREAD'" \
     bash -c 'test "$1" = 0 && test -n "$2" && grep -q "$3" "$4" && grep -q "^status: draft" "$5/.workbench/threads/$2/goal.md" && grep -q "^base: $6" "$5/.workbench/threads/$2/goal.md"' \
-    _ "$RC" "$THREAD" "$ID" "$SCRATCH/ok.out" "$P" "$BASE"
+    _ "$RC" "$THREAD" "$SID" "$SCRATCH/ok.out" "$P" "$BASE"
 check "the person's words reach the drafter, quoted" "the marker is not in the prompt as a quoted line" \
     bash -c 'test -f "$1" && grep -q "^> PERSON-MARKER-" "$1" && ! grep -q "OLDER-SESSION" "$1"' _ "$FAKE/prompt"
 check "a tool result does not reach the drafter" "the tool result's marker is in the prompt" \
@@ -116,7 +116,7 @@ rm -f "$FAKE/prompt"
 
 # --- 3. an id: that session; unknown and unsafe ids, and --request with it, are refused ---------------------------------------
 
-wbp "$SCRATCH/byid.out" goal draft backoff2 --from-claude-session "$ID" --base "$BASE"
+wbp "$SCRATCH/byid.out" goal draft backoff2 --from-claude-session "$SID" --base "$BASE"
 shown "$SCRATCH/byid.out" 4
 check "an id that names the session drafts too" "exit $RC" \
     bash -c 'test "$1" = 0 && grep -q "^> PERSON-MARKER-" "$2"' _ "$RC" "$FAKE/prompt"
