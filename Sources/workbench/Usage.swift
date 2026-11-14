@@ -40,6 +40,11 @@ let workbenchUsage = """
                                  --from-chat <name-or-id> (instead of <name> and --request): draft from a chat's
                                  conversation into the same thread; refused if it is not a chat, has a goal already,
                                  or has no finished exchange
+                                 --from-claude-session [<session-id>] (instead of --request): draft from a Claude Code
+                                 session of this project (the newest without an id) into a new draft thread; only the
+                                 person's messages and the assistant's text, at most 128 KiB (the oldest after the first
+                                 are left out); looks in claude_config_dir of ~/.workbench/config.toml, CLAUDE_CONFIG_DIR,
+                                 then ~/.claude, and is refused (exit 6) naming them when none holds a session
                                  --replace: <name> is an existing thread (default: the active one); its title, request,
                                  criteria and out of scope are redrafted and an approved goal returns to draft
                                  refused (exit 6) with no [agents.goal]: write the goal by hand with goal new

@@ -33,7 +33,11 @@ with `accept`, `discard` or `abandon`.
    remote ref" when it is not). Pass `--base` only when the user names another one. Write the request, checkable criteria each with a
    `proof:`, and out of scope. A `proof: screenshot: <name>` line holds only the names. A proof may not name a command the run cannot
    execute (not in `[tools] allowed`). Check `budget_usd`, `turn_timeout_min` and `model` in the created `goal.md`: older builds drop them
-   from a `--from` file and use the config defaults. Open the goal for the user with `wb open --goal --editor <name>` (`--print` gives the path; an editor is needed until one is set in the config) so they read the file itself, not a paste. **`wb goal approve` only when the user says to go.**
+   from a `--from` file and use the config defaults. **Hand-off from an interactive session:** when the research was done in a Claude
+   Code session of this project and the work should now be done by Workbench, `wb goal draft <name> --from-claude-session [<session-id>]`
+   has the goal agent draft the goal from that conversation (the newest session without an id; only the person's words and the
+   assistant's text, never tool output) into a new draft thread. It approves and runs nothing: read the draft as any other. If it says no
+   session was found, set `claude_config_dir` in `~/.workbench/config.toml` to the folder `CLAUDE_CONFIG_DIR` names. Open the goal for the user with `wb open --goal --editor <name>` (`--print` gives the path; an editor is needed until one is set in the config) so they read the file itself, not a paste. **`wb goal approve` only when the user says to go.**
 3. **Prerequisites land first.** If the run needs something it cannot create itself (a synced API contract from another repo, a
    migration), land that on the default branch as its own PR before creating the thread. A run's file tools stop at its worktree, so it
    cannot read sibling repos or write under `.claude/`.
