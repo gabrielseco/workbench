@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Runs `workbench` from this checkout after rebuilding it, so a stale binary is never what runs (an old build rejects config keys it does
+# not know). Use it instead of .build/debug/workbench; run it from the project you are driving, the build happens here.
+#   scripts/wb doctor      ~/rogal/workbench/scripts/wb goal new add-retry
+# - builds with the Xcode in .xcode-version (scripts/use-xcode.sh); an incremental build with nothing changed takes a second or two.
+# - build output goes to stderr, so stdout is only workbench's (`--json` stays parseable).
+# - a failed build stops here: the old binary is not run in its place.
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$ROOT/scripts/use-xcode.sh"
+swift build --package-path "$ROOT" --product workbench --quiet >&2 || { echo "wb: build failed in $ROOT; not running a stale binary" >&2; exit 70; }
+exec "$ROOT/.build/debug/workbench" "$@"

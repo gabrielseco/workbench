@@ -15,9 +15,10 @@ with `accept`, `discard` or `abandon`.
 
 ## Before the first command
 
-- **Which binary.** `wb` is the debug build in `~/rogal/workbench/.build/debug/workbench`. After a Workbench PR merges, rebuild it:
-  `git -C ~/rogal/workbench switch main && git -C ~/rogal/workbench pull --ff-only && swift build` there. An old build rejects config keys it
-  does not know (`[run]`) with "unknown table".
+- **Which binary.** Run `wb` as `~/rogal/workbench/scripts/wb ...`: it rebuilds first (pinned Xcode, a second or two when nothing
+  changed) and runs the build, so it is never stale; a failed build stops it. Do not run `.build/debug/workbench` directly: an old build
+  rejects config keys it does not know (`[run]`, `[verifier] provider`) with "unknown table" or "unknown key". It builds the checkout it
+  lives in, so keep `~/rogal/workbench` on a current `main` (`git -C ~/rogal/workbench pull --ff-only`).
 - **Run it from the project directory**, in a shell that has the project's toolchain. A run uses the `PATH` it was started from, so
   an unpinned shell runs the wrong Elixir or Node (this produced a 24k-line contract diff and reformatted files). Until Workbench resolves
   the toolchain itself, start it as `mise exec -- wb ...` in a repo that pins versions.
