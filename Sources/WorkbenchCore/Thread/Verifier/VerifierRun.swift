@@ -128,9 +128,15 @@ struct VerifierRun {
         let files = changed.map { VerifierFile(name: $0.name, bytes: $0.bytes, sha256: $0.sha256) }
         // A Codex verifier that could not drive the app (its sandbox, a missing permission) still ends its run and writes a
         // report, so a screenshot the goal asks for that this attempt did not write means nothing on screen was checked: not a
-        // pass. One an earlier attempt left does not count (an identical re-capture is not told from it either).
+        // pass. One an earlier attempt left does not count, and a re-capture with the same bytes does (it is newer).
         if provider == .codex, answer.failure == nil {
-            let missing = Verifier.missingScreenshots(goal: goal, present: Set(changed.map(\.name)))
+            let written = Set(
+                after.map(\.name).filter { name in
+                    let date = try? FileManager.default.attributesOfItem(
+                        atPath: proofDirectory.appendingPathComponent(name).path)[.modificationDate] as? Date
+                    return date.map { $0 >= began } ?? false
+                })
+            let missing = Verifier.missingScreenshots(goal: goal, present: written)
             if !missing.isEmpty {
                 let more = missing.count > 5 ? ", and \(missing.count - 5) more" : ""
                 let shown = missing.prefix(5).joined(separator: ", ") + more

@@ -231,10 +231,31 @@ private struct SelectionFixture {
             .replacingOccurrences(of: "## Criteria", with: criterion).write(to: goalURL, atomically: true, encoding: .utf8)
         // The earlier attempt's `header.png` is there; the stand-in leaves `selection.png` only.
         let proof = s.fx.project.proofDirectory(id, turn: 1)
-        try Data("old".utf8).write(to: proof.appendingPathComponent("header.png"))
+        let stale = proof.appendingPathComponent("header.png")
+        try Data("old".utf8).write(to: stale)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: stale.path)
         let config = try Config.load(from: s.fx.project.configURL)
         let report = try await s.fx.service.verifier(
             id: id, config: config, again: true, environment: s.fx.options().parentEnvironment, timeout: 20, killGrace: 2)
         #expect(!report.ok && report.reason?.contains("header.png") == true, "\(String(describing: report.reason))")
+    }
+
+    /// A re-capture that comes out byte for byte the same as the earlier one is still this attempt's screenshot.
+    @Test func anIdenticalRecaptureCounts() async throws {
+        let s = try await SelectionFixture(verifier: "provider = \"codex\"\n")
+        let id = try await s.fx.approvedThread()
+        _ = try await s.fx.runner(id).run(s.fx.options("write=a.txt"))
+        let goalURL = s.fx.project.goalURL(id)
+        let criterion = "## Criteria\n\n- [c9] the selection\n  - proof: screenshot: selection\n"
+        try String(contentsOf: goalURL, encoding: .utf8)
+            .replacingOccurrences(of: "## Criteria", with: criterion).write(to: goalURL, atomically: true, encoding: .utf8)
+        // The stand-in writes `selection.png` with these very bytes; the earlier copy is an hour old.
+        let earlier = s.fx.project.proofDirectory(id, turn: 1).appendingPathComponent("selection.png")
+        try Data("png".utf8).write(to: earlier)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: earlier.path)
+        let config = try Config.load(from: s.fx.project.configURL)
+        let report = try await s.fx.service.verifier(
+            id: id, config: config, again: true, environment: s.fx.options().parentEnvironment, timeout: 20, killGrace: 2)
+        #expect(report.ok, "\(String(describing: report.reason))")
     }
 }

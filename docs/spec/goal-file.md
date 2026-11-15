@@ -498,7 +498,7 @@ Notes:
   sandboxes. It ignores the user's Codex config and rules, approves nothing, is bounded by `timeout_min`, writes its last
   message to a file outside the proof folder (`-o`), and reports no cost. A Codex verifier that leaves no `<name>.png` for a
   `screenshot:` proof the goal names ends `ok = false` with the missing names as its reason (its report is kept), so a run
-  that could not look at the screen is not shown as verified; a screenshot an earlier attempt left does not count. A missing `codex` is refused by
+  that could not look at the screen is not shown as verified; a screenshot an earlier attempt left does not count (judged by its modification time against the attempt's start), and an identical re-capture does. A missing `codex` is refused by
   `workbench verifier` and skipped, with the reason, after a turn: Claude never stands in. The skill is read from the thread's base commit, never the
   worktree, as a regular file: a symlink, or a path through one (this repository's `.claude/skills/<name>` points
   into `.agents/`), is refused with the real path to use; missing and empty are refused with the path; text over
