@@ -27,7 +27,7 @@ extension ThreadRunner {
         sessionID: String, resume: Bool, prompt: String, config: Config, goal: Goal, worktree: URL,
         outputDirectory: URL, options: RunOptions
     ) throws -> AgentRequest {
-        var limits = AgentLimits(timeout: options.timeoutOverride ?? TimeInterval(goal.turnTimeoutMin) * 60)
+        var limits = AgentLimits(timeout: options.timeoutOverride ?? goal.turnTimeout)
         limits.killGrace = options.killGrace
         let agent = config.resolvedRunAgent(goalModel: goal.model)
         if agent.provider == .codex {

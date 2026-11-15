@@ -59,7 +59,7 @@ extension TaskRunner {
         defer { access?.remove() }
         var request = ReadOnlyRequest(
             prompt: prompt, workingDirectory: checkout, model: agent.model, budget: budget,
-            timeout: TimeInterval((task.timeoutMin ?? Self.defaultReportTimeoutMinutes) * 60),
+            timeout: .minutes(task.timeoutMin ?? Self.defaultReportTimeoutMinutes),
             reasoningEffort: agent.reasoningEffort, tools: .read, scratch: scratch, turn: "report")
         request.mcp = access
         let chosen: any ReadOnlyAgent
