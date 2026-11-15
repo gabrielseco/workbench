@@ -1,6 +1,5 @@
 import Foundation
 
-/// One criterion's verdict from the advisory judge.
 public struct JudgeCriterion: Sendable, Equatable {
     public var id: String
     public var met: Bool
@@ -34,7 +33,6 @@ public struct JudgeInput: Sendable, Equatable {
     public var check: Review.Check?
     /// The last lines of the check's output, when it did not pass.
     public var checkOutput: String?
-    /// The latest verifier run, or its skip.
     public var verifier: Review.Verifier?
     /// Screenshot file names, relative to the judge's working directory, that it may look at.
     public var screenshots: [String]

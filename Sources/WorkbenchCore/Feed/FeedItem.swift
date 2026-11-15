@@ -25,7 +25,6 @@ public struct FeedItem: Sendable, Equatable, Identifiable {
         case earlierNotShown(count: Int)
     }
 
-    /// One task of the agent's own list in a turn.
     public struct PlanTask: Sendable, Equatable {
         public enum State: String, Sendable, Equatable { case pending, working, done }
         public var text: String

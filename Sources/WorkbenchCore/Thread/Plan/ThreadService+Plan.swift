@@ -9,7 +9,6 @@ public struct PlanResult: Sendable, Equatable {
     public var ref: String?
     public var costUSD: Double?
     public var truncated: Bool
-    /// Why there is no plan.
     public var failure: String?
     /// Something to tell the person that did not stop the plan, such as a checkout that could not be removed.
     public var warning: String?
@@ -54,7 +53,6 @@ public enum PlanRefusal: Error, Equatable, Sendable, CustomStringConvertible {
     }
 }
 
-/// A plan as written to the thread's folder.
 private struct SavedPlan {
     var text: String
     var truncated: Bool

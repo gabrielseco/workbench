@@ -84,7 +84,6 @@ enum Spawner {
     }
 }
 
-/// How a child ended.
 public enum Termination: Equatable, Sendable {
     case exited(Int32)
     case signaled(Int32)

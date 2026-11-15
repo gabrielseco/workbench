@@ -10,7 +10,6 @@ struct ProjectInboxRows: Equatable {
     var older = 0
 }
 
-/// A row of the inbox of all projects: the row, and the project it is in.
 struct AllInboxRow: Equatable, Identifiable {
     var project: ProjectInboxRows.ID
     var name: String

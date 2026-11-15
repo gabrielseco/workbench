@@ -6,7 +6,6 @@ import WorkbenchCore
 struct AutoAdviceSetting: Equatable {
     /// The goal's own `auto_advance`; nil follows the project.
     var goalSays: Bool?
-    /// The project's `[review] auto_advance`.
     var projectSwitch = false
     /// The project's `[review] auto`: when it lists anything, it decides and the switch adds nothing.
     var projectList: [String] = []
@@ -24,7 +23,6 @@ struct AutoAdviceSetting: Equatable {
 
     static let label = "Run the judge and review stages by themselves"
 
-    /// The advice runs by itself after a passing turn.
     var on: Bool { !steps.isEmpty }
 
     /// The switch changes something only while the project has not said which steps itself.

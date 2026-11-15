@@ -62,7 +62,6 @@ extension ProjectStore {
         }
     }
 
-    /// What setup did, in a sentence.
     nonisolated static func setupNote(_ report: ProjectSetup.Report) -> String {
         let config = report.wroteConfig ? "Workbench is set up" : "Workbench kept the config that was there"
         guard let agent = report.goalAgent else {

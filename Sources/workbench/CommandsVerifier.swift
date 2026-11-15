@@ -49,7 +49,6 @@ extension Commands {
 }
 
 extension Commands {
-    /// The lines `run` prints for an automatic verifier.
     static func printVerifierNotice(_ notice: RunNotice) {
         switch notice {
         case .verifierStarted(_, let skill):

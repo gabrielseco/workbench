@@ -1,6 +1,5 @@
 import Foundation
 
-/// What a read-only turn may use besides its prompt.
 public enum ReadOnlyTools: Sendable, Equatable {
     /// Reading the request's folder (the plan turn).
     case read

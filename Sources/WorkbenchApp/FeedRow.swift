@@ -140,9 +140,9 @@ struct GoalCardRow: View {
     @State private var showAllRequest = false
     /// A read-only request this long is folded, as on the Goal screen.
     static let foldedRequest = 500
-    /// Criteria shown on the summary; a longer list is the editor's to show whole.
     /// The column a criterion's id (c1, c2) sits in, so the words after it line up.
     static let idColumn: CGFloat = 28
+    /// Criteria shown on the summary; a longer list is the editor's to show whole.
     static let shownCriteria = 6
 
     private var rows: [GoalModel.Row] { goal?.rows ?? [] }

@@ -70,7 +70,6 @@ struct PRReviewRound: Sendable {
     /// that setup (a lock on the repository's `FETCH_HEAD`) is let go, so the agent's minutes do not block another run.
     var setupDone: (@Sendable () -> Void)?
 
-    /// Provider and model this stage resolves to.
     var agent: ResolvedAgent { config.resolvedReviewAgent(stage: stage.name) }
     var executable: String { agent.provider == .codex ? settings.codexPath : config.executable(for: agent.provider) }
 

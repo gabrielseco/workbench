@@ -91,7 +91,6 @@ public struct HerdrClient: Sendable {
 
 /// What opening a folder in Herdr did.
 public struct HerdrOpened: Equatable, Sendable {
-    /// The space Herdr shows the folder in.
     public var space: String
     /// The folder already had a space: it was brought forward, not made.
     public var alreadyOpen: Bool
@@ -99,7 +98,6 @@ public struct HerdrOpened: Equatable, Sendable {
 
 /// What handing a goal to Herdr did.
 public struct HerdrHandoff: Equatable, Sendable {
-    /// The space Herdr shows the worktree in.
     public var space: String
     /// The worktree already had a space: it was brought forward and nothing was typed into it.
     public var alreadyOpen: Bool
@@ -270,7 +268,6 @@ public struct HerdrOpener: Sendable {
             code: "no_window", message: "Herdr was started but its window did not come up within \(Int(startupWait)) seconds")
     }
 
-    /// The space whose folder is `folder`.
     func space(showing folder: URL, in spaces: [JSONValue]) -> String? {
         let wanted = folder.resolvingSymlinksInPath().path
         return spaces.first { space in

@@ -7,7 +7,6 @@ public enum GoalStatus: String, Sendable, Equatable {
 
 /// Where a goal stands relative to its approval.
 public enum ApprovalState: Sendable, Equatable {
-    /// Never approved.
     case draft
     /// Approved and unchanged since: this is the only state the runner accepts.
     case approved

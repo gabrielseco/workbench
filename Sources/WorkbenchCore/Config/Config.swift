@@ -10,7 +10,7 @@ public struct ToolSet: Sendable, Equatable {
     public var denied: [String]
 }
 
-/// `.workbench/config.toml`.
+/// `app_type` in `.workbench/config.toml`.
 public enum AppType: String, Sendable, Equatable, CaseIterable {
     case web
     case desktop
@@ -220,7 +220,6 @@ public struct Config: Sendable, Equatable {
             return (out, entry.line)
         }
 
-        // Root
         var claudePath = defaultClaudePath
         if let (value, line) = string("", "claude_path") {
             if value.isEmpty || value.contains("\n") || value.contains("\0") {
@@ -335,7 +334,6 @@ public struct Config: Sendable, Equatable {
         let copy = checkedList("copy", WorktreeCopier.patternProblem)
         let readAlso = checkedList("read_also", limit: ReadAlso.maxEntries, ReadAlso.entryProblem)
 
-        // [tools]
         guard let toolsTable = document.tables["tools"] else {
             fail(.missingKey, nil, "missing [tools] table with 'available'")
             throw ConfigError(problems: sorted(problems))
@@ -500,7 +498,6 @@ public struct Config: Sendable, Equatable {
         return lines.joined(separator: "\n")
     }
 
-    /// A starting point for `workbench init`.
     public static let exampleTOML = """
         # Workbench project config. One fixed tool set per project.
 

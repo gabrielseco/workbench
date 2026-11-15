@@ -186,7 +186,6 @@ public actor ThreadRunner {
             }
         }
 
-        // What to say this turn.
         let anySuccess = await anyTurnSucceeded()
         let lastTurn = await log.lastTurn
         var prompt = ""
@@ -223,7 +222,6 @@ public actor ThreadRunner {
             codexFollowUp = codexRerun(store: store, lastTurn: lastTurn, config: config, goal: goal)
         }
 
-        // The worktree.
         var worktree: URL
         var baseCommit: String?
         let baseUpdated = worktreeManager.exists(threadID) ? false : try await updateBaseBeforeStart(goal: goal)

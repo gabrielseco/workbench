@@ -106,12 +106,10 @@ public actor EventLogWriter {
     public var openTurn: Int? { state.openTurn }
     /// The turn whose check started and has not ended, if any.
     public var openCheck: Int? { state.openCheck }
-    /// The `seq` the next append will get.
     public var nextSeq: Int { state.nextSeq }
     /// The highest turn number started so far, 0 for a thread with no turns.
     public var lastTurn: Int { state.lastTurn }
 
-    /// Appends a structured event.
     @discardableResult
     public func append(_ kind: EventKind, turn: Int = 0, data: JSONValue = [:]) throws -> Event {
         let event = Event(seq: state.nextSeq, ts: timestamp(), turn: turn, kind: kind, data: data)

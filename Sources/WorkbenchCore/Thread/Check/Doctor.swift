@@ -42,7 +42,6 @@ enum ProjectLock {
     static func release(_ fd: Int32) { close(fd) }
 }
 
-/// How one declared command did when doctor ran it.
 public struct DoctorStep: Sendable, Equatable {
     public enum Outcome: Sendable, Equatable {
         case passed
@@ -51,7 +50,6 @@ public struct DoctorStep: Sendable, Equatable {
         case stopped
         /// Not run, with why ("setup failed", "interrupted").
         case skipped(String)
-        /// The config does not declare it.
         case notDeclared
     }
 
@@ -76,7 +74,6 @@ public struct DoctorVerifier: Sendable, Equatable {
     public var screenRecording: String?
 }
 
-/// What one responsibility resolves to, as `doctor` shows it.
 public struct DoctorAgent: Sendable, Equatable {
     public var role: AgentRole
     /// Nil only for goal drafting with no `[agents.goal]`: it stays manual.

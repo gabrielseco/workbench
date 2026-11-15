@@ -59,7 +59,6 @@ enum Theme {
     static var raised: Color { adaptive(.raised) }
     /// A panel: the chat's composer.
     static var panel: Color { adaptive(.panel) }
-    /// A hairline border.
     static var line: Color { adaptive(.line) }
     /// The artboards' second and third text colours: a step that is done, and one still to come. Readable on the canvas in both appearances,
     /// which the system's `.tertiary` is not on the light one.

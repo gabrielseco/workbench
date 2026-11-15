@@ -2,7 +2,6 @@ import Foundation
 
 /// Where a thread stands for the person deciding about it.
 public enum ReviewStatus: Sendable, Equatable {
-    /// No turn has started.
     case empty
     /// A turn or its check is open.
     case running
@@ -43,7 +42,6 @@ public struct Review: Sendable, Equatable {
     public struct PRReview: Sendable, Equatable {
         public var round: Int
         public var pr: Int?
-        /// The commit of the pull request that was reviewed.
         public var headSHA: String?
         /// `clean` or `fix`; nil when the round has no verdict.
         public var verdict: String?
@@ -156,7 +154,6 @@ public struct PlanRecord: Sendable, Equatable {
 public struct ThreadLineage: Sendable, Equatable {
     /// The thread this one follows (itself a follow-up from the second round on).
     public var parent: String
-    /// The thread that opened the pull request.
     public var root: String
     /// 1 for the first follow-up of the root, 2 for the next.
     public var round: Int
@@ -168,7 +165,6 @@ public struct PullRequestRecord: Sendable, Equatable {
     public var url: String
     /// The commit the pull request was opened at; nil when the event carries none.
     public var headSHA: String?
-    /// The `seq` of the `pr.opened` event.
     public var seq: Int
 }
 
@@ -239,7 +235,7 @@ public struct ThreadState: Sendable, Equatable {
     public var chat: ChatState?
     /// A thread made by `workbench chat`: it has no goal until one is made from it, and no worktree.
     public var isChat = false
-    /// The `seq` of the latest `turn.ended`, nil when none has ended.
+    /// Nil when no turn has ended.
     public var lastTurnEndedSeq: Int?
     /// What the latest ended turn cost; nil when it reported none (never 0).
     public var lastTurnCostUSD: Double?

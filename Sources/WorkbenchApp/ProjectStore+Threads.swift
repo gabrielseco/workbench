@@ -121,7 +121,6 @@ extension ProjectStore {
         if result == .failed { threads.unwrittenOutcomes[thread] = status } else { threads.unwrittenOutcomes[thread] = nil }
     }
 
-    /// Tries again the merges whose write failed.
     func retryOutcomeWrites() async {
         guard let project else { return }
         let mine = generation
@@ -157,7 +156,6 @@ extension ProjectStore {
     /// Whether the Done section of the project on screen lists every finished thread.
     var doneOpen: Bool { inboxRail.doneOpen.contains(project?.root.path ?? "") }
 
-    /// Opens or closes the Done section of the project on screen.
     func toggleDoneOpen() {
         let key = project?.root.path ?? ""
         if inboxRail.doneOpen.contains(key) { inboxRail.doneOpen.remove(key) } else { inboxRail.doneOpen.insert(key) }

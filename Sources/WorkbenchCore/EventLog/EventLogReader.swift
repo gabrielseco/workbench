@@ -7,7 +7,6 @@ public struct EventLogContents: Sendable {
     public var problems: [LogProblem]
     /// Bytes after the last newline: a write that was cut short. Not a problem, a crash artifact.
     public var truncatedTail: Data?
-    /// Number of bytes up to and including the last newline.
     public var completeByteCount: Int
     /// A turn that started and never ended, if any.
     public var openTurn: Int?

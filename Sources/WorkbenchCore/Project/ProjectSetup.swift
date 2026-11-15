@@ -10,7 +10,6 @@ public enum ProjectSetup {
         !FileManager.default.fileExists(atPath: project.configURL.path)
     }
 
-    /// What one setup did.
     public struct Report: Sendable, Equatable {
         /// The config was written now; false when one was already there and was left as it was.
         public var wroteConfig: Bool

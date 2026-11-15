@@ -85,7 +85,6 @@ struct ThreadSnapshot: Equatable {
         }
     }
 
-    /// Accepted and not yet shipped: the work is on its branch and no pull request exists.
     var canShip: Bool { state.decision == "accepted" && state.pullRequest == nil && !state.cleaned }
 
     /// Shipped, not cleaned and not known to be merged or closed: the pull request is there to have Codex review.

@@ -10,7 +10,6 @@ extension ThreadRunner {
         }
     }
 
-    /// What the user has allowed for the turn that starts next, read from the log.
     func grantsForNextTurn(config: Config) -> [String] {
         let events = (try? EventLogReader.read(at: project.eventsURL(threadID)).events) ?? []
         return GrantLedger(events: events).patternsForNextTurn(tools: config.tools)

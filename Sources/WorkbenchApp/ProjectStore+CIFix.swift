@@ -12,7 +12,6 @@ struct CIFixProgress: Equatable {
     /// The thread whose CI failed, and the follow-up that fixes it once there is one: the progress is shown on either.
     var parent: String
     var fix: String?
-    /// The failed checks it was started for.
     var checks: [String]
     var generation: Int
 
@@ -24,7 +23,6 @@ struct CIFixProgress: Equatable {
         }
     }
 
-    /// The line the CI banner shows under its rows.
     var line: String {
         let names = checks.joined(separator: ", ")
         return switch phase {

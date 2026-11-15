@@ -79,7 +79,6 @@ public struct SHA256: Sendable {
 
     @inline(__always) private static func rotr(_ x: UInt32, _ n: UInt32) -> UInt32 { (x >> n) | (x << (32 - n)) }
 
-    /// One 64-byte block.
     private mutating func compress(_ block: UnsafeBufferPointer<UInt8>) {
         for i in 0..<16 {
             let j = i * 4

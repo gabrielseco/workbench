@@ -253,7 +253,6 @@ public struct TimerService: Sendable {
         var out: [TimerStatusLine] = []
         func add(_ level: TimerStatusLine.Level, _ text: String) { out.append(TimerStatusLine(level: level, text: text)) }
 
-        // The agent.
         let installed = FileManager.default.fileExists(atPath: paths.plist.path)
         if launchctl == nil {
             let cron = TimerFiles.cron(project: project, workbench: workbench, interval: TimerFiles.defaultInterval)
@@ -281,7 +280,6 @@ public struct TimerService: Sendable {
             add(.warn, "last tick: none yet (the first one comes within the interval)")
         }
 
-        // The tasks.
         let library = TaskLibrary(project: project)
         // An archived task is a reference, not something the timer runs: it is not listed.
         let active = library.activeNames()
@@ -302,7 +300,6 @@ public struct TimerService: Sendable {
             }
         }
 
-        // The machine.
         let plan = TimerWake.plan(for: tasks())
         let rawSched = await probes.sched()
         let canProbe = launchctl != nil

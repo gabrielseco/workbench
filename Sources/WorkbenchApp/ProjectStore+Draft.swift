@@ -66,7 +66,6 @@ extension ProjectStore {
             : "No draft\(cost): \(result.failure ?? "no proposal"). Nothing was written."
     }
 
-    /// Stops the drafter that is running, if any.
     func stopDrafting() { draftStop?.stop() }
 
     /// Stops the drafter and waits until its run has ended, at most `timeout`: the drafter's agent runs in a process group of its

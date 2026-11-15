@@ -40,7 +40,6 @@ enum RunSettingsLayout {
         }
     }
 
-    /// The foot: where the goal is saved, as the goal model names it.
     static func savedTo(_ goal: GoalModel) -> String { "Saved to \(goal.path)" }
 
     static let draftNote = "Settings change while the goal is a draft."

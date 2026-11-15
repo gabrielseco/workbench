@@ -6,6 +6,7 @@ extension ThreadService {
         do { return .success(try await pendingChanges(in: worktree, git: git)) } catch { return .failure(error) }
     }
 
+    /// Porcelain lines, untracked files always included (ignored ones never).
     static func pendingChanges(in worktree: URL, git: GitRunner) async throws -> [String] {
         let result = try await git.run(["status", "--porcelain", "--untracked-files=all"], in: worktree)
         guard result.succeeded else {

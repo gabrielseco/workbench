@@ -10,7 +10,6 @@ public struct DeniedCommandAssessment: Sendable, Equatable {
 
     /// One simple command of the denied text.
     public struct Part: Sendable, Equatable {
-        /// The command as written.
         public var command: String
         public var level: Level
         public var reasons: [String]

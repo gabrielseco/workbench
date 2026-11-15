@@ -76,10 +76,8 @@ public struct TaskHistory: Sendable, Equatable {
     /// The last time the schedule was turned back on (enabled or restored): the slots missed while it was off are not made up.
     public var resumedAt: Date?
 
-    /// Whether a tick may run the task: enabled and not archived.
     public var isScheduled: Bool { enabled && !archived }
 
-    /// A run that started and has no end yet.
     public var openRun: Run? { runs.last.flatMap { $0.outcome == nil ? $0 : nil } }
     public var lastRun: Run? { runs.last }
 

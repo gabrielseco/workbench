@@ -1,6 +1,5 @@
 import Foundation
 
-/// Which tasks a timer should run now.
 public enum TaskTick {
     /// The tasks whose next due time has passed, the earliest first. Only a task that was approved, or has run, has a time to count
     /// from, so a task nobody approved never fires. A task whose approval went stale is still due: running it records

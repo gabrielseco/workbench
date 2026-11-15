@@ -23,7 +23,6 @@ enum ModalBodyHeight {
 }
 
 extension View {
-    /// This content at the height of a modal's body.
     func modalBody(_ height: ModalBodyHeight) -> some View { frame(height: height.points) }
 }
 

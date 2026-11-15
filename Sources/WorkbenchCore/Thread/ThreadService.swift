@@ -427,7 +427,6 @@ public struct ThreadService: Sendable {
         }
     }
 
-    /// Uncommitted work as porcelain lines, untracked files always included (ignored ones never).
     /// `chore: <goal title>`, then the thread id. The type is a guess; edit it with `-m`. The request is left out: with
     /// a task's skill and input files it can pass the 8000-byte limit, and a public repo should not carry the prompt.
     static func defaultCommitMessage(id: String, goalURL: URL) -> String {

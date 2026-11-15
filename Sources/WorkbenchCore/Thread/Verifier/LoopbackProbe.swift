@@ -76,7 +76,6 @@ enum LoopbackProbe {
         }
     }
 
-    /// An address struct copied into the one type that holds either family.
     private static func storage<T>(of address: inout T) -> sockaddr_storage {
         var storage = sockaddr_storage()
         withUnsafeBytes(of: &address) { source in

@@ -263,12 +263,12 @@ extension Commands {
         }
     }
 
-    /// Where a review follow-up came from, and the follow-ups a thread has: the tree `ship --review-loop` builds.
     /// A thread's cost in a list: `$0.37`, or `unknown` when a turn reported none (never `$0.00`).
     static func listCost(_ state: ThreadState) -> String {
         state.knownCostUSD.map { String(format: "$%.2f", $0) } ?? "unknown"
     }
 
+    /// Where a review follow-up came from, and the follow-ups a thread has: the tree `ship --review-loop` builds.
     static func lineageLines(_ state: ThreadState, ctx: Context) -> [String] {
         var lines: [String] = []
         if let lineage = state.lineage {

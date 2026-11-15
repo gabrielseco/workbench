@@ -17,7 +17,6 @@ public struct TaskSummary: Sendable, Equatable {
     public var problem: String?
     public var schedule: String?
     public var fix: TaskFix?
-    /// The MCP tools the task may call, empty for most.
     public var mcpTools: [String] = []
     public var approval: TaskApproval.State
     public var nextDue: Date?
@@ -31,7 +30,6 @@ public struct TaskSummary: Sendable, Equatable {
     public var archived = false
 }
 
-/// The tasks of one project.
 public struct TaskLibrary: Sendable {
     public let project: Project
 
@@ -96,10 +94,10 @@ public struct TaskLibrary: Sendable {
     }
 
     /// Records that the task, as it is now, may run unattended.
-    @discardableResult
     ///
     /// With `expecting`, only the version whose hash that is: a person who approves what they were shown does not approve an edit made
     /// after.
+    @discardableResult
     public func approve(
         _ name: String, expecting hash: String? = nil, now: @escaping @Sendable () -> Date = { Date() }
     ) async throws -> String {

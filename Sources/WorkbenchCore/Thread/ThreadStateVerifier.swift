@@ -14,7 +14,6 @@ extension Review {
         public var durationMs: Int?
         /// What it said last, bounded; empty when it said nothing.
         public var report: String
-        /// The PNGs it recorded as proof.
         public var proof: [ProofFile]
         /// The run began and no end was recorded (still running, or cut off).
         public var open: Bool

@@ -196,7 +196,6 @@ enum FeedLayout {
     static let agentText: CGFloat = 620
 }
 
-/// One step of the phase row, as it is drawn and as VoiceOver says it.
 struct PhaseStep: Equatable {
     var title: String
     var mark: SpineMark

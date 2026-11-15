@@ -5,11 +5,9 @@ extension WorktreeManager {
     public enum BaseUpdate: Sendable, Equatable {
         /// Nothing to update from: no `origin`, `base` is not a local branch, or origin is not known to have it.
         case skipped
-        /// The local branch already had origin's tip.
         case current
         /// The local branch had commits origin does not, and nothing on origin it lacks: it is used as it is.
         case localAhead(Int)
-        /// The local branch was moved forward to origin's tip.
         case fastForwarded(from: String, to: String)
     }
 
@@ -124,7 +122,6 @@ extension WorktreeManager {
         return Int(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    /// The working tree that has `ref` checked out, if any.
     private func checkout(of ref: String) async -> URL? {
         guard let listed = try? await git.run(["worktree", "list", "--porcelain"], in: repoRoot), listed.succeeded
         else { return nil }

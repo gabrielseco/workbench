@@ -124,7 +124,6 @@ public struct ShipPlan: Sendable, Equatable {
     /// The branch on `origin` that is pushed to: `branch`, or the goal's `push_to`.
     public var remoteBranch: String
     public var base: String
-    /// Our tip.
     public var head: String
     /// The URL of `origin` with any credentials removed, safe to print and to record.
     public var origin: String

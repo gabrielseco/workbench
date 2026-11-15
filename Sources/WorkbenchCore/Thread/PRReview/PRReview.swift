@@ -223,11 +223,9 @@ public struct PRReviewResult: Sendable, Equatable {
     public var maxRounds: Int
     public var headSHA: String
     public var verdict: PRReviewVerdict?
-    /// Why there is no verdict.
     public var failure: String?
     /// Relative to the thread's directory.
     public var findingsPath: String?
-    /// The reviewer's answer, as stored.
     public var findings: String?
     public var warnings: [String]
     /// Why the stage did not run: its `applies_to` matches nothing the pull request changes. Never a pass.

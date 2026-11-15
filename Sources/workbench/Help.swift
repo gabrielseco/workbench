@@ -5,7 +5,6 @@ import Foundation
 /// here is only what the usage block leaves out: what a command changes and one example.
 enum Help {
     struct Entry: Equatable {
-        /// The leading words of the synopsis: `["plan", "show"]`, `["grant"]`.
         var words: [String]
         /// The synopsis alone, up to the gap before the description: `plan show [id]`.
         var synopsis: String

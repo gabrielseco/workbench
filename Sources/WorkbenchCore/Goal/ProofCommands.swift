@@ -4,7 +4,6 @@ import Foundation
 public struct ProofWarning: Sendable, Equatable {
     public var criterion: String
     public var command: String
-    /// Why it cannot run, in words.
     public var reason: String
     /// The `[tools] allowed` entry that would permit it, when adding one would.
     public var suggestion: String?

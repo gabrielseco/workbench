@@ -6,7 +6,6 @@ import WorkbenchCore
 struct ModalState {
     /// The review of the latest turn, with every criterion and where it stands.
     var reviewingDetails = false
-    /// The merge question for the thread's pull request.
     var confirmingMerge = false
     /// The file whose diff is open over the review.
     var diffPath: String?

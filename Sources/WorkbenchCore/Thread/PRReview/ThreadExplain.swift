@@ -17,7 +17,6 @@ public enum ReviewDiffSide: String, Sendable, Equatable {
     case right = "RIGHT"
 }
 
-/// A pull request review thread: where it is and what was said, in order.
 public struct ReviewThreadContext: Sendable, Equatable {
     public var id: String
     public var pr: Int
@@ -47,7 +46,6 @@ public struct ReviewThreadContext: Sendable, Equatable {
 
 /// Why `explain-thread` will not run. Nothing was spawned.
 public enum ThreadExplainRefusal: Error, Equatable, Sendable, CustomStringConvertible {
-    /// GitHub has no review thread with this id.
     case unknownThread(String)
     /// The thread is on another pull request (or another repository's).
     case otherPullRequest(thread: String, pr: Int, its: String)
