@@ -7,7 +7,7 @@ struct FeedAction: Equatable, Identifiable {
     enum Kind: String {
         case approveAndRun, run, stopTurn, stopAdvice, accept, acceptAndShip, ship, reviewPR, reviewAgain, merge, newGoal
         case discard, sendGuidance, openDiff, openWorktree, openHerdr, runAgain, refreshReview, reviewDetails
-        case showFindings, refreshCI, openPR, fixChecks
+        case showFindings, refreshCI, openPR, fixChecks, fixFindings
     }
 
     var kind: Kind
@@ -54,6 +54,8 @@ struct FeedActionContext {
     var grantsInFlight = false
     /// "Fix failed checks" is going (`CIFixProgress.active`): it is not offered a second time.
     var ciFixing = false
+    /// What the judge and the review stages say is wrong with the work in review.
+    var findings = OpenFindings()
 }
 
 enum FeedActions {
@@ -125,6 +127,18 @@ enum FeedActions {
                 enabled: !c.busy && c.reviewHasFiles)
             worktree()
             more.append(FeedAction(kind: .refreshReview, title: "Refresh", help: "Reads the worktree again after editing it"))
+            // Open findings make the fix the primary press, so the work does not go through on a path that never showed them;
+            // Ship stays beside it for a person who read them and decided to go on.
+            if !writing, !c.findings.isEmpty {
+                more.insert(diff, at: 0)
+                let fix = FeedAction(
+                    kind: .fixFindings, title: "Fix findings",
+                    help: "Starts the next turn with what the judge and the review steps found",
+                    enabled: !c.busy && !c.starting && !c.grantsInFlight)
+                return FeedDecision(
+                    primary: fix, secondary: acceptAndShip, more: more, why: c.findings.summary, title: "Findings to fix",
+                    takesGuidance: true)
+            }
             // Writing turns the primary into the send; Accept stays beside it and Open diff goes in the menu.
             if writing {
                 more.insert(diff, at: 0)

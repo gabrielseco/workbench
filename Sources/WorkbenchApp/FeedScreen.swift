@@ -78,6 +78,9 @@ struct FeedScreen: View {
             DecisionCard(
                 step: step, why: why, decision: decision, perform: perform,
                 route: snapshot.base.map { "\(WorktreeManager.branch(for: snapshot.id)) → \($0)" })
+            if decision.takesGuidance, let findings = store.review?.findings, !findings.isEmpty {
+                FindingsCard(findings: findings)
+            }
             if decision.takesGuidance { GuidanceField(store: store) }
         }
     }

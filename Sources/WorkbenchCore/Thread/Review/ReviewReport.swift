@@ -36,6 +36,8 @@ public struct ReviewReport: Sendable, Equatable {
     /// How far `origin/<base>` has moved on since the branch was cut, as of the last fetch (nothing here touches the network);
     /// nil when the thread has ended, has no worktree, or origin has no such branch.
     public var baseMovement: BaseMovement?
+    /// What the judge and the review stages say is still wrong with the latest turn's work; empty when nothing is.
+    public var openFindings = OpenFindings()
 
     public struct UnavailableStep: Sendable, Equatable {
         public var name: String
@@ -423,7 +425,9 @@ public struct ReviewLoader: Sendable {
             diff: shown,
             threadDirectory: project.threadDirectory(id), branchTip: tip,
             commits: commits?.commits ?? [],
-            commitCount: commits?.count ?? 0, nextSteps: steps, unavailableSteps: unavailable, baseMovement: moved.flatMap { $0 })
+            commitCount: commits?.count ?? 0, nextSteps: steps, unavailableSteps: unavailable, baseMovement: moved.flatMap { $0 },
+            openFindings: OpenFindings.derive(
+                state: state, criteria: criteria, events: events, threadDirectory: project.threadDirectory(id)))
     }
 
     /// What `accept` shows and what it pins, from one read of git: the diff `review` shows, and the full summary (staged

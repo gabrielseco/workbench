@@ -61,6 +61,8 @@ struct ReviewModel: Equatable {
     var unavailable: [String] = []
     /// The base has commits this thread's branch lacks: core's line about them, and the files both sides changed. nil otherwise.
     var baseMoved: BaseMoved?
+    /// What the judge and the review stages say is still wrong with this turn's work; the card lists it and Fix findings sends it.
+    var findings = OpenFindings()
 
     struct BaseMoved: Equatable {
         var line: String
@@ -120,7 +122,8 @@ struct ReviewModel: Equatable {
             baseMoved: report.baseMovement.flatMap { moved in
                 moved.behind > 0 && report.status == .awaitingReview
                     ? BaseMoved(line: moved.line, files: moved.overlapping, filesCut: moved.overlapTruncated) : nil
-            })
+            },
+            findings: report.openFindings)
     }
 
     static func checkText(_ check: Review.Check?) -> String {

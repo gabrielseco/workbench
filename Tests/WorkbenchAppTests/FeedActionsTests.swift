@@ -34,6 +34,20 @@ import Testing
 
     // MARK: The next press, per state
 
+    @Test func openFindingsMakeFixingThePrimaryAndShipStaysBesideIt() throws {
+        let shown = try snapshot(.needsYou)
+        let item = OpenFindings.Item(id: "criterion:c2", source: "Judge", title: "[c2] not met", detail: nil)
+        let findings = OpenFindings(items: [item])
+        let decision = decide(shown) {
+            $0.reviewShown = true; $0.reviewCanDecide = true; $0.reviewHasFiles = true; $0.findings = findings
+        }
+        #expect(decision.primary?.kind == .fixFindings && decision.primary?.enabled == true)
+        #expect(decision.secondary?.kind == .acceptAndShip, "a person who read them can still go on")
+        #expect(decision.why == "Judge: 1 criterion not met" && decision.takesGuidance)
+        let clean = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true }
+        #expect(clean.primary?.kind == .acceptAndShip, "nothing found: Ship is the press, as before")
+    }
+
     @Test func aDraftGoalIsApprovedAndRunFromTheCard() throws {
         let shown = try snapshot(.draft)
         let decision = decide(shown) { $0.goalPill = .draft; $0.goalCanApprove = true }
