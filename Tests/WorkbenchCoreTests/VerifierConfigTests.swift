@@ -171,4 +171,54 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
         let args = try argv("")
         #expect(!args.contains("--permission-mode") && !args.contains("Bash"))
     }
+
+    // MARK: the Codex verifier's sandbox
+
+    @Test func aCodexVerifierRunsWithoutASandboxAndWithoutTheUsersCodexSetup() {
+        func value(_ args: [String], after flag: String) -> String? { args.firstIndex(of: flag).map { args[$0 + 1] } }
+        let args = Verifier.codexArguments(
+            verifier: VerifierConfig(model: "m", provider: .codex), prompt: "p", worktree: URL(fileURLWithPath: "/wt"),
+            answerFile: URL(fileURLWithPath: "/answer"))
+        #expect(value(args, after: "-s") == "danger-full-access")
+        #expect(!args.contains { $0.hasPrefix("sandbox_workspace_write.") } && !args.contains("workspace-write"))
+        // What the user's Codex setup could add is still left out, and nothing asks for approval.
+        #expect(args.contains("--ignore-user-config") && args.contains("--ignore-rules"))
+        #expect(args.contains("approval_policy=\"never\""))
+        #expect(value(args, after: "-m") == "m" && value(args, after: "-C") == "/wt")
+        #expect(value(args, after: "-o") == "/answer" && args.last == "p")
+    }
+
+    @Test func screenshotsTheGoalNamesThatAreNotInTheProofAreReportedMissing() throws {
+        let goal = try GoalFile.parse(
+            """
+            ---
+            id: g-1
+            title: T
+            base: main
+            budget_usd: 1
+            turn_timeout_min: 5
+            ---
+
+            ## Request
+
+            Do it.
+
+            ## Criteria
+
+            - [c1] a
+              - proof: screenshot: one, two
+            - [c2] b
+              - proof: screenshot: two
+            - [c3] c
+              - proof: `scripts/check-changed.sh`
+
+            ## Out of scope
+
+            - none
+            """
+        ).goal
+        #expect(Verifier.missingScreenshots(goal: goal, present: []) == ["one.png", "two.png"])
+        #expect(Verifier.missingScreenshots(goal: goal, present: ["one.png"]) == ["two.png"])
+        #expect(Verifier.missingScreenshots(goal: goal, present: ["one.png", "two.png", "other.png"]).isEmpty)
+    }
 }

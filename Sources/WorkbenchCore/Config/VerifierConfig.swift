@@ -20,7 +20,6 @@ public struct VerifierConfig: Sendable, Equatable {
     public var provider: AgentProviderID?
     public var budgetUSD: Decimal
     public var timeoutMin: Int
-
     public init(
         skill: String = VerifierConfig.defaultSkill, tools: [String] = VerifierConfig.defaultTools, model: String? = nil,
         budgetUSD: Decimal = VerifierConfig.defaultBudgetUSD, timeoutMin: Int = VerifierConfig.defaultTimeoutMin,

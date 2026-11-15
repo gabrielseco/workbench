@@ -38,7 +38,7 @@ struct VerifierRun {
         func arguments(_ prompt: String) -> [String] {
             Verifier.arguments(
                 provider: provider, config: config, verifier: verifier, prompt: prompt, worktree: worktree,
-                proofDirectory: proofDirectory, scratch: scratch, answerFile: answerFile, sessionID: sessionID)
+                proofDirectory: proofDirectory, answerFile: answerFile, sessionID: sessionID)
         }
         var shown = arguments("")
         if provider == .codex, let end = shown.firstIndex(of: "--") { shown = Array(shown[..<end]) }
@@ -126,6 +126,23 @@ struct VerifierRun {
         let changed = after.filter { file in before.first { $0.name == file.name }?.sha256 != file.sha256 }
             .prefix(Verifier.maxFiles)
         let files = changed.map { VerifierFile(name: $0.name, bytes: $0.bytes, sha256: $0.sha256) }
+        // A Codex verifier that could not drive the app (its sandbox, a missing permission) still ends its run and writes a
+        // report, so a screenshot the goal asks for that this attempt did not write means nothing on screen was checked: not a
+        // pass. One an earlier attempt left does not count, and a re-capture with the same bytes does (it is newer).
+        if provider == .codex, answer.failure == nil {
+            let written = Set(
+                after.map(\.name).filter { name in
+                    let date = try? FileManager.default.attributesOfItem(
+                        atPath: proofDirectory.appendingPathComponent(name).path)[.modificationDate] as? Date
+                    return date.map { $0 >= began } ?? false
+                })
+            let missing = Verifier.missingScreenshots(goal: goal, present: written)
+            if !missing.isEmpty {
+                let more = missing.count > 5 ? ", and \(missing.count - 5) more" : ""
+                let shown = missing.prefix(5).joined(separator: ", ") + more
+                answer.failure = "codex left no screenshot the goal asks for (\(shown)), so nothing on screen was checked"
+            }
+        }
         // Every PNG it left is proof, recorded before the end so `review` and the criteria find it.
         for file in changed where file.name.lowercased().hasSuffix(".png") && !file.name.contains("/") {
             try await log.append(

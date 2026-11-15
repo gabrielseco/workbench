@@ -5,38 +5,23 @@ import Testing
 
 private let skillPath = ".claude/skills/verify/SKILL.md"
 
-/// A stand-in `codex` for the verifier: it records its argv and working directory, and keeps to the write boundary `codex
-/// exec -s workspace-write` sets: its workspace (`-C`) and the `writable_roots` it was given, nothing else. Inside it, it does
-/// what the repository's verify-app skill does through `scripts/bundle-app.sh` (a build and its temporary files under the
-/// checkout's `.build`), then leaves a screenshot in `$WORKBENCH_PROOF_DIR` and its answer in the file named by `-o`. A
-/// write outside the boundary fails the run, as the sandbox would.
+/// A stand-in `codex` for the verifier: it records its argv and working directory, does what the repository's verify-app skill
+/// does through `scripts/bundle-app.sh` (a build and its temporary files under the checkout's `.build`), then leaves a screenshot
+/// in `$WORKBENCH_PROOF_DIR` and its answer in the file named by `-o`.
 private func fakeCodexVerifier(_ dir: URL) -> String {
     """
     #!/bin/sh
     D="\(dir.path)"
     for a in "$@"; do echo "$a"; done > "$D/args"
     pwd -P > "$D/cwd"
-    out=""; work=""; roots=""
+    out=""; work=""
     while [ $# -gt 0 ]; do
       case "$1" in
         -o) out="$2"; shift ;;
         -C) work="$2"; shift ;;
-        -c) case "$2" in sandbox_workspace_write.writable_roots=*) roots="${2#*=}" ;; esac; shift ;;
         --) break ;;
       esac
       shift
-    done
-    may_write() {
-      case "$1" in "$work"/*) return 0 ;; esac
-      old_ifs="$IFS"; IFS=,
-      for r in $(printf '%s' "$roots" | tr -d '[]"'); do
-        r="${r# }"
-        case "$1" in "$r"/*) IFS="$old_ifs"; return 0 ;; esac
-      done
-      IFS="$old_ifs"; return 1
-    }
-    for target in "$work/.build/bundle-tmp.x" "$WORKBENCH_PROOF_DIR/selection.png"; do
-      if ! may_write "$target"; then echo "sandbox: write denied: $target" >&2; exit 1; fi
     done
     mkdir -p "$work/.build/bundle-tmp.x" && printf 'app' > "$work/.build/bundle-tmp.x/Workbench"
     printf 'png' > "$WORKBENCH_PROOF_DIR/selection.png"
@@ -108,13 +93,12 @@ private struct SelectionFixture {
         func value(after flag: String) -> String? { args.firstIndex(of: flag).map { args[$0 + 1] } }
         #expect(args.first == "exec")
         #expect(value(after: "-m") == "gpt-6.1-terra")
-        #expect(value(after: "-s") == "workspace-write")
-        // Its workspace is the checkout, so the skill's helpers can build there (the fake refuses a write outside the
-        // workspace and the writable roots, as the sandbox does); the proof directory is one of its writable roots.
+        // No sandbox: the verifier builds the app and photographs it, which a sandbox does not allow. Its working directory is
+        // the checkout, so the skill's helpers build there.
+        #expect(value(after: "-s") == "danger-full-access")
         let worktree = WorktreeManager(repoRoot: s.fx.repo, git: s.fx.git).path(for: id)
-        let proof = s.fx.project.proofDirectory(id, turn: 1)
         #expect(value(after: "-C") == worktree.path)
-        #expect(args.contains { $0.hasPrefix("sandbox_workspace_write.writable_roots=") && $0.contains(proof.path) })
+        #expect(!args.contains { $0.hasPrefix("sandbox_workspace_write.") })
         #expect(FileManager.default.fileExists(atPath: worktree.appendingPathComponent(".build/bundle-tmp.x/Workbench").path))
         #expect(!args.contains("--max-budget-usd") && !args.contains("--allowedTools"))
 
@@ -213,5 +197,65 @@ private struct SelectionFixture {
                 id: id, config: config, environment: s.fx.options().parentEnvironment, timeout: 20, killGrace: 2)
         }
         #expect(try s.verifierEvents(id).map(\.kind) == [.verifierSkipped], "nothing started on another provider")
+    }
+
+    /// A Codex verifier that left no screenshot the goal names has checked nothing on screen, whatever its report says.
+    @Test func aCodexVerifierWithoutTheScreenshotsTheGoalNamesDoesNotPass() async throws {
+        let s = try await SelectionFixture(verifier: "provider = \"codex\"\n")
+        let id = try await s.fx.approvedThread()
+        _ = try await s.fx.runner(id).run(s.fx.options("write=a.txt"))
+        // The goal asks for `header.png`; the stand-in leaves `selection.png` only.
+        let goalURL = s.fx.project.goalURL(id)
+        let goal = try String(contentsOf: goalURL, encoding: .utf8)
+        let criterion = "## Criteria\n\n- [c9] the header\n  - proof: screenshot: header\n"
+        let named = goal.replacingOccurrences(of: "## Criteria", with: criterion)
+        try named.write(to: goalURL, atomically: true, encoding: .utf8)
+        let config = try Config.load(from: s.fx.project.configURL)
+        let report = try await s.fx.service.verifier(
+            id: id, config: config, again: true, environment: s.fx.options().parentEnvironment, timeout: 20, killGrace: 2)
+        #expect(!report.ok)
+        #expect(report.reason?.contains("header.png") == true, "\(String(describing: report.reason))")
+        #expect(report.report == "c1 holds: the header is blue", "the report is kept for the person")
+        let ended = try #require(try s.verifierEvents(id).last { $0.kind == .verifierEnded })
+        #expect(ended.data["ok"] == false)
+    }
+
+    /// A screenshot an earlier attempt left does not make a retry that took none pass.
+    @Test func aScreenshotFromAnEarlierAttemptDoesNotCount() async throws {
+        let s = try await SelectionFixture(verifier: "provider = \"codex\"\n")
+        let id = try await s.fx.approvedThread()
+        _ = try await s.fx.runner(id).run(s.fx.options("write=a.txt"))
+        let goalURL = s.fx.project.goalURL(id)
+        let criterion = "## Criteria\n\n- [c9] the header\n  - proof: screenshot: header\n"
+        try String(contentsOf: goalURL, encoding: .utf8)
+            .replacingOccurrences(of: "## Criteria", with: criterion).write(to: goalURL, atomically: true, encoding: .utf8)
+        // The earlier attempt's `header.png` is there; the stand-in leaves `selection.png` only.
+        let proof = s.fx.project.proofDirectory(id, turn: 1)
+        let stale = proof.appendingPathComponent("header.png")
+        try Data("old".utf8).write(to: stale)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: stale.path)
+        let config = try Config.load(from: s.fx.project.configURL)
+        let report = try await s.fx.service.verifier(
+            id: id, config: config, again: true, environment: s.fx.options().parentEnvironment, timeout: 20, killGrace: 2)
+        #expect(!report.ok && report.reason?.contains("header.png") == true, "\(String(describing: report.reason))")
+    }
+
+    /// A re-capture that comes out byte for byte the same as the earlier one is still this attempt's screenshot.
+    @Test func anIdenticalRecaptureCounts() async throws {
+        let s = try await SelectionFixture(verifier: "provider = \"codex\"\n")
+        let id = try await s.fx.approvedThread()
+        _ = try await s.fx.runner(id).run(s.fx.options("write=a.txt"))
+        let goalURL = s.fx.project.goalURL(id)
+        let criterion = "## Criteria\n\n- [c9] the selection\n  - proof: screenshot: selection\n"
+        try String(contentsOf: goalURL, encoding: .utf8)
+            .replacingOccurrences(of: "## Criteria", with: criterion).write(to: goalURL, atomically: true, encoding: .utf8)
+        // The stand-in writes `selection.png` with these very bytes; the earlier copy is an hour old.
+        let earlier = s.fx.project.proofDirectory(id, turn: 1).appendingPathComponent("selection.png")
+        try Data("png".utf8).write(to: earlier)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: earlier.path)
+        let config = try Config.load(from: s.fx.project.configURL)
+        let report = try await s.fx.service.verifier(
+            id: id, config: config, again: true, environment: s.fx.options().parentEnvironment, timeout: 20, killGrace: 2)
+        #expect(report.ok, "\(String(describing: report.reason))")
     }
 }

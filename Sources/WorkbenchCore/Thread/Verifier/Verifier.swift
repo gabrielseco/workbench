@@ -72,38 +72,29 @@ public enum Verifier {
         return args
     }
 
-    /// The argv of a Codex verifier, prompt last. Codex has no per-command allowlist, so the project's helpers (a skill's
-    /// `scripts/verify-app.sh`, which builds under the checkout's `.build`) run inside its sandbox, not beside it as the
-    /// Claude verifier's allowed `Bash` patterns do. Its workspace is therefore the worktree, writable as a coding turn's
-    /// is (`.git` stays read-only), so those helpers can build; the proof directory and its own temporary directory are
-    /// the other places it may write. No network, nothing the user's own Codex setup could allow or approve, and no
-    /// dollar cap: `timeout_min` bounds it, which is why the config refuses `budget_usd` and `tools` beside
-    /// `provider = "codex"`. Its last message is written to `answerFile`, outside the proof directory so it is never
-    /// taken for proof.
-    public static func codexArguments(
-        verifier: VerifierConfig, prompt: String, worktree: URL, proofDirectory: URL, scratch: URL, answerFile: URL
-    ) -> [String] {
+    /// The argv of a Codex verifier, prompt last. It runs with no sandbox (`danger-full-access`), because the verifier's
+    /// job, building the app and photographing it, cannot be done inside one: the build's caches live outside the worktree
+    /// and macOS lets a sandboxed process neither capture the screen nor drive the app. Measured with `codex sandbox`:
+    /// writes to `~/Library/Caches` and `$TMPDIR` and `screencapture` fail inside `workspace-write` and work outside it.
+    /// That is the verifier alone; every other Codex run (coding, judge, review) keeps its own sandbox. What the user's own
+    /// Codex setup could add is still left out, nothing is approved, and there is no dollar cap: `timeout_min` bounds it,
+    /// which is why the config refuses `budget_usd` and `tools` beside `provider = "codex"`. Its last message is written to
+    /// `answerFile`, outside the proof directory so it is never taken for proof.
+    public static func codexArguments(verifier: VerifierConfig, prompt: String, worktree: URL, answerFile: URL) -> [String] {
         var args = ["exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral"]
         if let model = verifier.model { args += ["-m", model] }
         args += ["--ignore-user-config", "--ignore-rules", "-c", "approval_policy=\"never\""]
-        args += ["-c", "sandbox_workspace_write.network_access=false"]
-        args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
-        args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
-        let roots = [proofDirectory, scratch].map { CodexProvider.tomlString($0.path) }.joined(separator: ", ")
-        args += ["-c", "sandbox_workspace_write.writable_roots=[\(roots)]"]
-        args += ["-s", "workspace-write", "-C", worktree.path, "-o", answerFile.path, "--", prompt]
+        args += ["-s", "danger-full-access", "-C", worktree.path, "-o", answerFile.path, "--", prompt]
         return args
     }
 
     /// The argv of the configured provider, as `verifier.started` records it (the prompt left out by the caller).
     static func arguments(
         provider: AgentProviderID, config: Config, verifier: VerifierConfig, prompt: String, worktree: URL,
-        proofDirectory: URL, scratch: URL, answerFile: URL, sessionID: UUID
+        proofDirectory: URL, answerFile: URL, sessionID: UUID
     ) -> [String] {
         if provider == .codex {
-            return codexArguments(
-                verifier: verifier, prompt: prompt, worktree: worktree, proofDirectory: proofDirectory, scratch: scratch,
-                answerFile: answerFile)
+            return codexArguments(verifier: verifier, prompt: prompt, worktree: worktree, answerFile: answerFile)
         }
         return arguments(
             config: config, verifier: verifier, prompt: prompt, proofDirectory: proofDirectory, sessionID: sessionID)
@@ -132,7 +123,7 @@ public enum Verifier {
         ]
         var environment = environmentLines(proofDirectory, threadID, goalPath, app: app)
         if let checkout {
-            // A Codex verifier runs the project's helpers inside its sandbox, so where it may write is said.
+            // A Codex verifier is told where it is and where the proof goes.
             environment += "\n- The checkout to verify is your working directory, \(checkout.path). Do not edit its files; "
                 + "the project's helpers may build in it. Screenshots go in the proof directory."
         }
@@ -254,6 +245,19 @@ public enum Verifier {
         let cut = window.lastIndex(of: UInt8(ascii: "\n")) ?? window.count
         let kept = String(decoding: window[..<cut], as: UTF8.self)
         return kept.isEmpty ? marker : kept + "\n" + marker
+    }
+
+    /// The screenshots the goal's criteria name that are not in the proof directory, as `<name>.png`, in the order the goal
+    /// lists them. Empty when none is missing, and for a goal with no `screenshot:` proof (a quick goal asks for none by name).
+    static func missingScreenshots(goal: Goal, present: Set<String>) -> [String] {
+        var missing: [String] = []
+        for criterion in goal.criteria {
+            for name in ScreenshotProof.names(in: criterion.proof) ?? [] {
+                let file = ScreenshotProof.fileName(for: name)
+                if !present.contains(file), !missing.contains(file) { missing.append(file) }
+            }
+        }
+        return missing
     }
 
     /// Why a Codex verifier left no answer: its answer file, bounded, or the failure. Codex reports tokens, not dollars, so
