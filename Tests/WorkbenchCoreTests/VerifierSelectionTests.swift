@@ -235,4 +235,22 @@ private struct SelectionFixture {
         let ended = try #require(try s.verifierEvents(id).last { $0.kind == .verifierEnded })
         #expect(ended.data["ok"] == false)
     }
+
+    /// A screenshot an earlier attempt left does not make a retry that took none pass.
+    @Test func aScreenshotFromAnEarlierAttemptDoesNotCount() async throws {
+        let s = try await SelectionFixture(verifier: "provider = \"codex\"\n")
+        let id = try await s.fx.approvedThread()
+        _ = try await s.fx.runner(id).run(s.fx.options("write=a.txt"))
+        let goalURL = s.fx.project.goalURL(id)
+        let criterion = "## Criteria\n\n- [c9] the header\n  - proof: screenshot: header\n"
+        try String(contentsOf: goalURL, encoding: .utf8)
+            .replacingOccurrences(of: "## Criteria", with: criterion).write(to: goalURL, atomically: true, encoding: .utf8)
+        // The earlier attempt's `header.png` is there; the stand-in leaves `selection.png` only.
+        let proof = s.fx.project.proofDirectory(id, turn: 1)
+        try Data("old".utf8).write(to: proof.appendingPathComponent("header.png"))
+        let config = try Config.load(from: s.fx.project.configURL)
+        let report = try await s.fx.service.verifier(
+            id: id, config: config, again: true, environment: s.fx.options().parentEnvironment, timeout: 20, killGrace: 2)
+        #expect(!report.ok && report.reason?.contains("header.png") == true, "\(String(describing: report.reason))")
+    }
 }
