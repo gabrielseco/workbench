@@ -120,7 +120,7 @@ import WorkbenchCore
             return GoalDraftResult(id: nil, provider: .claude, failure: "stopped")
         }
         let first = Task { await store.draftGoal(request: "one") }
-        while !store.drafting { try await Task.sleep(for: .milliseconds(10)) }
+        await waitFor { store.drafting }
         #expect(await store.draftGoal(request: "two") == false)
         store.stopDrafting()
         #expect(await first.value == false)
@@ -136,7 +136,7 @@ import WorkbenchCore
             return GoalDraftResult(id: nil, provider: .claude, failure: "stopped")
         }
         let first = Task { await polite.draftGoal(request: "x") }
-        while !polite.drafting { try await Task.sleep(for: .milliseconds(10)) }
+        await waitFor { polite.drafting }
         await polite.stopDraftingAndWait(timeout: .seconds(5))
         #expect(!polite.drafting)
         _ = await first.value
@@ -148,7 +148,7 @@ import WorkbenchCore
             return GoalDraftResult(id: nil, provider: .claude, failure: "late")
         }
         let second = Task { await stubborn.draftGoal(request: "x") }
-        while !stubborn.drafting { try await Task.sleep(for: .milliseconds(10)) }
+        await waitFor { stubborn.drafting }
         let started = ContinuousClock.now
         await stubborn.stopDraftingAndWait(timeout: .milliseconds(200))
         #expect(stubborn.drafting && ContinuousClock.now - started < .seconds(3))

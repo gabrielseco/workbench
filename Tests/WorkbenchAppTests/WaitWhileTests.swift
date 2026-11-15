@@ -25,6 +25,12 @@ import Testing
         #expect(!ended)
     }
 
+    @Test func waitForFailsTheTestInsteadOfHangingWhenTheConditionNeverHolds() async {
+        await withKnownIssue("waitFor reports a timeout as a failure") {
+            await waitFor("a state that never comes", timeout: .milliseconds(100)) { false }
+        }
+    }
+
     @Test func aDeadlineAlreadyPastChecksOnceAndStops() async {
         let ended = await wait(while: { true }, until: ContinuousClock.now - .seconds(1))
         #expect(!ended)
