@@ -70,7 +70,8 @@ public enum ProjectSummaryLoader {
         private var known: [String: (print: String, activity: ThreadActivity)] = [:]
         private var created: [String: String] = [:]
         /// How many threads were replayed (not taken from here): what a test reads to see that an unchanged project costs nothing.
-        public private(set) var replays = 0
+        public var replays: Int { lock.withLock { replayCount } }
+        private var replayCount = 0
 
         public init() {}
 
@@ -79,7 +80,7 @@ public enum ProjectSummaryLoader {
             let fresh = read()
             lock.withLock {
                 known[key] = (print, fresh)
-                replays += 1
+                replayCount += 1
             }
             return fresh
         }
