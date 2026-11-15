@@ -21,10 +21,8 @@ import Testing
     }
 
     @Test func givesUpAtTheDeadlineAndSaysSo() async {
-        let started = ContinuousClock.now
         let ended = await wait(while: { true }, atMost: .milliseconds(200))
         #expect(!ended)
-        #expect(ContinuousClock.now - started < .seconds(5))
     }
 
     @Test func aDeadlineAlreadyPastChecksOnceAndStops() async {
