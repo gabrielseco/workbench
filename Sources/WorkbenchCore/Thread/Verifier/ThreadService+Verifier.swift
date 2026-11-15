@@ -62,7 +62,7 @@ extension ThreadService {
             return try await withLog(id) { log in
                 try await self.verifierLocked(
                     id: id, log: log, config: config, verifier: verifier, again: again, environment: environment,
-                    timeout: timeout ?? TimeInterval(verifier.timeoutMin) * 60, killGrace: killGrace, attach: attach)
+                    timeout: timeout ?? verifier.timeout, killGrace: killGrace, attach: attach)
             }
         } catch EventLogError.alreadyOpen { throw VerifierRefusal.busy }
     }
@@ -187,7 +187,7 @@ extension ThreadRunner {
             goalPath: project.goalURL(threadID).path, worktree: worktree,
             proofDirectory: project.proofDirectory(threadID, turn: turn), threadDirectory: project.threadDirectory(threadID),
             executable: executable, environment: options.parentEnvironment,
-            timeout: options.verifierTimeoutOverride ?? TimeInterval(verifier.timeoutMin) * 60, killGrace: options.killGrace,
+            timeout: options.verifierTimeoutOverride ?? verifier.timeout, killGrace: options.killGrace,
             identity: await ProofIdentity.of(worktree: worktree, git: git, attributesFrom: base))
         notify(.verifierStarted(turn: turn, skill: skill.path))
         defer { currentRun = nil }

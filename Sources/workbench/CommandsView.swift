@@ -290,7 +290,7 @@ extension Commands {
         guard let text = try? String(contentsOf: ctx.project.goalURL(id), encoding: .utf8),
             let goal = try? GoalFile.parse(text).goal
         else { return nil }
-        return TimeInterval(goal.turnTimeoutMin * 60)
+        return goal.turnTimeout
     }
 
     static func review(_ args: [String]) async throws {

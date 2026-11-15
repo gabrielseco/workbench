@@ -505,7 +505,7 @@ extension ThreadRunner {
             command: command, worktree: worktree,
             environment: threadEnvironment(config: config, options: options),
             timeout: options.checkTimeoutOverride ?? options.timeoutOverride
-                ?? TimeInterval(goal.turnTimeoutMin) * 60,
+                ?? goal.turnTimeout,
             killGrace: options.killGrace)
         notify(.checkStarted(turn: report.turn, command: command))
         defer { currentRun = nil }

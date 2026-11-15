@@ -67,7 +67,7 @@ struct RunCardModel: Equatable {
         }
         let stop = ([decision.primary].compactMap { $0 } + decision.more).first { $0.kind == .stopTurn }
         return RunCardModel(
-            number: number, progress: snapshot.state.progress, limit: snapshot.turnTimeoutMin.map { TimeInterval($0 * 60) },
+            number: number, progress: snapshot.state.progress, limit: snapshot.turnTimeoutMin.map(TimeInterval.minutes),
             tasks: tasks, tail: Array((latest.isEmpty ? tail : latest).suffix(tailLines)), stop: stop,
             worktree: decision.secondary?.kind == .openWorktree ? decision.secondary : nil, consumed: consumed)
     }
