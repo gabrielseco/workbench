@@ -5,38 +5,23 @@ import Testing
 
 private let skillPath = ".claude/skills/verify/SKILL.md"
 
-/// A stand-in `codex` for the verifier: it records its argv and working directory, and keeps to the write boundary `codex
-/// exec -s workspace-write` sets: its workspace (`-C`) and the `writable_roots` it was given, nothing else. Inside it, it does
-/// what the repository's verify-app skill does through `scripts/bundle-app.sh` (a build and its temporary files under the
-/// checkout's `.build`), then leaves a screenshot in `$WORKBENCH_PROOF_DIR` and its answer in the file named by `-o`. A
-/// write outside the boundary fails the run, as the sandbox would.
+/// A stand-in `codex` for the verifier: it records its argv and working directory, does what the repository's verify-app skill
+/// does through `scripts/bundle-app.sh` (a build and its temporary files under the checkout's `.build`), then leaves a screenshot
+/// in `$WORKBENCH_PROOF_DIR` and its answer in the file named by `-o`.
 private func fakeCodexVerifier(_ dir: URL) -> String {
     """
     #!/bin/sh
     D="\(dir.path)"
     for a in "$@"; do echo "$a"; done > "$D/args"
     pwd -P > "$D/cwd"
-    out=""; work=""; roots=""
+    out=""; work=""
     while [ $# -gt 0 ]; do
       case "$1" in
         -o) out="$2"; shift ;;
         -C) work="$2"; shift ;;
-        -c) case "$2" in sandbox_workspace_write.writable_roots=*) roots="${2#*=}" ;; esac; shift ;;
         --) break ;;
       esac
       shift
-    done
-    may_write() {
-      case "$1" in "$work"/*) return 0 ;; esac
-      old_ifs="$IFS"; IFS=,
-      for r in $(printf '%s' "$roots" | tr -d '[]"'); do
-        r="${r# }"
-        case "$1" in "$r"/*) IFS="$old_ifs"; return 0 ;; esac
-      done
-      IFS="$old_ifs"; return 1
-    }
-    for target in "$work/.build/bundle-tmp.x" "$WORKBENCH_PROOF_DIR/selection.png"; do
-      if ! may_write "$target"; then echo "sandbox: write denied: $target" >&2; exit 1; fi
     done
     mkdir -p "$work/.build/bundle-tmp.x" && printf 'app' > "$work/.build/bundle-tmp.x/Workbench"
     printf 'png' > "$WORKBENCH_PROOF_DIR/selection.png"
@@ -108,13 +93,12 @@ private struct SelectionFixture {
         func value(after flag: String) -> String? { args.firstIndex(of: flag).map { args[$0 + 1] } }
         #expect(args.first == "exec")
         #expect(value(after: "-m") == "gpt-6.1-terra")
-        #expect(value(after: "-s") == "workspace-write")
-        // Its workspace is the checkout, so the skill's helpers can build there (the fake refuses a write outside the
-        // workspace and the writable roots, as the sandbox does); the proof directory is one of its writable roots.
+        // No sandbox: the verifier builds the app and photographs it, which a sandbox does not allow. Its working directory is
+        // the checkout, so the skill's helpers build there.
+        #expect(value(after: "-s") == "danger-full-access")
         let worktree = WorktreeManager(repoRoot: s.fx.repo, git: s.fx.git).path(for: id)
-        let proof = s.fx.project.proofDirectory(id, turn: 1)
         #expect(value(after: "-C") == worktree.path)
-        #expect(args.contains { $0.hasPrefix("sandbox_workspace_write.writable_roots=") && $0.contains(proof.path) })
+        #expect(!args.contains { $0.hasPrefix("sandbox_workspace_write.") })
         #expect(FileManager.default.fileExists(atPath: worktree.appendingPathComponent(".build/bundle-tmp.x/Workbench").path))
         #expect(!args.contains("--max-budget-usd") && !args.contains("--allowedTools"))
 

@@ -38,7 +38,7 @@ struct VerifierRun {
         func arguments(_ prompt: String) -> [String] {
             Verifier.arguments(
                 provider: provider, config: config, verifier: verifier, prompt: prompt, worktree: worktree,
-                proofDirectory: proofDirectory, scratch: scratch, answerFile: answerFile, sessionID: sessionID)
+                proofDirectory: proofDirectory, answerFile: answerFile, sessionID: sessionID)
         }
         var shown = arguments("")
         if provider == .codex, let end = shown.firstIndex(of: "--") { shown = Array(shown[..<end]) }

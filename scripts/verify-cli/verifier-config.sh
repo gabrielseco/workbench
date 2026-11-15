@@ -11,7 +11,7 @@
 # `[verifier]`, by `doctor`, and `doctor` must print no verify step. Exit 0 only when every step passed, 1 when one failed,
 # 2 when it refused to start (nothing changed). VERIFY_CLI_SABOTAGE=1 points the skill at a path that does not exist, so
 # the steps that need the skill read (path and sha256 printed, equal to git's, unchanged by an edit) must FAIL, and it
-# leaves the old key out of section 5, so the steps that expect the refusal (doctor refused, the migration message) must FAIL too. Section 6 (`[verifier] sandbox`): `sandbox = "full"` beside `provider = "codex"` must load, and beside Claude (or no provider) must be refused with a message naming `provider = "codex"`; the sabotage puts the accepted case on Claude, so its step must FAIL. The frame and the other switches are in lib.sh.
+# leaves the old key out of section 5, so the steps that expect the refusal (doctor refused, the migration message) must FAIL too. The frame and the other switches are in lib.sh.
 # Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -142,29 +142,4 @@ model = "sonnet"'
 wbp "$SCRATCH/d10.out" doctor --base "$BASE"
 check "a verifier-only config: doctor prints no verify step" "a 'verify:' line was printed" \
     bash -c '! grep -q "^verify:" "$1"' _ "$SCRATCH/d10.out"
-
-# --- 6. [verifier] sandbox is for a Codex verifier only ---------------------------------------------------
-
-PROVIDER=codex
-[ "$SABOTAGE" = 1 ] && PROVIDER=claude
-config "[verifier]
-provider = \"$PROVIDER\"
-sandbox = \"full\""
-wbp "$SCRATCH/d11.out" doctor --base "$BASE"
-shown "$SCRATCH/d11.out" 3
-check "sandbox = full beside codex: doctor accepts the config" "workbench doctor exited $RC" test "$RC" = 0
-
-config '[verifier]
-provider = "claude"
-sandbox = "full"'
-wbp "$SCRATCH/d12.out" doctor --base "$BASE"
-shown "$SCRATCH/d12.out" 3
-check "sandbox = full beside claude: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
-check "sandbox = full beside claude: the message names provider = codex" "no 'provider = \"codex\"' in the output" \
-    grep -q 'provider = "codex"' "$SCRATCH/d12.out"
-
-config '[verifier]
-sandbox = "full"'
-wbp "$SCRATCH/d13.out" doctor --base "$BASE"
-check "sandbox = full with no provider: doctor is refused" "workbench doctor exited $RC" test "$RC" != 0
 finish
