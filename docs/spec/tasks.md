@@ -142,7 +142,8 @@ The Tasks screen of the app (a `Thread | Tasks` switch on the rail) shows the sa
 timer's `status` lines as the card "Will it run tonight?". It re-reads when the app is activated and every 30 s while the screen is
 shown. Reading writes nothing. Three things write, only through core: `Approve` (the press approves the task as it is on disk now, with no card to show it first: `TaskLibrary.approve` binds the hash read at
 that moment, and a refusal is shown as a note) and `Run now` (`TaskRunner.run(trigger: .manual)` in the app's own process, one run at a time from
-a window, with a `Stop`; the press starts the run at once, with no card to confirm, since only an approved task can be run). Quitting the app mid-run ends the run as `interrupted`,
+a window, with a `Stop`; the press starts the run at once, with no card to confirm, since only an approved task can be run). **Disable** /
+**Enable**, **Archive** and an archived task's **Restore** write too, through `TaskLibrary.change` (see "Disabling and archiving"). Quitting the app mid-run ends the run as `interrupted`,
 like a killed `task run`. **Edit with AI** is a button beside `Run now`: its card is closed until the button opens it (the text box is
 focused), and stays open while an edit is working or waiting for a decision. It (`TaskEditor`) asks the goal agent once for a new `task.md`: a one-shot read-only turn, no
 thread and no worktree, so it needs no active-thread slot and works beside one. The agent is given the file's text and the request, each
@@ -192,6 +193,29 @@ run log), and a newer failure of the same task is a new reason. `Pause notificat
 normalised), the bytes of the pending script and of the `include` file (the skill is instructions the agent follows with nobody watching). Editing any of them revokes the approval (`task list` says STALE) until it is approved
 again. The input files are data and are not in the hash, so a new list needs no approval. Nothing runs unapproved.
 
+## Disabling and archiving
+
+A task can be turned off without editing its file, and put away without deleting it. Both are events in the task's run log, so the state
+is on disk, survives the app or the timer starting again, and is derived on read (`TaskHistory.enabled`, `archived`); neither touches
+`task.md`, so neither changes the approval.
+
+- **Disabled** (`workbench task disable <name>`, the task page's **Disable**): a tick never runs it, and the timer asks no wake for it.
+  It stays on the task list, which says `DISABLED` (the app: a `Disabled` pill, `· disabled` in its row, and *Will it run tonight?*
+  saying so first with an **Enable** button). A run by hand (`task run`, **Run now**) still runs it and does not turn it back on.
+  **Enabled** again (`task enable`, **Enable**), its schedule counts from that moment: a task that was off for a week is due at its next
+  slot, not at once for the ones it missed.
+- **Archived** (`workbench task archive <name>`, **Archive**): off the active list (`task list` leaves it out and says how many are
+  archived; the app lists it under a folded **Archived · N** below the scheduled tasks, and nothing counts, notifies or ticks it), and
+  nothing runs it: a tick skips it and `task run` is refused (exit 6). Its folder stays as it was: `task.md`, the pending script, `reports/`
+  and `runs.jsonl`, so its definition and its runs can be read as a reference (`task list --archived`, `task log <name>`, or the app's page
+  for it, whose one button is **Restore**). A task that does not load can be archived too, and is then not a tick's PROBLEM.
+  **Restored** (`task restore`, **Restore**), it is back on the list, enabled or disabled as it was when it was archived (the command
+  and the page say which), and its schedule counts from the restore.
+
+Each is refused while a run of the task holds its log (exit 6; the app's buttons are off with the reason), and is nothing to do when the
+task is already in that state (no event is written). The runner checks again under the log's lock, so a tick planned before a person
+turned a task off ends `skipped-disabled` without recording a run. Making a new task from an archived one is not built.
+
 ## The run log
 
 `runs.jsonl` is an event log with the same file rules as a thread's (one writer, `seq` without gaps, a damaged log is not appended to) and
@@ -203,6 +227,8 @@ its own kinds. A run that cannot start a thread still has a place to say how it 
 | `task.run.started` | a run is about to begin, before anything is spent | `trigger` (`tick`, `manual`) |
 | `task.run.thread` | the run created its thread, before the turn starts | `thread`, `units`, `hash` (the approval the run ran under) |
 | `task.run.ended` | always, exactly once per start | `outcome`, `reason`, `units`, `thread` when one was started, `report` (the report file, relative to the project root) for a `fix: report` run |
+| `task.disabled`, `task.enabled` | `task disable`, `task enable` (only when the state changes) | none |
+| `task.archived`, `task.restored` | `task archive`, `task restore` (only when the state changes) | none |
 
 A run that stops without a pull request says why in `reason`, in one bounded line: what stopped it, then what the agent said last (600
 characters), the commands the turn was denied (up to three, 120 characters each) and, for a failed check, the last eight lines of its output.
@@ -218,7 +244,7 @@ approval are not tries. A run whose thread never started a turn (setup failed, t
 the next run is not skipped for it; a thread that ran a turn is still left for a person. When the discard itself fails the reason says the
 thread is left for you (`workbench abandon`), never that it was removed.
 
-Outcomes: `pr-opened` (also an update that was pushed), `needs-you` (`fix: update` only), `reported`, `nothing-pending`, `nothing-to-do`, `skipped-project-busy`, `skipped-already-running`, `skipped-too-many-open`, `budget-exceeded`,
+Outcomes: `pr-opened` (also an update that was pushed), `needs-you` (`fix: update` only), `reported`, `nothing-pending`, `nothing-to-do`, `skipped-project-busy`, `skipped-already-running`, `skipped-too-many-open`, `skipped-disabled` (a tick of a disabled or archived task, or a run by hand of an archived one; like `skipped-already-running` it is returned and not recorded), `budget-exceeded`,
 `failed`, `stale-approval`, `interrupted` (a run whose process died; the next writer closes it). Holding the log's lock is what makes a task
 run once at a time: a second run finds it taken and ends as `skipped-already-running`.
 
@@ -241,13 +267,16 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
   pull requests of units an earlier run took; a task that is not approved, or was edited since, is not run (`not checked (...)`: its script is
   not what was approved), and a script that fails shows `unknown (why)`.
 - `workbench task approve <name>`: records the approval. Exit 6 for a task that does not parse, 7 for no such task.
+- `workbench task disable|enable|archive|restore <name>`: see "Disabling and archiving". Prints the state the task is in after it
+  (a restore says enabled or disabled). Exit 6 while a run of it holds its log, 7 for no such task.
+  `task list` leaves archived tasks out and ends with `N archived: workbench task list --archived`; `--archived` lists only them.
 
 - `workbench task run <name> [--dry]`: runs the task now (below); `--dry` makes a `fix: report` task list what it would take instead of asking the agent. Exit 0 when it did its work or found none (`pr-opened`, `needs-you`, `reported`,
   `nothing-pending`, `nothing-to-do`), 6 when it was skipped or refused (`skipped-project-busy`, `skipped-already-running`,
-  `stale-approval`; nothing was changed), 5 over budget, 1 failed, 7 no such task.
+  `skipped-disabled` for an archived task, `stale-approval`; nothing was changed), 5 over budget, 1 failed, 7 no such task.
 - `workbench task tick [--all]`: runs the tasks whose next due time has passed, the earliest first, one after the other, and prints how each ended. A
   task with no approval and no run has nothing to count from and never fires; one whose approval went stale is due, so its run can record
-  `stale-approval`. A task that was approved once and can no longer be loaded (its script deleted, its skill grown past the limit) has no
+  `stale-approval`. A disabled or archived task is never due and never a PROBLEM. A task that was approved once and can no longer be loaded (its script deleted, its skill grown past the limit) has no
   schedule to read: the tick prints `<name>: PROBLEM <why>` and exits 1, so a timer does not take its silence for "all is well". Exit 1
   also when a run failed or went over budget; a skip is a note. This is what a timer calls; the app will call the same
   code for each project it has open.
@@ -336,7 +365,7 @@ did by hand:
   (the earliest `at` minus five minutes, on the days any task runs; a time just after midnight wakes the evening before; tasks with only
   `every:` get no wake line and a sentence saying why; a `days: monthly` task runs on a day of the month, which `pmset repeat` cannot name, so it adds no wake: `install` says the machine must be awake and logged in on or after that day (a run missed while it was off happens once on the next tick), and so does `status` when no other task gives a wake). **Workbench never runs `sudo` or changes a power setting**; the person runs the line.
   The only program it runs is `launchctl`.
-- `status` is the "will it run tonight?" check: the agent installed and loaded (runs, last exit code), when it last ticked, the binary copy the launcher runs (missing is a FAIL; older than the `workbench` being run is a warning with the fix, compared only when the running program is `workbench`), each task approved
+- `status` is the "will it run tonight?" check: the agent installed and loaded (runs, last exit code), when it last ticked, the binary copy the launcher runs (missing is a FAIL; older than the `workbench` being run is a warning with the fix, compared only when the running program is `workbench`), each task (not an archived one; a disabled one is an `ok` line saying it is disabled, and asks no wake) approved
   and scheduled, whether the machine's repeating wake matches (`pmset -g sched`: the time, and the days read as a set, never "close enough";
   days that cannot be read are a warning, not a pass), battery or power, and FileVault. The timer is a user agent, so after a restart it starts when that user logs in, with FileVault on or off:
   FileVault makes the Mac wait for the disk password first, and automatic login would do the rest for you.
