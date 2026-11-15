@@ -34,6 +34,7 @@ enum LoopbackProbe {
         }
     }
 
+    /// State is guarded by `lock`.
     private final class Stop: @unchecked Sendable {
         private let lock = NSLock()
         private var stopped = false

@@ -620,6 +620,7 @@ extension ThreadService {
         return result
     }
 
+    /// Written once by the `newThread` callback and read only after that call has returned or thrown, so the two never overlap.
     private final class MadeThread: @unchecked Sendable {
         var id: String?
     }

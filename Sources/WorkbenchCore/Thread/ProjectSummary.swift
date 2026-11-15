@@ -64,6 +64,7 @@ public enum ProjectSummaryLoader {
     static let goalHeadBytes = 64 * 1024
 
     /// What was read of each thread, kept by the caller between polls.
+    /// State is guarded by `lock`.
     public final class Cache: @unchecked Sendable {
         private let lock = NSLock()
         private var known: [String: (print: String, activity: ThreadActivity)] = [:]

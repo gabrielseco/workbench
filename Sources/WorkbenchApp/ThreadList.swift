@@ -138,6 +138,7 @@ enum ThreadListLoader {
     }
 
     /// Remembers what was read, so a second listing with nothing changed reads nothing.
+    /// State is guarded by `lock`.
     final class Cache: @unchecked Sendable {
         private let lock = NSLock()
         private var created: [String: String] = [:]

@@ -29,7 +29,7 @@ public struct ChatResult: Sendable, Equatable {
 }
 
 extension ThreadService {
-    private struct PreparedChat: @unchecked Sendable {
+    private struct PreparedChat: Sendable {
         var agent: ResolvedAgent
         var provider: any AgentProvider
         var request: AgentRequest
@@ -40,12 +40,12 @@ extension ThreadService {
     }
 
     /// What the person said in one message: its words and the screenshots sent with it.
-    private struct Said: @unchecked Sendable {
+    private struct Said: Sendable {
         var text: String
         var images: [GoalAttachments.Loaded]
     }
 
-    private struct NamedImage: @unchecked Sendable {
+    private struct NamedImage: Sendable {
         var name: String
         var image: GoalAttachments.Loaded
     }
