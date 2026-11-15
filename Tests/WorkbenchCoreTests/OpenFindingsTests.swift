@@ -53,9 +53,9 @@ import Testing
         let found = OpenFindings.derive(
             state: ThreadState.derive(from: events, id: "t"), criteria: [Criterion(id: "c2", text: long, proof: "test")],
             events: events, threadDirectory: nil)
-        #expect(found.items[0].title.hasSuffix("word") && !found.items[0].title.contains("…"))
+        #expect(found.items[0].title == "[c2] not met: " + long.trimmingCharacters(in: .whitespaces))
         #expect(found.items[0].detail == "first\nsecond")
-        #expect(found.feedback.contains("(first second)"))
+        #expect(found.feedback.contains(found.items[0].title + " (first second)"))
     }
 
     @Test func aJudgeThatMetEverythingLeavesNothing() {
