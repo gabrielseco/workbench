@@ -69,7 +69,7 @@ extension ProjectStore {
         async let task: Void = tasks.stopAndWait(timeout: timeout)
         async let edit: Void = tasks.stopEditAndWait(timeout: timeout)
         await stopOwnedRun()
-        while runningProjectPath != nil, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+        await wait(while: { runningProjectPath != nil }, until: deadline)
         _ = await (draft, chat, task, edit)
     }
 }

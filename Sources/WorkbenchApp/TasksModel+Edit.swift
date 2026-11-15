@@ -106,7 +106,7 @@ extension TasksModel {
         guard isEditing else { return }
         let deadline = ContinuousClock.now + timeout
         stopEdit()
-        while isEditing, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+        await wait(while: { isEditing }, until: deadline)
     }
 
     /// Writes the proposal. A refusal (the file changed, a run is going) leaves it shown with the core's words; nothing is written.
