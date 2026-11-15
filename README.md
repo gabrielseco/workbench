@@ -64,7 +64,8 @@ workbench goal new add-retry        # a thread and a draft goal; edit it, then:
 workbench goal approve
 workbench run                       # worktree, agent turn, your check; ends with a result
 workbench review                    # the diff, the check, the findings
-workbench ship                      # accepted? push and open the PR
+workbench accept                    # your decision (or send-back / discard)
+workbench ship                      # push the accepted branch and open the PR
 ```
 
 `workbench help` lists every command and `workbench help <command>` says what one changes. Add `--json` to read
@@ -77,10 +78,15 @@ Everything is declared by you; Workbench never guesses a stack.
 
 ```toml
 [tools]
+available = ["Read", "Edit", "Bash"]        # what the agent can see at all
 allowed = ["Read", "Edit", "Bash(swift test:*)"]
 
 [review]
 stages = ["pr-review", "design"]
+
+[review.stage.design]
+skill = "design.md"                  # a skill in your repo that reviews the screenshots
+applies_to = ["Sources/**"]
 
 [run]                                  # how to start your app, for the verifier
 command = "npm run dev:mock"
