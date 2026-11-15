@@ -32,7 +32,7 @@ struct StagedThumbnails: View {
 }
 
 /// A staged screenshot decoded for the preview, with the pixel size of the file it came from.
-struct StagedScreenshotImage: @unchecked Sendable {
+struct StagedScreenshotImage: Sendable {
     var image: CGImage
     var pixels: CGSize
 

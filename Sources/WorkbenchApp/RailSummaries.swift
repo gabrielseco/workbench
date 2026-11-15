@@ -161,6 +161,7 @@ import WorkbenchCore
     }
 
     /// True for the first caller only.
+    /// State is guarded by `lock`.
     private final class Once: @unchecked Sendable {
         private let lock = NSLock()
         private var taken = false

@@ -117,6 +117,7 @@ struct AgentRunReport: Sendable {
 }
 
 /// Keeps a run's stdout lines, in order, as the transcript the person can read afterwards.
+/// State is guarded by `lock`.
 final class TranscriptRecorder: AgentRecorder, @unchecked Sendable {
     private let lock = NSLock()
     private var kept: [String] = []

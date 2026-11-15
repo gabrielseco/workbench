@@ -99,6 +99,7 @@ extension Commands {
     }
 
     /// Set by the first Ctrl-C or SIGTERM: the project being ticked ends its run cleanly and no later project starts.
+    /// State is guarded by `lock`.
     final class StopFlag: @unchecked Sendable {
         private let lock = NSLock()
         private var set = false

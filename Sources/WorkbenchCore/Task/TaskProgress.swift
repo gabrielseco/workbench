@@ -3,6 +3,7 @@ import Foundation
 /// What a task run says while its turn goes: the runner's own notices, as short lines (`task run` prints them, the app shows the last one).
 /// A coding turn streams a line for every tool call, so those are let through at most every `interval`, and the milestones (a turn, a
 /// check, a setup, the verifier) always.
+/// State is guarded by `lock`.
 public final class TaskProgress: @unchecked Sendable {
     public static let interval: TimeInterval = 2
     static let maxLine = 240

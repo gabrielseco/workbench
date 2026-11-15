@@ -69,7 +69,7 @@ struct DarwinPlatform: ProcessInspecting, SpawnPlatform, ExitNotifying, Subreapi
 }
 
 /// A Dispatch read source: the closing of the descriptor is its cancel handler's job, after libdispatch has unregistered it.
-private final class DispatchPipeReader: PipeReader, @unchecked Sendable {
+private final class DispatchPipeReader: PipeReader, Sendable {
     private let source: DispatchSourceRead
 
     init(fd: Int32, queue: DispatchQueue, onReadable: @escaping @Sendable () -> Void) {

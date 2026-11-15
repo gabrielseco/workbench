@@ -38,6 +38,7 @@ public struct TaskRunResult: Sendable, Equatable {
 }
 
 /// Lets a signal handler stop the turn or check a run is in the middle of.
+/// State is guarded by `lock`.
 public final class TaskStopSwitch: @unchecked Sendable {
     private let lock = NSLock()
     private var runner: ThreadRunner?

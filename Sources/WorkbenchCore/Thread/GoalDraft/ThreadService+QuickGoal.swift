@@ -117,6 +117,7 @@ extension ThreadService {
     }
 }
 
+/// Written once by the `newThread` callback and read only after that call has returned or thrown, so the two never overlap.
 private final class QuickThread: @unchecked Sendable {
     var id: String?
 }

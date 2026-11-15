@@ -23,13 +23,13 @@ protocol Notifier: AnyObject, Sendable {
 }
 
 /// Posts nothing: tests, and a launch on a fixture project (which must not ask the person for a permission).
-final class NullNotifier: Notifier, @unchecked Sendable {
+final class NullNotifier: Notifier, Sendable {
     func post(_ notice: Notice) async -> PostResult { .posted }
 }
 
 /// Local notifications through UserNotifications. The centre exists only in an app bundle: `swift run` has none, and asking for it
 /// there ends the process, so there it posts nothing and says it was not allowed.
-final class SystemNotifier: NSObject, Notifier, UNUserNotificationCenterDelegate, @unchecked Sendable {
+final class SystemNotifier: NSObject, Notifier, UNUserNotificationCenterDelegate, Sendable {
     static var hasBundle: Bool { Bundle.main.bundleURL.pathExtension == "app" }
 
     /// Called on the main actor with where a clicked notification goes.

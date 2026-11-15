@@ -9,6 +9,7 @@ struct RunHandle: Sendable {
 }
 
 /// Ends the goal drafter the app started: a stop asked before the drafter is attached takes effect when it is.
+/// State is guarded by `lock`.
 final class DraftStop: @unchecked Sendable {
     private let lock = NSLock()
     private var stopper: (@Sendable () -> Void)?
