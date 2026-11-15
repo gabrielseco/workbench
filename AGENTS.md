@@ -11,6 +11,7 @@ phase's plan.
 ## Commands
 
 ```bash
+scripts/wb <args>                        # rebuilds `workbench` (pinned Xcode), then runs it from your directory: never a stale binary
 scripts/codex-review.sh <pr> [spec]      # Codex reviews a PR with the pr-review skill (read-only)
 scripts/ci-report.sh [<pr>]               # what CI saw: check status, failed-step log, slowest suites/tests (artifact `test-reports`)
 scripts/check.sh                         # what CI runs, minus the soak: banned APIs, SwiftLint, build, tests
