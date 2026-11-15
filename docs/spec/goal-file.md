@@ -363,7 +363,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # ready_timeout_s = 120                 # default 120 (1 to 900)
 # [verifier]                            # P10: a skill run as its own turn that drives the app and leaves proof
 # skill = ".claude/skills/verify/SKILL.md"  # the default; an explicit repo path, read from the base commit
-# tools = ["Read", "Bash(scripts/verify-app.sh:*)"]  # what the verifier may use; default ["Read"]; no bare Bash
+# tools = ["Read", "Bash(scripts/verify-app.sh:*)"]  # what the verifier may use; default ["Read"]; no bare Bash; with permissions = "auto" Bash is available and the classifier decides
 # provider = "claude"                   # "claude" (unset is claude) or "codex"; codex takes no tools or budget_usd
 # model = "sonnet"                      # --model (codex: -m) for the verifier; unset = the CLI default
 # enabled = false                       # the verifier is on by default; this turns it off
@@ -505,7 +505,7 @@ Notes:
   money: one `claude -p --output-format json` run in the thread's worktree, in `--safe-mode --restricted
   --disable-slash-commands --add-dir <the turn's proof folder>` (the file tools are confined to the worktree, and the
   proof folder is outside it: the run can `Read` the screenshots it takes), with `--model` from `[verifier] model` (else the CLI default; it never inherits the coding model), the tools of `[verifier]
-  tools` as `--tools` and `--allowedTools` and nothing else (the project's `[tools] denied` still applies), its own
+  tools` as `--tools` and `--allowedTools` and nothing else (with `permissions = "auto"` it also gets `--permission-mode auto` and `Bash` in `--tools`, as a coding run does) (the project's `[tools] denied` still applies), its own
   session, `--max-budget-usd` from `budget_usd` and the `timeout_min` deadline. Its prompt holds the skill text read from
   the base commit, the goal's request and criteria, and `WORKBENCH_PROOF_DIR` (the latest turn's `proof/turn-N`, not
   emptied), `WORKBENCH_THREAD` and `WORKBENCH_GOAL`, which its tools see too. It runs once per turn unless `--again`

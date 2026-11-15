@@ -143,4 +143,32 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
     @Test func aSecondVerifierTableIsNotAReviewStage() {
         #expect(problems("[verifier.extra]\nskill = \"s.md\"").map(\.code) == [.unknownTable])
     }
+
+    private func argv(_ root: String, verifier: String = "") throws -> [String] {
+        let config = try parse(verifier, root: root)
+        return Verifier.arguments(
+            config: config, verifier: try #require(config.verifier), prompt: "p", proofDirectory: URL(fileURLWithPath: "/proof"))
+    }
+
+    @Test func autoPermissionsLetTheVerifierUseBashWithoutListingHelpers() throws {
+        let auto = try argv("permissions = \"auto\"")
+        #expect(auto.contains("--permission-mode") && auto[auto.firstIndex(of: "--permission-mode")! + 1] == "auto")
+        let tools = auto[(auto.firstIndex(of: "--tools")! + 1)...].prefix { !$0.hasPrefix("--") }
+        #expect(Array(tools) == ["Read", "Bash"])
+    }
+
+    @Test func autoPermissionsKeepADeniedToolDeniedAndTheListedToolsAllowed() throws {
+        let tools = "[tools]\navailable = [\"Read\"]\ndenied = [\"Bash(rm:*)\"]\n"
+        let config = try Config.parse(
+            "permissions = \"auto\"\n" + tools + "\n[verifier]\ntools = [\"Read\", \"Bash(scripts/v.sh:*)\"]")
+        let args = Verifier.arguments(
+            config: config, verifier: try #require(config.verifier), prompt: "p", proofDirectory: URL(fileURLWithPath: "/proof"))
+        #expect(args.contains("Bash(rm:*)") && args.contains("Bash(scripts/v.sh:*)"))
+        #expect(args.filter { $0 == "Bash" }.count == 1)
+    }
+
+    @Test func theAllowlistModeStaysWithoutBashOrAutoMode() throws {
+        let args = try argv("")
+        #expect(!args.contains("--permission-mode") && !args.contains("Bash"))
+    }
 }
