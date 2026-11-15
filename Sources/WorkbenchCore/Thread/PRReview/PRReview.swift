@@ -6,13 +6,13 @@ public enum PRReviewVerdict: String, Sendable, Equatable {
     case fix
 }
 
-/// Everything the brief for the reviewer is built from. Text only: nothing here is read by Codex from the log.
 /// A repository file a stage's `inputs` names, read from the pull request's checkout.
 struct PRReviewFile: Sendable, Equatable {
     var path: String
     var text: String
 }
 
+/// Everything the brief for the reviewer is built from. Text only: nothing here is read by Codex from the log.
 struct PRReviewInput: Sendable, Equatable {
     var pr: Int
     var branch: String

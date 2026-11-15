@@ -11,7 +11,6 @@ struct DecisionCard: View {
     /// `branch → base`, for the ready-to-ship bar's line.
     var route: String?
 
-    /// The artboard's foot when the next press is Ship: the work is accepted and the person either ships it or asks for more.
     /// What the ship bar's `…` keeps: every other action of the decision, so Open worktree and New goal do not vanish.
     static func shipMenu(_ decision: FeedDecision) -> [FeedAction] { decision.more }
 
@@ -30,6 +29,7 @@ struct DecisionCard: View {
         if Self.isReadyToShip(decision) { readyToShip } else { next }
     }
 
+    /// The artboard's foot when the next press is Ship: the work is accepted and the person either ships it or asks for more.
     private var readyToShip: some View {
         HStack(alignment: .center, spacing: Space.m) {
             VStack(alignment: .leading, spacing: Space.xs) {

@@ -122,7 +122,6 @@ struct ReplyingRow: View {
     }
 }
 
-/// The foot of a chat: what the last action said, the text box, and the two buttons.
 /// The composer's Send button: a 30 pt rounded square with an up arrow, dimmed while there is nothing to send.
 struct ComposerSendButton: View {
     var enabled: Bool
@@ -133,6 +132,7 @@ struct ComposerSendButton: View {
     }
 }
 
+/// The foot of a chat: what the last action said, the text box, and the two buttons.
 struct ChatComposer: View {
     var snapshot: ThreadSnapshot
     var store: ProjectStore

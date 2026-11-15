@@ -285,7 +285,6 @@ import WorkbenchCore
         try differs(card(goal), card(warned), "a proof's warning", width: 640, height: 240)
     }
 
-    /// A draft goal's card is the editor: the Goal screen's blocks, in place, in place of the summary.
     /// The screen's choice, through the store, for the states a thread is in: only a draft that nothing has run is edited in the feed.
     @Test func onlyADraftThatHasNotRunIsEditedInTheFeed() async throws {
         for (approved, turn, edited) in [(false, false, true), (true, false, false), (true, true, false), (false, true, false)] {

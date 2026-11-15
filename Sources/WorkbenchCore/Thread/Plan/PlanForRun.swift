@@ -29,7 +29,6 @@ public struct PlanForRun: Sendable, Equatable {
 
 /// What `run` does about a plan.
 public enum PlanChoice: Sendable, Equatable {
-    /// There is none.
     case none
     case use(PlanForRun)
     /// There is one and it is not used, and why.

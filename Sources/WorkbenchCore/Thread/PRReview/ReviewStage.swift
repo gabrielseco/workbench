@@ -50,7 +50,6 @@ public struct ReviewStage: Sendable, Equatable {
         return ReviewStage(name: name, config: stage, events: .stage(name))
     }
 
-    /// The brief for one round.
     func brief(for input: PRReviewInput) -> String { PRReview.prompt(for: input) }
 
     static let skillHeader =

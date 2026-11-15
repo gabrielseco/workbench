@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The type scale: every font the app uses, by name. A view never writes a font; it picks a step. A step the scale lacks is a new case here,
-/// decided once, not a `.font(...)` in a view (`scripts/check-ui-literals.sh` counts them and fails a PR that adds one).
+/// decided once, not a `.font(...)` in a view (`scripts/check-ui-tokens.sh` fails one outside the component files).
 enum TextStyle {
     /// Screen and sheet titles, and the largest text.
     case display

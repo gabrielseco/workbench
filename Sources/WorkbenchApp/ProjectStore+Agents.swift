@@ -3,7 +3,6 @@ import WorkbenchCore
 
 /// What reading the project's config for the Agents card found.
 enum AgentConfigState: Equatable {
-    /// Not read yet.
     case unread
     /// The project has no `.workbench/config.toml`: every role runs its provider's default and there is no goal agent.
     case missing

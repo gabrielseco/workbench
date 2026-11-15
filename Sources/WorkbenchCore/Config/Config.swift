@@ -10,7 +10,7 @@ public struct ToolSet: Sendable, Equatable {
     public var denied: [String]
 }
 
-/// `.workbench/config.toml`.
+/// `app_type` in `.workbench/config.toml`.
 public enum AppType: String, Sendable, Equatable, CaseIterable {
     case web
     case desktop

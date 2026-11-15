@@ -51,7 +51,6 @@ public struct DoctorStep: Sendable, Equatable {
         case stopped
         /// Not run, with why ("setup failed", "interrupted").
         case skipped(String)
-        /// The config does not declare it.
         case notDeclared
     }
 

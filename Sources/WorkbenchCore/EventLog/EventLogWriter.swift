@@ -111,7 +111,6 @@ public actor EventLogWriter {
     /// The highest turn number started so far, 0 for a thread with no turns.
     public var lastTurn: Int { state.lastTurn }
 
-    /// Appends a structured event.
     @discardableResult
     public func append(_ kind: EventKind, turn: Int = 0, data: JSONValue = [:]) throws -> Event {
         let event = Event(seq: state.nextSeq, ts: timestamp(), turn: turn, kind: kind, data: data)
