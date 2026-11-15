@@ -55,7 +55,7 @@ not this one; it needs `--restricted` lifted.
 
 - Without the key, a run's argv is what it was. With `auto`, it adds `--permission-mode auto` and nothing else.
 - `[tools] denied` still denies under `auto`; a denial is still recorded and listed by `grant`.
-- The verifier, the plan turn, the review and the goal agents do not change (their argv builders do not read the key).
+- The plan turn, the review and the goal agents do not change (their argv builders do not read the key). The Claude verifier does (added later): under `auto` it gets `--permission-mode auto` and `Bash`, so the classifier, not its `[verifier] tools` list, decides which commands it may run; `[tools] denied` still wins. The Codex verifier is unchanged.
 
 ## Open questions
 
