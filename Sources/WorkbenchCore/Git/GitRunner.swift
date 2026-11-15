@@ -53,7 +53,7 @@ public enum GitError: Error, Equatable, Sendable {
 }
 
 /// Runs short, bounded commands (git) to completion. Not for `claude`: that streams and has its own
-/// runner. Follows the process-layer rules in `docs/plan/P1-runner.md`:
+/// runner. Follows the process-layer rules in `docs/archive/P1-runner.md`:
 ///
 /// - started through `Spawner`, so the child inherits nothing but stdin, stdout and stderr (rule 8),
 /// - no blocking wait, no blocking pipe reads: output goes to temp files and a kqueue exit watcher resumes

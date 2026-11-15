@@ -7,7 +7,7 @@ import WorkbenchCore
 
 @MainActor private var keptPickerFixtures: [AppFixture] = []
 
-/// The Agents card's pickers (docs/plan/P25-project-agents.md, slice 3): each edit is one `ConfigEdit` call on the project's config.
+/// The Agents card's pickers (docs/archive/P25-project-agents.md, slice 3): each edit is one `ConfigEdit` call on the project's config.
 @MainActor @Suite struct AgentPickerTests {
     private static let tools = "\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n"
 

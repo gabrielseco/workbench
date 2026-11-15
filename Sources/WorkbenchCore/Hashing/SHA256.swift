@@ -3,7 +3,7 @@ import Foundation
 /// SHA-256 (FIPS 180-4), in plain Swift, with the shape of CryptoKit's: `SHA256.hash(data:)`, or `update(data:)` and
 /// `finalize()` for input that arrives in pieces. Used for fingerprints (the goal's approval hash, ids, proof files), never
 /// for secrets. It is here and not a library's because it is the only hash Workbench uses and a crypto package costs
-/// Linux about 35 s of every cold build (docs/plan/P18-linux.md); `SHA256Tests` holds it to the published vectors and,
+/// Linux about 35 s of every cold build (docs/archive/P18-linux.md); `SHA256Tests` holds it to the published vectors and,
 /// on macOS, to CryptoKit.
 public struct SHA256: Sendable {
     public typealias Digest = [UInt8]

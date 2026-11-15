@@ -1,7 +1,7 @@
 import Foundation
 
 /// The verifier's instructions: the project's skill file, read from the base commit so the coding run cannot
-/// change what its own verifier is told (docs/plan/P10-skill-verifier.md, rule 1).
+/// change what its own verifier is told (docs/archive/P10-skill-verifier.md, rule 1).
 public struct VerifierSkill: Sendable, Equatable {
     public static let sizeLimit = 32768
     public static let truncationMarker = "[verifier skill truncated at \(sizeLimit) bytes]"

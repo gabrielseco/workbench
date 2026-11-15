@@ -76,7 +76,7 @@ public struct ThreadExplainResult: Sendable, Equatable {
 }
 
 /// `explain-thread`: the read-only agent run of `explain-pr`, asked about one review thread of the pull request, answering
-/// in JSON. The output contract is docs/plan/explain-thread.md.
+/// in JSON. The output contract is docs/spec/explain-thread.md.
 public enum ThreadExplain {
     /// Comments read per page, and pages read at most: a thread longer than that is cut and the brief says so.
     static let pageSize = 100

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Where everything lives for one repository (docs/plan/P1-runner.md, "On disk").
+/// Where everything lives for one repository (docs/archive/P1-runner.md, "On disk").
 ///
 ///     <repo>/.workbench/
 ///       config.toml

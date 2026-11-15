@@ -4,7 +4,7 @@ import Foundation
 import Glibc
 #endif
 
-/// The ready check of `[run] ready_url` (docs/plan/P16-run.md), on plain BSD sockets so it is the same code on macOS and
+/// The ready check of `[run] ready_url` (docs/archive/P16-run.md), on plain BSD sockets so it is the same code on macOS and
 /// Linux. The URL may only name this machine (`localhost`, `127.0.0.1`, `::1`; Config checks it), so no name is ever
 /// resolved: a resolver that stalls cannot hold the check, and every wait below is a poll bounded by the one deadline.
 enum LoopbackProbe {

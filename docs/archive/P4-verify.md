@@ -6,7 +6,7 @@
 and, optionally, an independent verdict, all produced in the background with no UI and no prompts. First
 proven on a web app (expense-tracker, Playwright), then on a native one (Triage, which is the hard case).
 
-**Depends on:** P2.6 merged. Independent of [P3](P3-app.md): the app will only display what this phase
+**Depends on:** P2.6 merged. Independent of [P3](../plan/P3-app.md): the app will only display what this phase
 records. This pulls a slice of [`later/proof.md`](../later/proof.md) forward on purpose, because a thread
 that cannot show the change on screen cannot be trusted for UI work (friction #41).
 

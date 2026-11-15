@@ -199,7 +199,7 @@ private func lines(of url: URL) throws -> [String] {
     @Test func realClaudeOutputRoundTripsVerbatim() async throws {
         let fixture = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("docs/plan/P1-spikes/fixtures/s1-read-2.jsonl")
+            .appendingPathComponent("docs/archive/P1-spikes/fixtures/s1-read-2.jsonl")
         let raw = try String(contentsOf: fixture, encoding: .utf8).split(separator: "\n").map(String.init)
         try #require(!raw.isEmpty)
 

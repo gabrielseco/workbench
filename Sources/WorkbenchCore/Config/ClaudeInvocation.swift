@@ -70,7 +70,7 @@ extension Config {
                 reasoningEffort: agent.reasoningEffort))
     }
 
-    /// The argv for one turn (docs/plan/P1-runner.md, "Turn lifecycle"; flags verified in the P1 spikes).
+    /// The argv for one turn (docs/archive/P1-runner.md, "Turn lifecycle"; flags verified in the P1 spikes).
     ///
     /// - `--restricted` is always passed. It is what confines the file tools to the worktree; without it
     ///   a bare `Edit` in the allowed list can write anywhere (spike S3).

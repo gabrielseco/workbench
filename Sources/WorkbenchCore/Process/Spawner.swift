@@ -9,7 +9,7 @@ public enum SpawnError: Error, Equatable, Sendable {
 ///
 /// Uses `posix_spawn` with `POSIX_SPAWN_CLOEXEC_DEFAULT`, so the child holds exactly stdin, stdout and
 /// stderr and nothing else. Foundation's `Process` leaves a window between fork and exec in which a child
-/// shares our descriptors, including the event log's lock (docs/plan/P1-runner.md, rule 8). Nothing else
+/// shares our descriptors, including the event log's lock (docs/archive/P1-runner.md, rule 8). Nothing else
 /// should call `Process`; `scripts/check-banned-apis.sh` enforces that.
 enum Spawner {
     /// - Parameters:

@@ -1,9 +1,9 @@
 # P10: A verifier that runs the project's skill
 
 Status: built (PRs 1 to 6). PR 5's comparison was skipped by the owner's decision on 2026-10-19: the verifier ran for real on Triage (#75, Everything's order, screenshots in the PR) and `verify_command` was removed without the five-run recipe-against-verifier numbers, so the rule below that removal waits for them was overridden, not met. Written 2026-10-17, extended 2026-10-18 (design stage, model, skill location, PR breakdown), 2026-10-19 (the verifier replaces `verify_command`, runs by default). Friction row 57. Builds on [P4](P4-verify.md) (`verify_command`,
-proof, the judge), [P6](P6-review-stages.md) (reading a skill file as instructions) and the project-instructions
+proof, the judge), [P6](../plan/P6-review-stages.md) (reading a skill file as instructions) and the project-instructions
 loader (a file read from the base commit). [P9](P9-agent-providers.md) will decide which providers can run it. 
-[P11](P11-verified-pipeline.md) runs it as the `verify` step of a pipeline, before `ship`, with the proof tied to a commit.
+[P11](../plan/P11-verified-pipeline.md) runs it as the `verify` step of a pipeline, before `ship`, with the proof tied to a commit.
 
 ## Why
 
@@ -113,7 +113,7 @@ The verifier does not change the stage. It changes what the stage is handed:
 
 So a goal for a UI change names the captures it needs (`proof: screenshot: everything-order, everything-min-size,
 everything-before`), the verifier takes them, and PR 3 makes the stage and the judge read every PNG in the turn's
-proof directory, with its pixel size (row 10 of [P11](P11-verified-pipeline.md)). What the stage still cannot do is
+proof directory, with its pixel size (row 10 of [P11](../plan/P11-verified-pipeline.md)). What the stage still cannot do is
 press a button: a state nobody captured stays unreviewed.
 
 ## Events and command

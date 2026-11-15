@@ -23,7 +23,7 @@ public struct VerifierReport: Sendable, Equatable {
 }
 
 /// The request to the verifier and the reading of its answer. Pure: no process, no files.
-/// docs/plan/P10-skill-verifier.md has the rules; the numbers refer to them.
+/// docs/archive/P10-skill-verifier.md has the rules; the numbers refer to them.
 public enum Verifier {
     public static let reportLimit = 4096
     public static let maxFiles = 200

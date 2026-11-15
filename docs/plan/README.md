@@ -1,7 +1,8 @@
 # Plan
 
-**Do one thing well: one project, one thread at a time.** Concurrency, many projects, proof and Triage
-integration all come later, and only after the single-thread loop is boringly reliable.
+**Do one thing well, and prove each slice before widening it.** This was written as "one project, one thread at a time";
+concurrency ([P23](P23-concurrency.md)) has since been built, with its own soak, and the scope rule below says what is still
+true of it. Plans for finished phases are in [`../archive/`](../archive/README.md).
 
 The thing we are building:
 
@@ -9,37 +10,24 @@ The thing we are building:
 you write a goal → you approve it → agent works in a worktree → you see diff + checks → accept / send back / discard
 ```
 
-Phases, in order. Each ends with a demo you can run, not just merged code.
+Phases still open or being worked, in order. Each ends with a demo you can run, not just merged code. A status line in a plan
+can lag behind `main` (several say "planned" about built work); check `main` before acting on one. All phases, with the finished ones: [`../archive/README.md`](../archive/README.md).
 
 | Phase | Name | Outcome | Size |
 |---|---|---|---|
-| [P1](P1-runner.md) | Runner | `workbench run` runs Claude on an approved goal in a worktree, logs everything, always ends cleanly | M |
-| [P2](P2-review.md) | Review | `workbench review` shows diff and check results; accept, send back, discard | S |
-| [P2.5](P2.5-ship.md) | Ship | `workbench ship` pushes an accepted thread and opens its PR; Claude never holds credentials | S |
-| [P2.6](P2.6-harden.md) | Harden | `setup_command`, a `status` that says working or stuck, thread ids on `status` and `log`; the probe's fixes | S |
-| [P2.7](P2.7-pr-sections.md) | PR sections | `ship` fills the template's Why from the goal and What changed from the diff, so no section is left empty | S |
-| [P4](P4-verify.md) | Verify | (the `verify_command` of this phase was replaced by the P10 verifier) `verify_command` runs in the background and a thread ends with screenshots, a recorded result and an advisory verdict; piloted on expense-tracker, then Triage | M |
 | [P5](P5-review-loop.md) | Review loop | `workbench pr-review` runs a second reviewer on the shipped PR; `ship --review-loop` feeds its findings back as turns until clean or a cap | S |
 | [P6](P6-review-stages.md) | Review stages | a project declares its review stages and their order (`pr-review` is the default, design or migrations can follow) and the loop runs them in order; task 1 (config, `ReviewStage`, doctor) and task 2 (`review-stage <name>`, `proof`, `applies_to`) built | M |
-| [P7](P7-judge-on-codex.md) | Judge on Codex (superseded) | unbuilt fixed-provider proposal replaced by P9; current judge remains on Claude | — |
 | [P8](P8-faster-checks.md) | Faster checks | measure what a thread's check costs, map changed files to fewer suites, and run the check once where it counts | S |
-| [P9](P9-agent-providers.md) | Agent providers | built, gate accepted 2026-10-28 (soak on Codex, a mixed-provider scenario and the real pilot runs still open): independently select providers/models for optional goal drafting, run, judge and automated review; two providers per responsibility, shared contracts and recovery; required before P3 | M |
-| [P10](P10-skill-verifier.md) | Skill verifier | planned: a verifier turn runs the project's own skill (read from the base commit, tools set by the project) to drive the app to the states a goal names and take the screenshots, instead of recipe files, with its own model and every screenshot reaching the judge and the design stage; it replaces `verify_command` and each project's `verify.sh`, and runs after a passing check by default; built, and `verify_command` is removed; six PRs (config, the turn, proof and review, the Triage side, the pilot and comparison, removing `verify_command`); Claude only, independent of P9 | L |
 | [P11](P11-verified-pipeline.md) | Verified pipeline | planned: one loop (check, verify, judge, design, then `ship`, then `pr-review`) where a proof belongs to a commit, a failed step goes back to the model and any fix returns to check and verify; piloted on a small Triage feature | M |
 | [P12](P12-pipeline-rough-edges.md) | Pipeline rough edges | planned: what a second sequential run of the P11 loop found in Workbench: `abandon` saves a worktree's changes then removes it, refusals that say what to do, a judge or stage result that knows its commit, a true `ship` preview; independent of P11's tasks | S |
-| [P13](P13-grant.md) | Grant | planned: `workbench grant` turns a turn's denied commands into a per-command decision (once, thread, never) with a rules-based risk level, recorded in the log, so a run goes on without hand-editing `[tools]` | S |
 | [P14](P14-plan-turn.md) | Plan turn | tasks 1 to 5 built (the verify-cli scenario has a recorded PASS and a recorded sabotage FAIL), the comparison planned: `workbench plan` runs a read-only turn on its own model against the approved goal and base commit, and the next `run` gets the plan in its first prompt, so a stronger model can decide and a cheaper one can code; a provider seam for P9 | M |
 | [P15](P15-agent-ergonomics.md) | Agent ergonomics | `doctor` after approve, per-command help, a criterion backed by the named tests the check ran; typed proofs written down for later | S |
-| [P16](P16-run.md) | Run | built: `[run]` declares how a project's app is started (a command and a ready check); Workbench starts it for the verifier, hands it the port and PID, and ends it with the turn, so the verifier no longer launches the app through its own helper; launch only, not `verify_command` back; piloted on Triage and expense-tracker | S |
 | [P17](P17-faster-tests.md) | Faster tests | task 1 built (profile); the repo's own `swift test` from 178 s to about 60 s without weakening a test: measure per-test cost serially, clean fixtures, size the gate, fewer and parallel git calls in the commands the tests drive, shorter by-design waits, fewer CLI spawns | M |
-| [P18](P18-linux.md) | Linux | built: the #221 probe shipped as small PRs so more PRs can run CI at once (portable crypto and zlib, a platform contract, the Linux implementation, orphan adopters instead of `ppid == 1`, a loopback ready check on sockets, a build cache and a 5 ms exit poll); PRs run lint and Linux (about 2m20s per job), macOS runs nightly (it ran on `main` until #288); no shards were needed | M |
 | [P19](P19-swiftui-app.md) | SwiftUI app | planned: the window and menu bar from the mockups in [`../mac-app/`](../mac-app/), one slice per screen (goal, run, review, ship, menu bar) over a core-derived thread spine and an amber "needs you" rule; refines P3; starts after P9's gate | L |
 | [P20](P20-goal-editor.md) | Goal editor | planned: edit the drafted goal in the app (blocks on the Goal screen, written back through a core `GoalEditor`), and a per-goal `skip:` list that turns the verifier, judge or a review stage off for one goal; the popover stays the place you write the request | M |
 | [P21](P21-scheduled-tasks.md) | Scheduled tasks | planned: tasks in `.workbench/tasks/<name>/` that run on a schedule (a time of day, or an interval) through the normal thread path and open a pull request, with an approval bound to the file and its pending script, a run log per task, and `fix: pr` accepting its own work when the check and verifier pass; never merges | L |
 | [P22](P22-chat-feed.md) | Chat feed | planned, nothing built: refactor the app around the chat-feed mockups ([`../design/chat-feed/`](../design/chat-feed/)): a per-thread session instead of one single-thread `ProjectStore`, the feed as data derived from the log, a feed screen behind a preference, auto-advance that stops only for a failed check, a judge disagreement or the budget, a thread list, and a chat before a goal exists; slice 7 made the feed the only window (the old one and its flag are gone), core changes are additive; concurrency stays a separate phase after it | L |
 | [P23](P23-concurrency.md) | Concurrency | built (slices 1 to 7): a few threads active at once (sized for three), default three, `max_active_threads = 1` for the old rule: a stable port block per thread for the run, the check and the setup, the single-thread guard lifted behind `max_active_threads`, `--thread` in the CLI, shared-repo git calls made safe to overlap, `max_concurrent_checks`, the app and quit/recovery for N live threads, ship onto a moved base, a concurrent soak; no queue and no scheduler | L |
-| [P24](P24-permissions-auto.md) | Permissions auto | built: `permissions = "auto"` in the config lets `claude`'s classifier decide what a run may do in its worktree (`--permission-mode auto`) instead of an allowlist entry or a grant per command; `[tools] denied` still wins, default stays the allowlist, Bash is not confined to the worktree | S |
-| [P25](P25-project-agents.md) | Project agents | built: an Agents card (rail ▸ `Agents…`) shows each role's provider, model and effort as the project's config sets them, a chat and the new-thread screen name the goal agent, `workbench config set` and `unset` change one agent key without touching the rest of the file, and the card's pickers change a role's provider, effort and model through the same editor | S |
 | [P26](P26-project-rail-inbox.md) | Project rail and inbox | planned, nothing built: a rail of projects with counts, the thread list as an inbox (Needs you, Waiting, Done), an Inbox / Automations switch, and the Agents card kept per project (inbox header button, tile menu, ⌘,); from the mockups in [`../design/project-inbox/`](../design/project-inbox/) | L |
 | [P3](P3-app.md) | App | One window that does the whole loop without the terminal | M |
 
@@ -48,19 +36,17 @@ conflicting provider-selection design. P8 remains independent check-performance 
 
 Sizes are relative effort (S < M < L), not dates. Deferred work lives in [`../later/`](../later/README.md).
 What got in the way while using Workbench on itself is kept in [`FRICTION.md`](FRICTION.md).
-Output contracts other tools rely on: [`explain-pr.md`](explain-pr.md) (`workbench explain-pr`, read by Triage) and
-[`explain-thread.md`](explain-thread.md) (`workbench explain-thread`, read by Triage).
+Output contracts other tools rely on: [`explain-pr.md`](../spec/explain-pr.md) (`workbench explain-pr`, read by Triage) and
+[`explain-thread.md`](../spec/explain-thread.md) (`workbench explain-thread`, read by Triage).
 
 ## The scope rule
 
-At any moment there is **one project** (a git repo you point Workbench at) and **one active thread**.
+*Historical: this was the rule until [P23](P23-concurrency.md), which lifted it.* A project now has at most `max_active_threads`
+active threads (default 3; `1` is the old rule), a new thread over the cap is refused with a message and never queued, and the
+app has a thread list (P22) and a project rail and inbox (P26). Still true: there is no queue and no CPU or memory scheduler, and
+many projects at once belong in [`../later/`](../later/README.md).
 
-- Starting a new thread while another is not finished is refused with a clear message (the CLI). The app's New Goal sheet instead abandons the active thread once the draft is good (patch saved, branch kept). No queue.
-- There is no thread list, no project list, no inbox. There is "the current thread" and a short history.
-- Nothing runs concurrently. Not turns, not checks, not two threads.
-
-[P22](P22-chat-feed.md) changes what the app shows, not this rule: it adds a thread list that shows history and the one live thread, and a chat before a goal
-(a thread in state `chat`: read-only turns, no worktree). Lifting the guard is [P23](P23-concurrency.md); its "well" gate below is waived there.
+The original rule, for the reasoning: one project, one active thread, nothing concurrent, no thread list or inbox.
 
 The on-disk layout is still thread-shaped (a folder per thread id) so that lifting this later is deleting a
 guard, not a migration. But no code is written for the many-thread case now.
@@ -102,7 +88,7 @@ Status: **proposed** until we agree; **decided** once written into the phase tha
 |---|---|---|---|---|
 | D0 | Scope | One project, one active thread, sequential. Concurrency after the "well" gate above | Design for N threads now (rejected: it is what sank the first attempt) | decided; superseded by [P23](P23-concurrency.md) |
 | D1 | Language and runtime | Swift package: `WorkbenchCore` + `workbench` CLI, SwiftUI app in P3 | TypeScript or Python with the Claude Agent SDK handling the subprocess | **decided**: Swift holds (P1 soak) |
-| D2 | Permissions (current Claude adapter; generalized in P9) | `claude -p --permission-prompts none --restricted` + one fixed `--tools`/`--allowedTools`/`--disallowedTools` set (never bare file tools) + budget; worktree is the boundary. Verified in [P1 spikes](P1-spikes.md) | Prompt per tool call over a control channel (rejected: needs the engine we removed) | P1 |
+| D2 | Permissions (current Claude adapter; generalized in P9) | `claude -p --permission-prompts none --restricted` + one fixed `--tools`/`--allowedTools`/`--disallowedTools` set (never bare file tools) + budget; worktree is the boundary. Verified in [P1 spikes](../archive/P1-spikes.md) | Prompt per tool call over a control channel (rejected: needs the engine we removed) | P1 |
 | D3 | Process model | **One process per turn/attempt**, stdin `/dev/null`. Claude uses first-turn `--session-id` then `--resume` (S4); P9 makes native session support optional and provider-qualified | One long-lived process per thread (rejected: idle eviction, queueing, resume races) | P1 |
 | D4 | Goal format | Markdown with YAML front matter, see [`spec/goal-file.md`](../spec/goal-file.md) | JSON (worse to write and review by hand) | P1 |
 | D5 | Event log | JSON lines, append-only, see [`spec/event-log.md`](../spec/event-log.md) | SQLite (heavier, harder to inspect) | P1 |
@@ -121,7 +107,7 @@ Status: **proposed** until we agree; **decided** once written into the phase tha
 - **D9 — Compatibility:** retain Claude run/judge and Codex review defaults. Preserve historical logs
   and state transitions; add normalized activity and attempt recovery before the app depends on them.
 
-[P9](P9-agent-providers.md) defines configuration, contracts, migration and the measurable gates. D2
+[P9](../archive/P9-agent-providers.md) defines configuration, contracts, migration and the measurable gates. D2
 remains the current Claude policy; P9 extends it through tested native provider controls, not a new
 Workbench permission engine. Historical phase documents describe their original implementation.
 

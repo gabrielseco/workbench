@@ -253,7 +253,7 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   its current tip, so review and accept see only what the thread adds on top. The local branch is still
   `workbench/<id>`. `main`, `master`, `trunk` and `develop` are refused. `ship` pushes the work to that
   branch and records the branch's open pull request, instead of creating a branch and a PR
-  ([P2.5](../plan/P2.5-ship.md)).
+  ([P2.5](../archive/P2.5-ship.md)).
   **Optional:** `skip`, step names separated by commas, each once: `verifier`, `judge`, or a stage named in
   `[review] stages`. A step the goal skips does not run for this goal: the verifier records `verifier.skipped` ("the
   goal skips the verifier") after a turn, `[review] auto` prints `auto judge: skipped, the goal skips it`, and `next`
@@ -468,11 +468,11 @@ Notes:
   thread does, and prints `copy: not copied:` lines for what it left out.
 - **`verify_command` and `verify_timeout_min` are gone.** A config that still has either is refused at load with
   "'verify_command' was removed: replace it with a [verifier] table" (not the unknown-key message), so nothing runs
-  on a half-migrated project. The project's evidence is made by the verifier ([P10](../plan/P10-skill-verifier.md)),
+  on a half-migrated project. The project's evidence is made by the verifier ([P10](../archive/P10-skill-verifier.md)),
   a `claude` turn on the project's skill; a project with no skill at the base has no verifier. When a goal has a
   `screenshot:` proof and the verifier will run (on, the default, with its skill in the base commit), the first prompt
   says the verifier captures it, so Claude does not report it as unverified.
-- **`[run]` is checked when the config loads** ([P16](../plan/P16-run.md)). `command` is one plain command like `check_command`
+- **`[run]` is checked when the config loads** ([P16](../archive/P16-run.md)). `command` is one plain command like `check_command`
   (no operators, quotes or substitutions); exactly one of `ready_url` (an `http` URL on `localhost` or `127.0.0.1`, `{port}`
   standing for the port) and `ready_line` (a regular expression a line of the command's output must match) says when the app
   is up; `ready_timeout_s` is 1 to 900 (default 120). A missing `command`, none or both ready checks, an unknown key or a bad
@@ -483,7 +483,7 @@ Notes:
   `WORKBENCH_RUN_URL`, and the prompt tells it not to start or stop the app. An app that exits, never comes up or is not
   found ends the verifier with `ok: false` and the reason, and spends nothing. The command comes from the project's
   config, never from a file in the worktree. It is launch only: nothing it prints or returns is a verdict.
-- **`[verifier]` is checked when the config loads** ([P10](../plan/P10-skill-verifier.md)). `skill` is optional (default `.claude/skills/verify/SKILL.md`) and is an explicit repository path (`.claude/skills/…` and
+- **`[verifier]` is checked when the config loads** ([P10](../archive/P10-skill-verifier.md)). `skill` is optional (default `.claude/skills/verify/SKILL.md`) and is an explicit repository path (`.claude/skills/…` and
   `.agents/skills/…` both work; nothing is discovered): no empty value, no absolute path, no `..`. `tools` are
   Claude Code permission patterns; a bare `Bash`, `Bash(*)` and the like are refused, and the list may not be empty.
   `model` is a model name, `enabled` a boolean (`false` turns the verifier off; it is on with no table at all), `budget_usd` a positive number, `timeout_min` 1 to 240; any other key

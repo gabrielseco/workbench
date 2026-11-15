@@ -295,7 +295,7 @@ these differences:
 ### `explain-pr --pr <n>`
 
 The same codes as `pr-review --pr` for the same input, with no 15 (an explanation has no verdict). The output contract
-is [`../plan/explain-pr.md`](../plan/explain-pr.md).
+is [`../plan/explain-pr.md`](explain-pr.md).
 
 | Code | Kind | When |
 |---|---|---|
@@ -306,7 +306,7 @@ is [`../plan/explain-pr.md`](../plan/explain-pr.md).
 
 ### `explain-thread --pr <n> --thread <id>`
 
-The output contract is [`../plan/explain-thread.md`](../plan/explain-thread.md).
+The output contract is [`../plan/explain-thread.md`](explain-thread.md).
 
 | Code | Kind | When |
 |---|---|---|

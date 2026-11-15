@@ -15,12 +15,12 @@ full list. Don't re-flag what `scripts/check.sh` (CI) already enforces; flag onl
   run `swiftlint lint --quiet` on the changed files and `swift test --filter` on their suites (`AGENTS.md`,
   "Shipping a change" step 2); the full `scripts/check.sh` is CI's.
 - Read each changed file in full, not just hunks: whether an error path still writes its end record is
-  invisible in a diff. Read `AGENTS.md`, and for the phase in question its plan under `docs/plan/` and
+  invisible in a diff. Read `AGENTS.md`, and for the phase in question its plan under `docs/plan/` (or `docs/archive/` once built) and
   the spec under `docs/spec/`.
 
 ## Step 2 — Check against this repo's invariants
 
-**Process layer** (`docs/plan/P1-runner.md`, "Process layer rules")
+**Process layer** (`docs/archive/P1-runner.md`, "Process layer rules")
 - Children start only through `Spawner`; no `Process`, `waitUntilExit` or `readDataToEndOfFile` anywhere under `Sources/`. New spawn paths get stdin `/dev/null`, their own group, an explicit
   environment, a timeout with SIGTERM then SIGKILL, and a swept process tree.
 - Exit comes from `ChildExitWatcher`; a new place that waits on a child by any other means is a finding.
@@ -65,7 +65,7 @@ full list. Don't re-flag what `scripts/check.sh` (CI) already enforces; flag onl
 - A test that only asserts a prompt or instruction text contains a phrase is a finding: it checks wording, not
   behaviour (`AGENTS.md`, step 2).
 - A test for a bug fix fails without the fix. Stream-handling changes are checked against the real
-  fixtures in `docs/plan/P1-spikes/fixtures/`.
+  fixtures in `docs/archive/P1-spikes/fixtures/`.
 
 **UI components** (`AGENTS.md`, Conventions; `docs/UI-AUDIT.md`)
 - A new or changed view that writes out a card, callout, pill, label, row or button look that already exists as a component (or as the

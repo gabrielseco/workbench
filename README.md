@@ -127,5 +127,5 @@ docs/spec/               formats and contracts
 scripts/                 checks, bundle-app.sh, verify-cli and verify-app scenarios
 ```
 
-The project's history is in its pull requests; `docs/plan/` holds the phase plans and `docs/later/` what is deliberately
+The project's history is in its pull requests; `docs/plan/` holds the phases still open, `docs/archive/` the finished ones, and `docs/later/` what is deliberately
 not built yet.

@@ -1,9 +1,9 @@
 # P11: A pipeline that proves the change before it opens the pull request
 
 Status: plan, nothing built. Written 2026-10-17. Replaces an earlier draft of this file ("ship first, then
-verify"). Builds on [P2.5](P2.5-ship.md) (`ship`, `pr-shots`), [P4](P4-verify.md) (verify, the judge),
+verify"). Builds on [P2.5](../archive/P2.5-ship.md) (`ship`, `pr-shots`), [P4](../archive/P4-verify.md) (verify, the judge),
 [P5](P5-review-loop.md) (`ship --review-loop`), [P6](P6-review-stages.md) (review stages) and
-[P10](P10-skill-verifier.md) (a verifier that runs the project's skill). Friction rows 57 and the stale-proof gap
+[P10](../archive/P10-skill-verifier.md) (a verifier that runs the project's skill). Friction rows 57 and the stale-proof gap
 below.
 
 ## Why
@@ -203,7 +203,7 @@ tools = ["Read", "Bash(scripts/verify-app.sh:*)", "Bash(scripts/snap.sh:*)", "Ba
 |---|---|
 | Events (`docs/spec/event-log.md`) | `commit` on `proof.added`, `verifier.started`; `pipeline.started`, `pipeline.step`, `pipeline.ended` with `reason` (clean, round cap, cost cap, stopped, failed) |
 | Proof | `ProofSet.head(commit:)` and a stale check used by `review`, judge, design and publish |
-| `Verify` | a failed or missing-criterion result builds a follow-up request; runs the verifier ([P10](P10-skill-verifier.md)); `verify_command` is removed in P10 PR 6 |
+| `Verify` | a failed or missing-criterion result builds a follow-up request; runs the verifier ([P10](../archive/P10-skill-verifier.md)); `verify_command` is removed in P10 PR 6 |
 | `Judge` | `--gate` returns the not-met criteria with evidence as the follow-up request |
 | `Ship/ShipScreenshots.swift` | `PRProof.publish(number:, worktree:)`: refuses a stale proof, no PNGs means no edit, a failure is a note |
 | `Config` | `[pipeline]` and its refusals; `doctor` prints the order and the budget |

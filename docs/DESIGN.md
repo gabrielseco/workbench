@@ -176,7 +176,7 @@ ships, and the mockup gets fixed.
 
 ## Agents card
 
-The project's agent roles, and where they are changed ([P25](plan/P25-project-agents.md)). A `popover` card, 560 wide, centred over a light veil, opened by the
+The project's agent roles, and where they are changed ([P25](archive/P25-project-agents.md)). A `popover` card, 560 wide, centred over a light veil, opened by the
 agents pill beside the project pill in the top bar (a `.control` pill: a `cpu` mark and the run role's `Codex · model`, or `Agents` when the config is unread)
 or by Agents… in the app menu (⌘,). Header: `AGENTS` (`SectionLabel`) and a close button. One row per role in
 the order goal, plan, run, judge, review, ship, verifier. An editable row has the role in `.calloutStrong` with what it does under it (`.caption`); at the

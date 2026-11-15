@@ -1,6 +1,6 @@
 import Foundation
 
-/// `[run]`: how the project's app is started for the verifier (docs/plan/P16-run.md). Workbench starts `command` itself,
+/// `[run]`: how the project's app is started for the verifier (docs/archive/P16-run.md). Workbench starts `command` itself,
 /// waits for the ready check and stops it when the turn ends, so the verifier only drives and photographs it. It is
 /// launch only: nothing the command prints or returns is a verdict.
 public struct RunConfig: Sendable, Equatable {

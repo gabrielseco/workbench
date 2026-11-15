@@ -1,7 +1,7 @@
 import Foundation
 
 /// How risky it is to let a run use a command it was denied, by rules and not by a model, so the same text
-/// always gets the same answer (docs/plan/P13-grant.md). When unsure it rates up.
+/// always gets the same answer (docs/archive/P13-grant.md). When unsure it rates up.
 public struct DeniedCommandAssessment: Sendable, Equatable {
     public enum Level: Int, Sendable, Comparable, Equatable {
         case safe, caution, unsafe

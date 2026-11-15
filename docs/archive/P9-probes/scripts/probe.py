@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P9 task 1: probe what the Claude and Codex CLIs can enforce. See docs/plan/P9-capabilities.md.
+"""P9 task 1: probe what the Claude and Codex CLIs can enforce. See docs/archive/P9-capabilities.md.
 
     probe.py static OUT                 free: versions and the flags each capability needs
     probe.py paid OUT [probe ...]       costs money: real turns on a throwaway repo, raw output kept in OUT

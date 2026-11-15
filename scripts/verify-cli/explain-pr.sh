@@ -8,7 +8,7 @@
 # read-only in the throwaway checkout; the clone, its branches and origin are as they were and no checkout is left; gh was
 # only asked to read; a second run reuses the file without running codex; --again runs it; --out writes there and prints that
 # path; a moved head is explained afresh into its own file; an empty answer exits 1 and prints no path; no --pr and a
-# non-numeric --pr exit 2; help names the command. The output contract is docs/plan/explain-pr.md.
+# non-numeric --pr exit 2; help names the command. The output contract is docs/spec/explain-pr.md.
 # VERIFY_CLI_SABOTAGE=1 rewrites the first run's output after it ran (front matter put back in the file, the path line dropped
 # from stdout), so "last stdout line is the absolute path" and "the file is the body only" must FAIL.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. Run by hand, not by CI.

@@ -41,7 +41,7 @@ runs:
     - name: Restore each file's last commit time
       # A fresh checkout gives every file a new modification time, and SwiftPM treats a newer file as changed, so it would
       # rebuild everything and the restored .build would be worth nothing. With the time of the commit that last touched
-      # each file, only what a change touched looks new. Measured on this repository (docs/plan/P18-linux.md): a cold
+      # each file, only what a change touched looks new. Measured on this repository (docs/archive/P18-linux.md): a cold
       # build takes 2.5 to 4 minutes, a warm one after a one-file change about 30 seconds.
       shell: bash
       run: |

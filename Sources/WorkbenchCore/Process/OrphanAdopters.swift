@@ -25,7 +25,7 @@ enum AdopterProbe {
         else { return Outcome() }
         var status: Int32 = 0
         var waited = 0
-        // Polled, never a blocking wait (docs/plan/P1-runner.md): the shell ends within milliseconds.
+        // Polled, never a blocking wait (docs/archive/P1-runner.md): the shell ends within milliseconds.
         while waitpid(shell, &status, WNOHANG) == 0 {
             guard waited < patience else { return Outcome(adopter: nil, shell: endGroup(shell)) }
             usleep(10_000)

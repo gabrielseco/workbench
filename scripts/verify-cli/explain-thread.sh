@@ -11,7 +11,7 @@
 # thread on another pull request and a closed pull request exit 6 (workbench: refused:); no --thread exits 2; help lists it;
 # an answer with a line of prose before the object is accepted; while one thread is being explained (the stand-in codex sleeps), a
 # second thread is explained and exits 0, and the same thread again exits 6 (refused: busy), then the first finishes with 0.
-# The output contract is docs/plan/explain-thread.md.
+# The output contract is docs/spec/explain-thread.md.
 # VERIFY_CLI_SABOTAGE=1 rewrites the first run's output after it ran (the object line dropped from stdout, the thread taken out
 # of the brief), so "the last stdout line is a JSON object ..." and "the brief has ..." must FAIL; it also drops the object from the
 # second thread's output, so "a second thread is explained while the first runs" must FAIL.

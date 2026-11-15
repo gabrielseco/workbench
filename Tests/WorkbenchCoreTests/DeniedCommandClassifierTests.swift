@@ -6,7 +6,7 @@ private func bash(_ command: String) -> DeniedCommandAssessment {
     DeniedCommandClassifier.classify(tool: "Bash", input: command)
 }
 
-/// The commands the 2026-10-17 `verify-cli` threads were denied (docs/plan/P13-grant.md) and the cases in
+/// The commands the 2026-10-17 `verify-cli` threads were denied (docs/archive/P13-grant.md) and the cases in
 /// FRICTION #28, #29, #33, #34 and #35.
 @Suite struct DeniedCommandClassifierTests {
     @Test func theChmodCompoundIsSplitIntoPartsThatCanBeGrantedOneByOne() {

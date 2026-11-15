@@ -175,7 +175,7 @@ private let completed =
     @Test func probeFixturesReplay() throws {
         var root = URL(fileURLWithPath: #filePath)
         for _ in 0..<3 { root.deleteLastPathComponent() }
-        let folder = root.appendingPathComponent("docs/plan/P9-probes/fixtures")
+        let folder = root.appendingPathComponent("docs/archive/P9-probes/fixtures")
         let files = try FileManager.default.contentsOfDirectory(atPath: folder.path)
             .filter { $0.hasPrefix("codex-ws-hardened-") && $0.hasSuffix(".stdout") }.sorted()
         try #require(!files.isEmpty, "the probe fixtures are in the repository")

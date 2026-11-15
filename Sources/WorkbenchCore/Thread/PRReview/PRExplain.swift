@@ -1,7 +1,7 @@
 import Foundation
 
 /// `explain-pr`: the same read-only agent run as `pr-review --pr`, on the same throwaway checkout of the pull request's
-/// head, asked for an explanation instead of a verdict. The output contract is docs/plan/explain-pr.md.
+/// head, asked for an explanation instead of a verdict. The output contract is docs/spec/explain-pr.md.
 public enum PRExplain {
     /// The folder under `.workbench/` where explanations are kept, one file per pull request and head.
     public static let folderName = "explains"

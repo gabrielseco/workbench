@@ -130,12 +130,12 @@ private let repoTemplate = """
     }
 
     @Test func templateKeepsHeadingsInOrderAndFillsKnownOnes() {
-        let g = goal(request: "Add retry.\n(Plan: docs/plan/P2.5-ship.md task 3)")
+        let g = goal(request: "Add retry.\n(Plan: docs/archive/P2.5-ship.md task 3)")
         let body = PRBodyBuilder.build(goal: g, check: check("passed"), template: repoTemplate).body
         let headings = body.split(separator: "\n").filter { $0.hasPrefix("## ") }
         #expect(headings == ["## Summary", "## Why", "## What changed", "## Testing"])
         #expect(body.contains("## Summary\n\nAdd retry."))
-        #expect(body.contains("## Why\n\ndocs/plan/P2.5-ship.md task 3"))
+        #expect(body.contains("## Why\n\ndocs/archive/P2.5-ship.md task 3"))
         #expect(body.contains("## Testing\n\nCheck: passed (exit 0, 12s)"))
         #expect(body.contains("- [ ] Retries on 5xx, not 4xx."))
         // The template's own checklist is replaced by what Workbench knows, not left half true.

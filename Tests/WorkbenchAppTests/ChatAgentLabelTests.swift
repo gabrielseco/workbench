@@ -7,7 +7,7 @@ import WorkbenchCore
 
 @MainActor private var keptAgentFixtures: [AppFixture] = []
 
-/// The Agents card and the agent a chat names (docs/plan/P25-project-agents.md, slice 1): read from the project's config, never written.
+/// The Agents card and the agent a chat names (docs/archive/P25-project-agents.md, slice 1): read from the project's config, never written.
 @MainActor @Suite struct ChatAgentLabelTests {
     private func store(config: String?) async throws -> (ProjectStore, AppFixture) {
         let fixture = try await AppFixture()
