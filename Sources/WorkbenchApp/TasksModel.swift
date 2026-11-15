@@ -21,7 +21,7 @@ enum TaskOutcomeStyle {
         // A nothing-to-do run reached its end only after a succeeded turn and a passed check: the agent did its work (it may have acted
         // through a tool), there was just no change to ship.
         case .prOpened?, .reported?, .nothingToDo?: .done
-        case .nothingPending?, .skippedProjectBusy?, .skippedAlreadyRunning?, .skippedTooManyOpen?: .idle
+        case .nothingPending?, .skippedProjectBusy?, .skippedAlreadyRunning?, .skippedTooManyOpen?, .skippedDisabled?: .idle
         case .staleApproval?, .needsYou?: .needsYou
         case .failed?, .budgetExceeded?, .interrupted?: .broken
         }
@@ -119,6 +119,11 @@ struct TasksSnapshot: Equatable {
     /// A thread that fills the project's last free slot (`max_active_threads`), nil while one is free: a task's next run would
     /// skip while it is set (the task page says so).
     var activeThread: String?
+    /// The archived tasks: not in `entries` (nothing counts, notifies or runs them), listed apart so they can be opened and restored.
+    var archived: [TaskEntry] = []
+
+    /// Every task the page can show: the active ones, then the archived.
+    var allEntries: [TaskEntry] { entries + archived }
 }
 
 /// Reads the tasks of a project from the core and nothing else; read only, nothing is written and no thread is touched.
@@ -133,8 +138,20 @@ struct TasksReader: Sendable {
             let service = timerService(project: project, environment: environment)
             return TasksSnapshot(
                 projectPath: project.root.path, entries: entries, timer: await timerCard(service), readAt: now,
-                activeThread: blockingThread(project))
+                activeThread: blockingThread(project), archived: archivedEntries(project, now: now))
         }
+    }
+
+    /// The archived tasks and their runs, kept for reference.
+    static func archivedEntries(_ project: Project, now: Date) -> [TaskEntry] {
+        TaskLibrary(project: project).archivedNames().map { entry(project, $0, now: now) }
+    }
+
+    private static func entry(_ project: Project, _ name: String, now: Date) -> TaskEntry {
+        let history = try? TaskRunLog(project: project, name: name).history()
+        return TaskEntry(
+            summary: TaskLibrary(project: project).summary(name, now: now), runs: Array((history?.runs ?? []).reversed()),
+            approvedAt: history?.approvedAt)
     }
 
     /// A thread filling the last free slot, nil while one is free: what makes a task that opens a pull request skip.
@@ -143,20 +160,15 @@ struct TasksReader: Sendable {
         return ThreadStore(project: project).fullThreads(maxActive: cap)?.first
     }
 
-    /// The project's tasks and their runs, without the timer's probes: what the menu bar watches. A folder that cannot be read is a
-    /// failed read, not "no tasks", so the last good data stays.
+    /// The project's active tasks and their runs, without the timer's probes: what the menu bar watches. An archived task is not
+    /// one of them. A folder that cannot be read is a failed read, not "no tasks", so the last good data stays.
     static func entries(_ project: Project, now: Date) throws -> [TaskEntry] {
         let library = TaskLibrary(project: project)
         do { _ = try FileManager.default.contentsOfDirectory(atPath: project.tasksDirectory.path) } catch {
             let missing = (error as NSError).code == NSFileReadNoSuchFileError
             if !missing { throw error }
         }
-        return library.names().map { name -> TaskEntry in
-            let history = try? TaskRunLog(project: project, name: name).history()
-            return TaskEntry(
-                summary: library.summary(name, now: now), runs: Array((history?.runs ?? []).reversed()),
-                approvedAt: history?.approvedAt)
-        }
+        return library.activeNames().map { entry(project, $0, now: now) }
     }
 
     /// The core's lines, or `unknown` when the probes (`launchctl`, `pmset`, `fdesetup`) do not answer in time: never a made-up green.
@@ -204,6 +216,8 @@ struct TasksReader: Sendable {
     /// Why the last read failed; the last good snapshot stays on screen next to it.
     private(set) var error: String?
     var selection: String?
+    /// The list's `Archived · N` fold is open.
+    var archivedShown = false
     private(set) var reads = 0
 
     // What the two buttons are doing. Only they write, and only through `TaskActions` (core).
@@ -256,11 +270,12 @@ struct TasksReader: Sendable {
     }
 
     func selected(in snapshot: TasksSnapshot) -> TaskEntry? {
-        if let selection, let entry = snapshot.entries.first(where: { $0.id == selection }) { return entry }
-        // The task that most needs a look first: one that did not end well, a stale one, else the first.
+        if let selection, let entry = snapshot.allEntries.first(where: { $0.id == selection }) { return entry }
+        // The task that most needs a look first: one that did not end well, a stale one, else the first. An archived one only when
+        // nothing else is there.
         return snapshot.entries.first { TaskOutcomeStyle.tone($0.runs.first?.outcome) == .broken && !$0.runs.isEmpty }
             ?? snapshot.entries.first { $0.summary.approval != .approved || $0.summary.problem != nil }
-            ?? snapshot.entries.first
+            ?? snapshot.entries.first ?? snapshot.archived.first
     }
 
     /// Whether a read is due: the screen is shown and it has not been read for `interval`.
@@ -283,7 +298,7 @@ struct TasksReader: Sendable {
             // The project changed while this was reading: its answer is for the one that was left.
             guard latestPath == fresh.projectPath else { return }
             // A selection that is not a task of this project is dropped; one that is (made by a notification) stays.
-            if let chosen = selection, !fresh.entries.contains(where: { $0.id == chosen }) { selection = nil }
+            if let chosen = selection, !fresh.allEntries.contains(where: { $0.id == chosen }) { selection = nil }
             snapshot = fresh
             editLimit = TaskEdit.limit(config: try? Config.load(from: project.configURL))
             error = nil
@@ -316,8 +331,10 @@ enum TasksText {
 
     /// The next run: "due now" when the moment has passed (a run missed while off happens once, on the next tick), "manual" for none.
     static func next(_ summary: TaskSummary, now: Date) -> String {
+        if summary.archived { return "never (archived)" }
         if summary.problem != nil { return "—" }
         guard summary.schedule != nil else { return "manual" }
+        if !summary.enabled { return "never (disabled)" }
         guard summary.approval == .approved else { return "not until approved" }
         guard let due = summary.nextDue else { return "—" }
         return due <= now ? "due now" : when(due, now: now)

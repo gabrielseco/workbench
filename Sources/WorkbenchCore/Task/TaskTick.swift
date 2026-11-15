@@ -4,7 +4,7 @@ import Foundation
 public enum TaskTick {
     /// The tasks whose next due time has passed, the earliest first. Only a task that was approved, or has run, has a time to count
     /// from, so a task nobody approved never fires. A task whose approval went stale is still due: running it records
-    /// `stale-approval`, which is how a person finds out.
+    /// `stale-approval`, which is how a person finds out. A disabled or archived task is never due.
     public static func due(project: Project, now: Date = Date(), calendar: Calendar = .current) -> [String] {
         plan(project: project, now: now, calendar: calendar).due
     }
@@ -27,6 +27,8 @@ public enum TaskTick {
         var broken: [Broken] = []
         for name in library.names() {
             let history = try? TaskRunLog(project: project, name: name).history()
+            // A task a person turned off, or put away, is not due and not a problem: its schedule is not in force.
+            if let history, !history.isScheduled { continue }
             let loaded: LoadedTask
             do { loaded = try library.load(name) } catch {
                 if history?.approvedHash != nil { broken.append(Broken(name: name, reason: "\(error)")) }

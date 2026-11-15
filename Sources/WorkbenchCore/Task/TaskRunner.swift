@@ -112,6 +112,12 @@ public struct TaskRunner: Sendable {
             await writer.close()
             return TaskRunResult(outcome: .failed, reason: "the run log is damaged: \(error)", recorded: false)
         }
+        // Checked under the lock, so a tick planned before a person turned the task off does not run it. An archived task is a
+        // reference and runs for nobody; a disabled one still runs when a person asks.
+        if let why = Self.offReason(name, history: history, trigger: trigger) {
+            await writer.close()
+            return TaskRunResult(outcome: .skippedDisabled, reason: why, recorded: false)
+        }
         // Without a durable start nothing is spent: a run that cannot say it began could not say how it ended.
         do { try await writer.append(.taskRunStarted, data: ["trigger": .string(trigger.rawValue)]) } catch {
             await writer.close()
@@ -134,6 +140,13 @@ public struct TaskRunner: Sendable {
         }
         await writer.close()
         return result
+    }
+
+    /// Why the task may not run now, or nil when it may.
+    static func offReason(_ name: String, history: TaskHistory, trigger: TaskTrigger) -> String? {
+        if history.archived { return "the task is archived: workbench task restore \(name)" }
+        if !history.enabled, trigger == .tick { return "the task is disabled: workbench task enable \(name)" }
+        return nil
     }
 
     func fail(_ reason: String, units: [String] = [], thread: String? = nil) -> TaskRunResult {

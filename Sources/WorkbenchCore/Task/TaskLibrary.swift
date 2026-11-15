@@ -25,6 +25,10 @@ public struct TaskSummary: Sendable, Equatable {
     public var lastRun: Date?
     /// Why the last run ended as it did, when it did not end well.
     public var lastReason: String?
+    /// False while the task is disabled: a tick does not run it (`nextDue` is nil).
+    public var enabled = true
+    /// True while the task is archived: off the active list and never run (`nextDue` is nil).
+    public var archived = false
 }
 
 /// The tasks of one project.
@@ -126,19 +130,19 @@ public struct TaskLibrary: Sendable {
         }
         do {
             let loaded = try load(name)
-            let base = history.scheduleBase
+            let base = history.isScheduled ? history.scheduleBase : nil
             return TaskSummary(
                 name: name, problem: nil, schedule: loaded.definition.schedule?.summary, fix: loaded.definition.fix,
                 mcpTools: loaded.definition.mcpTools,
                 approval: TaskApproval.state(approvedHash: history.approvedHash, currentHash: loaded.hash),
                 nextDue: base.flatMap { loaded.definition.schedule?.nextDue(since: $0, calendar: calendar) },
                 lastOutcome: history.lastRun?.outcome, lastRun: history.lastRun?.started,
-                lastReason: history.lastRun?.reason)
+                lastReason: history.lastRun?.reason, enabled: history.enabled, archived: history.archived)
         } catch {
             return TaskSummary(
                 name: name, problem: "\(error)", schedule: nil, fix: nil, approval: .never, nextDue: nil,
                 lastOutcome: history.lastRun?.outcome, lastRun: history.lastRun?.started,
-                lastReason: history.lastRun?.reason)
+                lastReason: history.lastRun?.reason, enabled: history.enabled, archived: history.archived)
         }
     }
 }

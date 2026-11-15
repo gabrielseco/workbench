@@ -11,6 +11,44 @@ enum TaskPage {
         var path: String
     }
 
+    /// Whether the schedule is in force, as the pill beside the name says it: a word, and a tone so colour is never the only signal.
+    enum State: Equatable {
+        case enabled, disabled
+        /// Put away; `enabled` is what it is when restored.
+        case archived(enabled: Bool)
+
+        init(_ summary: TaskSummary) {
+            self = summary.archived ? .archived(enabled: summary.enabled) : summary.enabled ? .enabled : .disabled
+        }
+
+        var word: String {
+            switch self {
+            case .enabled: "Enabled"
+            case .disabled: "Disabled"
+            case .archived: "Archived"
+            }
+        }
+
+        var tone: TaskTone {
+            switch self {
+            case .enabled: .done
+            case .disabled: .needsYou
+            case .archived: .idle
+            }
+        }
+
+        /// What the state means, under the header; nil when the task runs as scheduled.
+        var note: String? {
+            switch self {
+            case .enabled: nil
+            case .disabled: "Disabled: it does not run on its schedule. Run now still runs it; Enable puts the schedule back on."
+            case .archived(let enabled):
+                "Archived: kept for reference with its runs, and never run. Restore puts it back on the list, "
+                    + (enabled ? "enabled." : "still disabled.")
+            }
+        }
+    }
+
     static func header(_ entry: TaskEntry, now: Date) -> Header {
         let summary = entry.summary
         let fix = summary.fix == .pr ? "opens a PR" : summary.fix == .update ? "updates PRs" : "reports"
@@ -36,7 +74,7 @@ struct RunTonight: Equatable {
     }
 
     enum Action: Equatable {
-        case approve, reapprove
+        case approve, reapprove, enable
         case openThread(String)
         /// The timer's tick log named by a warning: only a tick log of this app (`RunAction.isTickLogPath`).
         case openLog(String)
@@ -65,6 +103,13 @@ struct RunTonight: Equatable {
     static func derive(_ entry: TaskEntry, timer: TimerCard, activeThread: String?) -> RunTonight {
         let summary = entry.summary
         var found: [Warning] = []
+        // Turned off on purpose: said first, whatever else holds, since nothing else matters to tonight while it is off.
+        if !summary.enabled {
+            found.append(
+                Warning(
+                    fails: true, text: "Disabled: a tick does not run it. Run now still does.",
+                    detail: "workbench task enable \(summary.name)", action: .enable))
+        }
         if let problem = summary.problem {
             let detail = TaskExplanation.clean(problem, limit: 200)
             found.append(Warning(fails: true, text: "The task does not load.", detail: detail))
@@ -80,7 +125,7 @@ struct RunTonight: Equatable {
                     detail: "workbench task approve \(summary.name)", action: .reapprove))
         }
         // The timer's own line for this (`approved but has no schedule`) is one of the task lines left out below, so it is said here.
-        if summary.problem == nil, summary.approval == .approved, summary.schedule == nil {
+        if summary.problem == nil, summary.approval == .approved, summary.schedule == nil, summary.enabled {
             found.append(
                 Warning(
                     fails: false, text: "It has no schedule: a tick never runs it, so it runs only when you run it.",
@@ -156,6 +201,8 @@ enum RunAction: Equatable {
     case viewLog
     case approve
     case reapprove
+    /// A disabled task's schedule back on.
+    case enable
     case openThread(String)
     /// A report run's report file, relative to the project root: opens in whatever opens Markdown (Obsidian, when it does).
     case openReport(String)
@@ -167,6 +214,7 @@ enum RunAction: Equatable {
         case .viewLog: "View log"
         case .approve: "Approve"
         case .reapprove: "Re-approve"
+        case .enable: "Enable"
         case .openThread: "Open thread"
         case .openReport: "Open report"
         case .openLog: "Open log"

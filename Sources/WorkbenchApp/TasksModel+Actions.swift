@@ -4,6 +4,7 @@ import WorkbenchCore
 extension TasksModel {
     /// Why `Run now` is off for this task, or nil when it can start: shown as the button's `.help`.
     func runUnavailable(_ entry: TaskEntry, threadRunGoing: Bool) -> String? {
+        if entry.summary.archived { return "Archived: restore it to run it." }
         if entry.summary.problem != nil { return "The task does not load: fix its task.md first." }
         switch entry.summary.approval {
         case .never: return "Not approved: nothing runs unapproved."
@@ -41,6 +42,36 @@ extension TasksModel {
             await refresh(project)
         } catch {
             actionNote = "\(name) cannot be approved: \(error)"
+        }
+    }
+
+    // MARK: disable, enable, archive, restore
+
+    /// Why Disable, Enable, Archive or Restore is off for this task, or nil when it can be pressed: a run of it holds its log.
+    func changeUnavailable(_ entry: TaskEntry, in project: Project?) -> String? {
+        if entry.isRunning || isRunning(entry.id, in: project) { return "A run of this task is going: wait until it has ended." }
+        return nil
+    }
+
+    /// Records the change through core and reads again. The task stays selected, so an archived one is shown with its Restore.
+    func change(_ project: Project?, _ name: String, _ change: TaskStateChange) async {
+        guard let project else { return }
+        do {
+            try await actions.change(project, name, change)
+            actionNote = nil
+            selection = name
+            await refresh(project)
+        } catch {
+            actionNote = "\(name) cannot be \(Self.pastTense(change)): \(error)"
+        }
+    }
+
+    static func pastTense(_ change: TaskStateChange) -> String {
+        switch change {
+        case .disable: "disabled"
+        case .enable: "enabled"
+        case .archive: "archived"
+        case .restore: "restored"
         }
     }
 

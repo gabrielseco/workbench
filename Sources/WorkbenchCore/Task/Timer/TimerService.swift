@@ -85,7 +85,9 @@ public struct TimerService: Sendable {
 
     private func tasks() -> [TaskDefinition] {
         let library = TaskLibrary(project: project)
-        return library.names().compactMap { try? library.load($0).definition }
+        // A disabled or archived task asks for no wake: its schedule is not in force.
+        return library.names().filter { (try? TaskRunLog(project: project, name: $0).history())?.isScheduled ?? true }
+            .compactMap { try? library.load($0).definition }
     }
 
     public static func interval(_ text: String) throws -> Int {
@@ -281,11 +283,14 @@ public struct TimerService: Sendable {
 
         // The tasks.
         let library = TaskLibrary(project: project)
-        let defined = library.names().compactMap { name in (name, try? library.load(name).definition) }
-        if defined.isEmpty { add(.warn, "tasks: none in .workbench/tasks (workbench task new <name>)") }
-        for name in library.names() {
+        // An archived task is a reference, not something the timer runs: it is not listed.
+        let active = library.activeNames()
+        if active.isEmpty { add(.warn, "tasks: none in .workbench/tasks (workbench task new <name>)") }
+        for name in active {
             let summary = library.summary(name)
-            if let problem = summary.problem {
+            if !summary.enabled {
+                add(.ok, "task \(name): disabled, a tick does not run it (workbench task enable \(name))")
+            } else if let problem = summary.problem {
                 add(.fail, "task \(name): cannot be loaded: \(TaskExplanation.clean(problem, limit: 160))")
             } else if summary.approval != .approved {
                 let state = summary.approval == .stale ? "STALE" : "not approved"
@@ -298,7 +303,7 @@ public struct TimerService: Sendable {
         }
 
         // The machine.
-        let plan = TimerWake.plan(for: defined.compactMap(\.1))
+        let plan = TimerWake.plan(for: tasks())
         let rawSched = await probes.sched()
         let canProbe = launchctl != nil
         out.append(wakeStatus(plan: plan, rawSched: rawSched, canProbe: canProbe))

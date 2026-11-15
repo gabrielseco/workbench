@@ -10,6 +10,14 @@ extension EventKind {
     public static let taskRunThread: EventKind = "task.run.thread"
     /// The run ended, whatever came of it; exactly one per `task.run.started`: `outcome`, `reason`, `units`, `thread`.
     public static let taskRunEnded: EventKind = "task.run.ended"
+    /// A person turned the task's schedule off: a tick no longer runs it, until `task.enabled`. A run by hand still can.
+    public static let taskDisabled: EventKind = "task.disabled"
+    /// The schedule is on again, counted from this moment.
+    public static let taskEnabled: EventKind = "task.enabled"
+    /// The task was put away: off the active list and never run, its file and runs kept as a reference, until `task.restored`.
+    public static let taskArchived: EventKind = "task.archived"
+    /// Back on the active list, enabled or disabled as it was when it was archived; its schedule counts from this moment.
+    public static let taskRestored: EventKind = "task.restored"
 }
 
 public enum TaskOutcome: String, Sendable, Equatable {
@@ -27,6 +35,8 @@ public enum TaskOutcome: String, Sendable, Equatable {
     case budgetExceeded = "budget-exceeded"
     case failed
     case staleApproval = "stale-approval"
+    /// A tick found the task disabled or archived, or a run by hand found it archived: nothing started and nothing was recorded.
+    case skippedDisabled = "skipped-disabled"
     /// A run that never wrote its end (the process died): closed by the next one to open the log.
     case interrupted
 }
@@ -59,6 +69,15 @@ public struct TaskHistory: Sendable, Equatable {
     public var approvedHash: String?
     public var approvedAt: Date?
     public var runs: [Run] = []
+    /// False after `task.disabled` until `task.enabled`: a tick does not run it.
+    public var enabled = true
+    /// True after `task.archived` until `task.restored`: off the active list, and nothing runs it.
+    public var archived = false
+    /// The last time the schedule was turned back on (enabled or restored): the slots missed while it was off are not made up.
+    public var resumedAt: Date?
+
+    /// Whether a tick may run the task: enabled and not archived.
+    public var isScheduled: Bool { enabled && !archived }
 
     /// A run that started and has no end yet.
     public var openRun: Run? { runs.last.flatMap { $0.outcome == nil ? $0 : nil } }
@@ -98,8 +117,13 @@ public struct TaskHistory: Sendable, Equatable {
         return result
     }
 
-    /// When the schedule counts from: the last run's start, or the approval when there was none.
-    public var scheduleBase: Date? { lastRun?.started ?? approvedAt }
+    /// When the schedule counts from: the last run's start, or the approval when there was none. When the task was enabled or restored
+    /// after that, from then: a task that was off for a week is not due at once for the slots it missed.
+    public var scheduleBase: Date? {
+        guard let base = lastRun?.started ?? approvedAt else { return nil }
+        guard let resumedAt else { return base }
+        return max(base, resumedAt)
+    }
 
     /// Runs from before `report` was recorded name the file at the end of their summary: `(.workbench/tasks/<n>/reports/<t>.md)`.
     static func reportPath(inReason reason: String?, outcome: TaskOutcome?) -> String? {
@@ -140,6 +164,16 @@ public struct TaskHistory: Sendable, Equatable {
                 let units = event.data["units"]?.arrayItems?.compactMap(\.stringValue) ?? []
                 if !units.isEmpty { runs[runs.count - 1].units = units }
                 if let thread = event.data["thread"]?.stringValue { runs[runs.count - 1].thread = thread }
+            case .taskDisabled:
+                enabled = false
+            case .taskEnabled:
+                if !enabled { resumedAt = event.date }
+                enabled = true
+            case .taskArchived:
+                archived = true
+            case .taskRestored:
+                if archived { resumedAt = event.date }
+                archived = false
             default:
                 break
             }

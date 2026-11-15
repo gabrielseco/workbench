@@ -28,7 +28,7 @@ struct TasksView: View {
             if store.tasks.isNewShown(in: store.project) {
                 NewTaskScreen(store: store)
             } else if let snapshot {
-                if snapshot.entries.isEmpty {
+                if snapshot.allEntries.isEmpty {
                     NoTasks(timer: snapshot.timer, makeOne: { store.beginNewTask() })
                 } else if let entry = store.tasks.selected(in: snapshot) {
                     // The list at the left, the selected task's page at the right (design parity 5, P26 slice 5).
@@ -140,8 +140,16 @@ struct TaskButtons: View {
         let tasks = store.tasks
         let needsApproval = entry.summary.problem == nil && entry.summary.approval != .approved
         let off = tasks.runUnavailable(entry, threadRunGoing: store.threadRunGoing(in: store.project))
+        let changeOff = tasks.changeUnavailable(entry, in: store.project)
         HStack(spacing: Space.s) {
-            if tasks.isRunning(entry.id, in: store.project) {
+            if entry.summary.archived {
+                // A reference: the only thing to do with it is to bring it back.
+                Button("Restore") { Task { await tasks.change(store.project, entry.id, .restore) } }
+                    .primaryButton(size: .regular).disabled(changeOff != nil)
+                    .help(
+                        changeOff
+                            ?? "Puts the task back on the list, \(entry.summary.enabled ? "enabled" : "still disabled")")
+            } else if tasks.isRunning(entry.id, in: store.project) {
                 Button("Stop") { Task { await tasks.stopRun() } }
                     .help("Ends the agent's turn; the run records how it ended")
             } else {
@@ -164,6 +172,17 @@ struct TaskButtons: View {
                     editing
                         ? "An edit is open: accept or discard it first"
                         : "Describe a change to this task in words; you review it before anything is written")
+                let change: TaskStateChange = entry.summary.enabled ? .disable : .enable
+                Button(entry.summary.enabled ? "Disable" : "Enable") { Task { await tasks.change(store.project, entry.id, change) } }
+                    .plainButton(size: .regular).disabled(changeOff != nil)
+                    .help(
+                        changeOff
+                            ?? (entry.summary.enabled
+                                ? "Stops it running on its schedule; Run now still runs it"
+                                : "Puts its schedule back on, counted from now: the runs it missed are not made up"))
+                Button("Archive") { Task { await tasks.change(store.project, entry.id, .archive) } }
+                    .plainButton(size: .regular).disabled(changeOff != nil)
+                    .help(changeOff ?? "Takes it off the list and never runs it; its task.md and runs are kept, and Restore brings it back")
             }
         }
     }
