@@ -86,8 +86,10 @@ general workflow engine. Rules that hold across providers:
 - **The agent never holds credentials.** `ship` pushes and opens the PR, not the agent.
 - **Untrusted text is validated before it reaches git or a path** (`SafeNames`, `Config` validation) and fenced when it goes
   into a prompt.
-- **A person decides.** Accept, send back, discard, ship and merge are never taken by the tool. Scheduled tasks are bound to the
-  hash of their file and pending script, so an edited task must be approved again.
+- **A person decides, once, at the right place.** For a thread, accept, send back, discard, ship and merge are yours, and Workbench
+  never merges. A scheduled task is the one exception to "accept and ship": a `fix: pr` task you approved accepts its own work and
+  opens a PR when its check and verifier pass ([`spec/tasks.md`](spec/tasks.md)); the approval is bound to the hash of the task file
+  and its pending script, so an edited task must be approved again, and the PR is still yours to merge.
 
 ## Concurrency
 
