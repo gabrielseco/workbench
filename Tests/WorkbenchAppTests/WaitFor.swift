@@ -2,11 +2,12 @@ import Testing
 
 @testable import WorkbenchApp
 
-/// Waits until `condition` holds, and fails the test (rather than hanging it) if it has not by `timeout`.
+/// Waits until `condition` holds. After `timeout` the test fails and stops here, so what follows never runs against a state that
+/// did not come (it could block on it and hang the suite).
 @MainActor func waitFor(
     _ what: String = "the state the test needs", timeout: Duration = .seconds(30),
     sourceLocation: SourceLocation = #_sourceLocation, _ condition: () -> Bool
-) async {
+) async throws {
     let reached = await wait(while: { !condition() }, atMost: timeout, every: .milliseconds(10))
-    #expect(reached, "timed out waiting for \(what)", sourceLocation: sourceLocation)
+    try #require(reached, "timed out waiting for \(what)", sourceLocation: sourceLocation)
 }
