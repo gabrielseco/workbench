@@ -270,7 +270,7 @@ enum AppScenario: String, CaseIterable {  // swiftlint:disable:this type_body_le
         return format.date(from: iso) ?? Date(timeIntervalSince1970: 0)
     }
 
-    /// Seven tasks in the states the Tasks screen tells apart. Timestamps are fixed, so the committed files do not move.
+    /// Nine tasks in the states the Tasks screen tells apart (one disabled, one archived). Timestamps are fixed, so the committed files do not move.
     @MainActor private func buildTasks(in fixture: AppFixture) async throws {
         let project = fixture.project
         let files = FileManager.default
@@ -308,6 +308,10 @@ enum AppScenario: String, CaseIterable {  // swiftlint:disable:this type_body_le
         func approve(_ name: String, _ start: String) async throws {
             at(start)
             try await library.approve(name, now: { box.date })
+        }
+        func change(_ name: String, _ change: TaskStateChange, _ when: String) async throws {
+            at(when)
+            try await library.change(name, change, now: { box.date })
         }
 
         try write(
@@ -362,6 +366,26 @@ enum AppScenario: String, CaseIterable {  // swiftlint:disable:this type_body_le
             "cleanup-branches",
             "---\nat: 05:00\nfix: report\nlabels: [seed-preview, bot]\n---\nDelete the merged branches listed in branches.txt.\n")
         try write("broken-task", "---\nat: 06:00\ncolour: red\n---\nThis one does not load.\n")
+
+        // Turned off by a person: approved and run before, not run on its schedule now.
+        try write("refresh-snapshots", "---\nat: 03:00\ndays: weekdays\nfix: pr\nbudget: 2.00\n---\nRefresh the UI snapshots.\n")
+        try await approve("refresh-snapshots", "2026-10-19T09:00:00.000Z")
+        try await run(
+            "refresh-snapshots", "2026-10-20T03:00:04.000Z", outcome: .prOpened, minutes: 9, units: ["snapshots"],
+            thread: "refresh-snapshots-1", pr: "https://github.com/example/remote-flows/pull/401")
+        try await change("refresh-snapshots", .disable, "2026-10-21T10:00:00.000Z")
+
+        // Put away: off the list, with its definition and runs kept for reference.
+        try write(
+            "migrate-ledger", "---\nat: 01:00\ndays: mon\nfix: pr\nbudget: 4.00\n---\nMove the next ledger tables to v2.\n")
+        try await approve("migrate-ledger", "2026-09-28T09:00:00.000Z")
+        try await run(
+            "migrate-ledger", "2026-10-05T01:00:03.000Z", outcome: .prOpened, minutes: 18, units: ["accounts"],
+            thread: "migrate-ledger-1", pr: "https://github.com/example/remote-flows/pull/388")
+        try await run(
+            "migrate-ledger", "2026-10-12T01:00:02.000Z", outcome: .nothingPending, minutes: 0,
+            reason: "every table is on v2")
+        try await change("migrate-ledger", .archive, "2026-10-13T09:00:00.000Z")
     }
 
     /// Writes every scenario under `directory/<name>/`: its threads folder, or a `.gitkeep` for the one with none.
