@@ -69,7 +69,8 @@ import WorkbenchCore
         let (fixture, env) = try await scenario()
         let shown = try await snapshot(fixture, env)
         let library = TaskLibrary(project: fixture.project)
-        #expect(shown.entries.map(\.id) == library.names())
+        #expect(shown.entries.map(\.id) == library.activeNames())
+        #expect(shown.archived.map(\.id) == ["migrate-ledger"] && !library.activeNames().contains("migrate-ledger"))
         for entry in shown.entries {
             #expect(entry.summary == library.summary(entry.id, now: shown.readAt))
         }
@@ -218,7 +219,7 @@ import WorkbenchCore
         #expect(counter.count == 3)
         // A failed read keeps the last good data and says why.
         let good = model.snapshot(for: project)
-        #expect(good?.entries.count == 7)
+        #expect(good?.entries.count == 8)
         fail.on = true
         await model.refresh(project)
         #expect(model.error != nil)
@@ -279,7 +280,7 @@ import WorkbenchCore
         await model.refresh(fixture.project)
         await model.refresh(fixture.project)
         #expect(try bytes() == before)
-        #expect(model.snapshot(for: fixture.project)?.entries.count == 7)
+        #expect(model.snapshot(for: fixture.project)?.entries.count == 8)
         // The empty scenario says so rather than failing.
         let empty = try await AppFixture(git: false)
         let none = try await TasksReader.core(environment: env).read(empty.project, Date())

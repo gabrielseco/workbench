@@ -5,20 +5,20 @@ import Testing
 
 /// Archiving a task: off the active list and never run, with its file, its reports and its runs kept, until it is restored.
 @Suite(.processGate) struct TaskArchiveTests {
-    private typealias S = TaskSchedulingTests
+    private typealias Sch = TaskSchedulingTests
 
     @Test func archivePreservesTaskAndHistory() async throws {
-        let fx = try S.reportTask()
+        let fx = try Sch.reportTask()
         let other = try TaskFixture(in: fx.project, name: "other", front: "at: 05:00\nfix: report")
-        try await fx.library.approve(fx.name, now: { S.date(2, 9) })
-        #expect(await S.tick(fx, at: S.date(3, 4, 5))[fx.name]?.outcome == .reported)
+        try await fx.library.approve(fx.name, now: { Sch.date(2, 9) })
+        #expect(await Sch.tick(fx, at: Sch.date(3, 4, 5))[fx.name]?.outcome == .reported)
         let report = fx.project.taskDirectory(fx.name).appendingPathComponent("reports/kept.md")
         try FileManager.default.createDirectory(at: report.deletingLastPathComponent(), withIntermediateDirectories: true)
         try "# an old report\n".write(to: report, atomically: true, encoding: .utf8)
         let taskText = try String(contentsOf: fx.project.taskFileURL(fx.name), encoding: .utf8)
         let before = try fx.log.history()
 
-        let after = try await fx.library.change(fx.name, .archive, now: { S.date(3, 12) })
+        let after = try await fx.library.change(fx.name, .archive, now: { Sch.date(3, 12) })
         #expect(after.archived)
 
         // Off the active list, on the archived one; the other task is untouched.
@@ -36,14 +36,14 @@ import Testing
     }
 
     @Test func archivedTaskDoesNotRun() async throws {
-        let fx = try S.reportTask()
-        try await fx.library.approve(fx.name, now: { S.date(2, 9) })
-        try await fx.library.change(fx.name, .archive, now: { S.date(2, 10) })
+        let fx = try Sch.reportTask()
+        try await fx.library.approve(fx.name, now: { Sch.date(2, 9) })
+        try await fx.library.change(fx.name, .archive, now: { Sch.date(2, 10) })
         // Due many times over, it is never in a tick's plan, and a tick or a person asking for it records nothing.
         for day in 3...9 {
-            let plan = TaskTick.plan(project: fx.project, now: S.date(day, 5), calendar: S.utc)
+            let plan = TaskTick.plan(project: fx.project, now: Sch.date(day, 5), calendar: Sch.utc)
             #expect(plan.due.isEmpty && plan.broken.isEmpty)
-            #expect(await S.tick(fx, at: S.date(day, 5)).isEmpty)
+            #expect(await Sch.tick(fx, at: Sch.date(day, 5)).isEmpty)
         }
         var runner = TaskRunner(
             project: fx.project, git: GitRunner(executable: URL(fileURLWithPath: "/usr/bin/false"), environment: [:]), gh: nil)
@@ -57,32 +57,32 @@ import Testing
         #expect(fx.library.summary(fx.name).nextDue == nil)
 
         // Restored, it is enabled as it was before, and its schedule counts from the restore: the missed week is not owed.
-        let restored = try await fx.library.change(fx.name, .restore, now: { S.date(9, 12) })
+        let restored = try await fx.library.change(fx.name, .restore, now: { Sch.date(9, 12) })
         #expect(!restored.archived && restored.enabled)
         #expect(fx.library.activeNames() == [fx.name] && fx.library.archivedNames().isEmpty)
-        #expect(await S.tick(fx, at: S.date(9, 13)).isEmpty)
-        #expect(await S.tick(fx, at: S.date(10, 4, 5))[fx.name]?.outcome == .reported)
+        #expect(await Sch.tick(fx, at: Sch.date(9, 13)).isEmpty)
+        #expect(await Sch.tick(fx, at: Sch.date(10, 4, 5))[fx.name]?.outcome == .reported)
     }
 
     @Test func aTaskDisabledWhenArchivedIsRestoredStillDisabled() async throws {
-        let fx = try S.reportTask()
-        try await fx.library.approve(fx.name, now: { S.date(2, 9) })
+        let fx = try Sch.reportTask()
+        try await fx.library.approve(fx.name, now: { Sch.date(2, 9) })
         try await fx.library.change(fx.name, .disable)
         try await fx.library.change(fx.name, .archive)
-        let restored = try await fx.library.change(fx.name, .restore, now: { S.date(3, 12) })
+        let restored = try await fx.library.change(fx.name, .restore, now: { Sch.date(3, 12) })
         #expect(!restored.archived && !restored.enabled)
         let summary = fx.library.summary(fx.name)
         #expect(!summary.archived && !summary.enabled && summary.nextDue == nil)
-        #expect(await S.tick(fx, at: S.date(5, 5)).isEmpty)
+        #expect(await Sch.tick(fx, at: Sch.date(5, 5)).isEmpty)
     }
 
     @Test func aTaskThatDoesNotLoadCanBeArchivedAndIsNotATickProblem() async throws {
         let fx = try TaskFixture(front: "at: 04:00\nfix: pr\npending: pending.sh")
         try fx.script("echo '[]'")
-        try await fx.library.approve(fx.name, now: { S.date(2, 9) })
+        try await fx.library.approve(fx.name, now: { Sch.date(2, 9) })
         try FileManager.default.removeItem(at: fx.project.root.appendingPathComponent("pending.sh"))
-        #expect(TaskTick.plan(project: fx.project, now: S.date(3, 5), calendar: S.utc).broken.count == 1)
+        #expect(TaskTick.plan(project: fx.project, now: Sch.date(3, 5), calendar: Sch.utc).broken.count == 1)
         try await fx.library.change(fx.name, .archive)
-        #expect(TaskTick.plan(project: fx.project, now: S.date(3, 5), calendar: S.utc) == TaskTick.Plan(due: [], broken: []))
+        #expect(TaskTick.plan(project: fx.project, now: Sch.date(3, 5), calendar: Sch.utc) == TaskTick.Plan(due: [], broken: []))
     }
 }

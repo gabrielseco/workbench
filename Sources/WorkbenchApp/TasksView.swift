@@ -173,8 +173,10 @@ struct TaskButtons: View {
                         ? "An edit is open: accept or discard it first"
                         : "Describe a change to this task in words; you review it before anything is written")
                 let change: TaskStateChange = entry.summary.enabled ? .disable : .enable
-                Button(entry.summary.enabled ? "Disable" : "Enable") { Task { await tasks.change(store.project, entry.id, change) } }
-                    .plainButton(size: .regular).disabled(changeOff != nil)
+                Button(entry.summary.enabled ? "Disable" : "Enable") {
+                    Task { await tasks.change(store.project, entry.id, change) }
+                }
+                .plainButton(size: .regular).disabled(changeOff != nil)
                     .help(
                         changeOff
                             ?? (entry.summary.enabled
@@ -182,7 +184,9 @@ struct TaskButtons: View {
                                 : "Puts its schedule back on, counted from now: the runs it missed are not made up"))
                 Button("Archive") { Task { await tasks.change(store.project, entry.id, .archive) } }
                     .plainButton(size: .regular).disabled(changeOff != nil)
-                    .help(changeOff ?? "Takes it off the list and never runs it; its task.md and runs are kept, and Restore brings it back")
+                    .help(
+                        changeOff
+                            ?? "Takes it off the list and never runs it; its task.md and runs are kept; Restore brings it back")
             }
         }
     }

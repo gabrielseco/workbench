@@ -39,6 +39,47 @@ public enum TaskStateError: Error, Equatable, CustomStringConvertible {
     }
 }
 
+extension TaskRunner {
+    /// Why the task may not run now, or nil when it may: an archived task runs for nobody, a disabled one only when a person asks.
+    static func offReason(_ name: String, history: TaskHistory, trigger: TaskTrigger) -> String? {
+        if history.archived { return "the task is archived: workbench task restore \(name)" }
+        if !history.enabled, trigger == .tick { return "the task is disabled: workbench task enable \(name)" }
+        return nil
+    }
+
+    /// A run that ended before it began: nothing was started and nothing is recorded.
+    struct NotStarted: Error {
+        var result: TaskRunResult
+    }
+
+    /// Takes the log's lock and reads it, or says why the run cannot begin. The task's state is checked under the lock, so a tick
+    /// planned before a person turned the task off does not run it.
+    func openLog(_ name: String, trigger: TaskTrigger) async -> Result<(EventLogWriter, TaskHistory), NotStarted> {
+        func refuse(_ outcome: TaskOutcome, _ reason: String) -> Result<(EventLogWriter, TaskHistory), NotStarted> {
+            .failure(NotStarted(result: TaskRunResult(outcome: outcome, reason: reason, recorded: false)))
+        }
+        let log = TaskRunLog(project: project, name: name)
+        let writer: EventLogWriter
+        do {
+            writer = try await log.openWriter(now: now)
+        } catch EventLogError.alreadyOpen {
+            return refuse(.skippedAlreadyRunning, "another run of this task is in progress")
+        } catch {
+            return refuse(.failed, "the run log cannot be opened: \(error)")
+        }
+        let history: TaskHistory
+        do { history = try log.history() } catch {
+            await writer.close()
+            return refuse(.failed, "the run log is damaged: \(error)")
+        }
+        if let why = Self.offReason(name, history: history, trigger: trigger) {
+            await writer.close()
+            return refuse(.skippedDisabled, why)
+        }
+        return .success((writer, history))
+    }
+}
+
 extension TaskLibrary {
     /// The tasks on the active list: every task that is not archived (a disabled one is still listed, and says so).
     public func activeNames() -> [String] {

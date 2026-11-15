@@ -119,11 +119,11 @@ import WorkbenchCore
     @Test func theArrowKeysStepThroughTheAutomations() async throws {
         let store = try await tasksStore()
         let names = try #require(store.tasks.snapshot(for: store.project)).entries.map(\.id)
-        #expect(names.count == 7)
+        #expect(names.count == 8)
         #expect(AutomationsList.neighbour(of: names[2], in: names, up: false) == names[3])
         #expect(AutomationsList.neighbour(of: names[2], in: names, up: true) == names[1])
         #expect(AutomationsList.neighbour(of: names[0], in: names, up: true) == nil)
-        #expect(AutomationsList.neighbour(of: names[6], in: names, up: false) == nil)
+        #expect(AutomationsList.neighbour(of: names[7], in: names, up: false) == nil)
         #expect(AutomationsList.neighbour(of: nil, in: names, up: false) == nil)
     }
 }

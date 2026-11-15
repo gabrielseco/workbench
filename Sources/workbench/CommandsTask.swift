@@ -228,8 +228,9 @@ extension Commands {
             let last =
                 summary.lastRun.map { "\(summary.lastOutcome?.rawValue ?? "running") \(format.string(from: $0))" } ?? "never run"
             let waiting = pending ? "  pending: " + (await TaskPending.count(name: name, project: ctx.project, gh: gh)).text : ""
+            let state = off.map { "\($0)  " } ?? ""
             out(
-                "\(name)  \(off.map { "\($0)  " } ?? "")\(summary.schedule ?? "no schedule")  fix: \(summary.fix?.rawValue ?? "-")  "
+                "\(name)  \(state)\(summary.schedule ?? "no schedule")  fix: \(summary.fix?.rawValue ?? "-")  "
                     + "\(approval)  next: \(due)  last: \(last)\(waiting)")
             if !summary.mcpTools.isEmpty {
                 out("    mcp: may call \(summary.mcpTools.joined(separator: ", ")) (each one a capability for an unattended run)")

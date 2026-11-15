@@ -57,7 +57,8 @@ import Testing
         // The state is in the run log, not in memory: a new library and log (the app or the timer started again) read it the same.
         let reread = try TaskRunLog(project: Project(root: fx.project.root), name: fx.name).history()
         #expect(!reread.enabled)
-        let summary = TaskLibrary(project: Project(root: fx.project.root)).summary(fx.name, now: Self.date(9, 5), calendar: Self.utc)
+        let fresh = TaskLibrary(project: Project(root: fx.project.root))
+        let summary = fresh.summary(fx.name, now: Self.date(9, 5), calendar: Self.utc)
         #expect(!summary.enabled && summary.nextDue == nil)
         #expect(try fx.log.history().runs.count == runsBefore)
 

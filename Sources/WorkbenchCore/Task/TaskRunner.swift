@@ -97,26 +97,11 @@ public struct TaskRunner: Sendable {
     }
 
     public func run(_ name: String, trigger: TaskTrigger) async -> TaskRunResult {
-        let log = TaskRunLog(project: project, name: name)
         let writer: EventLogWriter
-        do {
-            writer = try await log.openWriter(now: now)
-        } catch EventLogError.alreadyOpen {
-            return TaskRunResult(
-                outcome: .skippedAlreadyRunning, reason: "another run of this task is in progress", recorded: false)
-        } catch {
-            return TaskRunResult(outcome: .failed, reason: "the run log cannot be opened: \(error)", recorded: false)
-        }
         let history: TaskHistory
-        do { history = try log.history() } catch {
-            await writer.close()
-            return TaskRunResult(outcome: .failed, reason: "the run log is damaged: \(error)", recorded: false)
-        }
-        // Checked under the lock, so a tick planned before a person turned the task off does not run it. An archived task is a
-        // reference and runs for nobody; a disabled one still runs when a person asks.
-        if let why = Self.offReason(name, history: history, trigger: trigger) {
-            await writer.close()
-            return TaskRunResult(outcome: .skippedDisabled, reason: why, recorded: false)
+        switch await openLog(name, trigger: trigger) {
+        case .success(let opened): (writer, history) = opened
+        case .failure(let refused): return refused.result
         }
         // Without a durable start nothing is spent: a run that cannot say it began could not say how it ended.
         do { try await writer.append(.taskRunStarted, data: ["trigger": .string(trigger.rawValue)]) } catch {
@@ -140,13 +125,6 @@ public struct TaskRunner: Sendable {
         }
         await writer.close()
         return result
-    }
-
-    /// Why the task may not run now, or nil when it may.
-    static func offReason(_ name: String, history: TaskHistory, trigger: TaskTrigger) -> String? {
-        if history.archived { return "the task is archived: workbench task restore \(name)" }
-        if !history.enabled, trigger == .tick { return "the task is disabled: workbench task enable \(name)" }
-        return nil
     }
 
     func fail(_ reason: String, units: [String] = [], thread: String? = nil) -> TaskRunResult {
