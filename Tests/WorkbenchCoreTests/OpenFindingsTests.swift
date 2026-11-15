@@ -44,6 +44,20 @@ import Testing
         #expect(found.summary == "Judge: 1 criterion not met, 1 concern")
     }
 
+    @Test func aLongCriterionAndAllItsEvidenceAreKeptWhole() {
+        let long = String(repeating: "word ", count: 60)
+        let judge: JSONValue = [
+            "ok": true, "criteria": [["id": "c2", "met": false, "evidence": ["first", "second"]]], "concerns": [],
+        ]
+        let events = base(judge: judge)
+        let found = OpenFindings.derive(
+            state: ThreadState.derive(from: events, id: "t"), criteria: [Criterion(id: "c2", text: long, proof: "test")],
+            events: events, threadDirectory: nil)
+        #expect(found.items[0].title == "[c2] not met: " + long.trimmingCharacters(in: .whitespaces))
+        #expect(found.items[0].detail == "first\nsecond")
+        #expect(found.feedback.contains(found.items[0].title + " (first second)"))
+    }
+
     @Test func aJudgeThatMetEverythingLeavesNothing() {
         let judge: JSONValue = ["ok": true, "criteria": [["id": "c1", "met": true, "evidence": []]], "concerns": []]
         #expect(derive(base(judge: judge)).isEmpty)

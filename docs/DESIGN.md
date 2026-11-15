@@ -39,6 +39,7 @@ Five colours, all from `Theme` (never `Color(red:…)` or a literal in a view), 
 
 - One window with the thread spine on the left (a rail, about 220 wide) and the current screen beside it. The window's minimum
   is **900×600** (`RootView`); everything must still fit there, truncating with an ellipsis rather than clipping or overlapping.
+  Truncate only what is a label (a name, a path). Text that says *why* something failed (a judge criterion, its evidence, an error) is shown whole and wraps: a cut reason is not a reason.
 - Screen content is padded 20 (a card or sheet 28), sections are stacked with spacing 10 to 14, a group inside a section 4 to 8.
 - Spacing values come from **2, 3, 4, 6, 8, 10, 12, 14, 20, 28**. A new value needs a reason.
 - Leading edges line up: marks in a column share a fixed width so the text beside them aligns.

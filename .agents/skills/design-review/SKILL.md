@@ -53,7 +53,7 @@ Then, for each screenshot, in this order:
    not judged by eye: the caret looks wrong when it is not.
 3. **Typography.** The DESIGN.md styles, at most three sizes in a component.
 4. **Colour and contrast.** Each colour means one thing; readable in the appearance shown.
-5. **Fit at 900×600.** Truncates with an ellipsis; nothing important is pushed off screen or under the footer.
+5. **Fit at 900×600.** Truncates with an ellipsis; nothing important is pushed off screen or under the footer. Exception: text that explains a failure (judge criterion and evidence, errors) is never cut by a character cap or a short line limit.
 6. **States.** Empty says what to do next; working shows progress in place; unknown says `unknown`.
 7. **Native feel.** Would it sit next to Mail or Xcode? Standard controls, consistent SF Symbols, sentence case.
 8. **Consistency.** A new row, pill or card matches the existing ones.

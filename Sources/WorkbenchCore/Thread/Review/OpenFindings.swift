@@ -47,7 +47,7 @@ public struct OpenFindings: Sendable, Equatable {
         let judge = items.filter { $0.source == Self.judgeSource }
         if !judge.isEmpty {
             out += "\n\nJudge:"
-            for item in judge { out += "\n- \(item.title)" + (item.detail.map { " (\($0))" } ?? "") }
+            for item in judge { out += "\n- \(item.title)" + (item.detail.map { " (\(Judge.oneLine($0)))" } ?? "") }
         }
         var sources: [String] = []
         for item in items where item.source != Self.judgeSource && !sources.contains(item.source) { sources.append(item.source) }
@@ -71,12 +71,13 @@ public struct OpenFindings: Sendable, Equatable {
         if let judge = state.review.judge, judge.turn == state.lastTurn, let verdict = judge.verdict {
             let texts = Dictionary(criteria.map { ($0.id, $0.text) }, uniquingKeysWith: { first, _ in first })
             for entry in verdict.criteria where !entry.met {
-                let text = ReviewReport.oneLine(texts[entry.id] ?? "")
+                // Whole text: the card wraps it, and a cut criterion hides what was asked.
+                let text = Judge.oneLine(texts[entry.id] ?? "")
                 items.append(
                     Item(
                         id: "criterion:\(entry.id)", source: judgeSource,
                         title: "[\(entry.id)] not met" + (text.isEmpty ? "" : ": \(text)"),
-                        detail: entry.evidence.first.map(ReviewReport.oneLine)))
+                        detail: entry.evidence.isEmpty ? nil : entry.evidence.map(Judge.oneLine).joined(separator: "\n")))
             }
             for (index, concern) in verdict.concerns.enumerated() {
                 let title = "Concern: \(ReviewReport.oneLine(concern))"

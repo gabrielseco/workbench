@@ -13,7 +13,7 @@ struct FindingsCard: View {
                 VStack(alignment: .leading, spacing: Space.xs) {
                     Text(item.title).textStyle(.callout)
                     if let detail = item.detail {
-                        Text(detail).role(.caption).lineLimit(item.source == OpenFindings.judgeSource ? 2 : 8)
+                        Text(detail).role(.caption).lineLimit(8)
                     }
                 }
             }
