@@ -4,7 +4,7 @@ import WorkbenchCore
 extension Commands {
     private static let taskUsage =
         "usage: workbench task list | task log <name> | task new <name> | task edit <name> | task approve <name>"
-        + " | task run <name> | task tick | task timer install|status|remove"
+        + " | task disable|enable|archive|restore <name> | task run <name> | task tick | task timer install|status|remove"
 
     /// `task list` shows the project's scheduled tasks; `task approve <name>` lets one run unattended; `task run <name>` runs
     /// one now; `task tick` runs the ones that are due, one after the other.
@@ -14,8 +14,15 @@ extension Commands {
         switch verb {
         case "list":
             let pending = a.flag("--pending")
+            let archived = a.flag("--archived")
             try a.requireEmpty()
-            try await taskList(pending: pending)
+            try await taskList(pending: pending, archived: archived)
+        case "disable", "enable", "archive", "restore":
+            guard let name = a.positional(), let change = TaskStateChange(rawValue: verb) else {
+                throw CLIError.usage("usage: workbench task \(verb) <name>")
+            }
+            try a.requireEmpty()
+            try await taskChange(name, change)
         case "new":
             let include = try a.value("--include")
             var inputs: [String] = []
@@ -73,7 +80,7 @@ extension Commands {
         if !result.recorded { out("  not recorded in the task's run log") }
         switch result.outcome {
         case .prOpened, .needsYou, .reported, .nothingPending, .nothingToDo: return 0
-        case .skippedProjectBusy, .skippedAlreadyRunning, .skippedTooManyOpen, .staleApproval: return 6
+        case .skippedProjectBusy, .skippedAlreadyRunning, .skippedTooManyOpen, .skippedDisabled, .staleApproval: return 6
         case .budgetExceeded: return 5
         case .failed, .interrupted: return 1
         }
@@ -161,12 +168,40 @@ extension Commands {
         return code
     }
 
-    private static func taskList(pending: Bool) async throws {
+    /// `task disable|enable|archive|restore <name>`: one event in the task's run log, and the state the task is in afterwards.
+    private static func taskChange(_ name: String, _ change: TaskStateChange) async throws {
+        let ctx = try await Context.load()
+        let history: TaskHistory
+        do { history = try await TaskLibrary(project: ctx.project).change(name, change) } catch let error as TaskStateError {
+            if case .notFound = error { throw CLIError.notFound("\(error)") }
+            throw CLIError.refused("\(error)")
+        } catch let error as EventLogError {
+            throw CLIError.refused("the task's run log is damaged: \(error)")
+        }
+        let schedule =
+            history.enabled
+            ? "enabled: it runs on its schedule" : "disabled: a tick does not run it (workbench task enable \(name))"
+        switch change {
+        case .disable: out("\(name): disabled: a tick does not run it until workbench task enable \(name)")
+        case .enable:
+            out(
+                history.archived
+                    ? "\(name): enabled, but archived: nothing runs it until workbench task restore \(name)"
+                    : "\(name): enabled: it runs on its schedule again, counted from now")
+        case .archive:
+            out("\(name): archived: off the task list and never run; its task.md and runs are kept (task list --archived)")
+        case .restore: out("\(name): restored to the task list, \(schedule)")
+        }
+    }
+
+    private static func taskList(pending: Bool, archived: Bool = false) async throws {
         let ctx = try await Context.load()
         let library = TaskLibrary(project: ctx.project)
-        let names = library.names()
+        let names = archived ? library.archivedNames() : library.activeNames()
         guard !names.isEmpty else {
-            out("no tasks (a task is .workbench/tasks/<name>/task.md)")
+            out(archived ? "no archived tasks" : "no tasks (a task is .workbench/tasks/<name>/task.md)")
+            let put = archived ? 0 : library.archivedNames().count
+            if put > 0 { out("\(put) archived: workbench task list --archived") }
             return
         }
         let format = DateFormatter()
@@ -186,17 +221,25 @@ extension Commands {
             case .stale: approval = "STALE (changed since approved: run task approve)"
             case .never: approval = "not approved"
             }
-            let due = summary.nextDue.map { format.string(from: $0) } ?? (summary.schedule == nil ? "manual" : "after approval")
+            let off = summary.archived ? "archived" : summary.enabled ? nil : "DISABLED"
+            let due =
+                off.map { _ in "-" } ?? summary.nextDue.map { format.string(from: $0) }
+                ?? (summary.schedule == nil ? "manual" : "after approval")
             let last =
                 summary.lastRun.map { "\(summary.lastOutcome?.rawValue ?? "running") \(format.string(from: $0))" } ?? "never run"
             let waiting = pending ? "  pending: " + (await TaskPending.count(name: name, project: ctx.project, gh: gh)).text : ""
+            let state = off.map { "\($0)  " } ?? ""
             out(
-                "\(name)  \(summary.schedule ?? "no schedule")  fix: \(summary.fix?.rawValue ?? "-")  \(approval)  "
-                    + "next: \(due)  last: \(last)\(waiting)")
+                "\(name)  \(state)\(summary.schedule ?? "no schedule")  fix: \(summary.fix?.rawValue ?? "-")  "
+                    + "\(approval)  next: \(due)  last: \(last)\(waiting)")
             if !summary.mcpTools.isEmpty {
                 out("    mcp: may call \(summary.mcpTools.joined(separator: ", ")) (each one a capability for an unattended run)")
             }
             printWhy(summary)
+        }
+        if !archived {
+            let put = library.archivedNames().count
+            if put > 0 { out("\(put) archived: workbench task list --archived") }
         }
     }
 

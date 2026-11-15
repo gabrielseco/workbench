@@ -30,6 +30,11 @@ struct RailRow: Equatable, Identifiable {
         let detail: String
         if entry.isRunning {
             (mark, detail) = (.working, "running")
+        } else if summary.archived {
+            // Put away on purpose: nothing about it asks for you.
+            (mark, detail) = (.idle, "archived")
+        } else if !summary.enabled {
+            (mark, detail) = (.idle, "disabled")
         } else if summary.problem != nil {
             (mark, detail) = (.broken, "needs a fix")
         } else if summary.approval == .stale {

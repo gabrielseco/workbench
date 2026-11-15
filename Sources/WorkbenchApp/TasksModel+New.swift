@@ -58,7 +58,7 @@ extension TasksModel {
         let name = typed.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return .empty }
         guard TaskScaffold.isUsableName(name) else { return .invalid }
-        let listed = snapshot(for: project)?.entries.contains { $0.id == name } ?? false
+        let listed = snapshot(for: project)?.allEntries.contains { $0.id == name } ?? false
         if listed || (project.map { FileManager.default.fileExists(atPath: $0.taskDirectory(name).path) } ?? false) {
             return .taken
         }

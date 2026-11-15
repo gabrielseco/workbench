@@ -97,20 +97,11 @@ public struct TaskRunner: Sendable {
     }
 
     public func run(_ name: String, trigger: TaskTrigger) async -> TaskRunResult {
-        let log = TaskRunLog(project: project, name: name)
         let writer: EventLogWriter
-        do {
-            writer = try await log.openWriter(now: now)
-        } catch EventLogError.alreadyOpen {
-            return TaskRunResult(
-                outcome: .skippedAlreadyRunning, reason: "another run of this task is in progress", recorded: false)
-        } catch {
-            return TaskRunResult(outcome: .failed, reason: "the run log cannot be opened: \(error)", recorded: false)
-        }
         let history: TaskHistory
-        do { history = try log.history() } catch {
-            await writer.close()
-            return TaskRunResult(outcome: .failed, reason: "the run log is damaged: \(error)", recorded: false)
+        switch await openLog(name, trigger: trigger) {
+        case .success(let opened): (writer, history) = opened
+        case .failure(let refused): return refused.result
         }
         // Without a durable start nothing is spent: a run that cannot say it began could not say how it ended.
         do { try await writer.append(.taskRunStarted, data: ["trigger": .string(trigger.rawValue)]) } catch {

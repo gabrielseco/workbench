@@ -50,7 +50,7 @@ enum AttentionItems {
     /// A run that ended in one of these broke; the others end well, or are a skip, or have not ended.
     static let broke: Set<TaskOutcome> = [.failed, .budgetExceeded, .interrupted]
     /// A skip is the next tick's problem, not yours, and says nothing about whether an earlier failure is fixed.
-    static let skips: Set<TaskOutcome> = [.skippedProjectBusy, .skippedAlreadyRunning, .skippedTooManyOpen]
+    static let skips: Set<TaskOutcome> = [.skippedProjectBusy, .skippedAlreadyRunning, .skippedTooManyOpen, .skippedDisabled]
 
     static func derive(thread: ThreadAttention?, tasks: [TaskEntry]) -> [AttentionItem] {
         var items: [AttentionItem] = []

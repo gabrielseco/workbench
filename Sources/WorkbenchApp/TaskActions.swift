@@ -95,6 +95,10 @@ struct TaskActions: Sendable {
     var acceptEdit: @Sendable (Project, TaskProposal) async throws -> Void = { project, proposal in
         try TaskEditor(project: project).accept(proposal)
     }
+    /// `TaskLibrary.change`: disables, enables, archives or restores the task (one event in its run log). Never runs or edits it.
+    var change: @Sendable (Project, String, TaskStateChange) async throws -> Void = { project, name, change in
+        try await TaskLibrary(project: project).change(name, change)
+    }
 
     typealias Edit = @Sendable (Project, String, String, DraftStop) async throws -> TaskEditResult
 

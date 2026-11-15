@@ -11,6 +11,7 @@ struct TaskPageView: View {
     var body: some View {
         let header = TaskPage.header(entry, now: snapshot.readAt)
         let tonight = RunTonight.derive(entry, timer: snapshot.timer, activeThread: snapshot.activeThread)
+        let state = TaskPage.State(entry.summary)
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
@@ -19,7 +20,11 @@ struct TaskPageView: View {
                     }
                     HStack(alignment: .top, spacing: Space.m) {
                         VStack(alignment: .leading, spacing: Space.xs) {
-                            Text(entry.summary.name).textStyle(.section).lineLimit(1).truncationMode(.middle)
+                            HStack(spacing: Space.s) {
+                                Text(entry.summary.name).textStyle(.section).lineLimit(1).truncationMode(.middle)
+                                Text(state.word).pill(Theme.color(for: state.tone))
+                                    .accessibilityLabel("State: \(state.word)")
+                            }
                             Text(header.line).role(.detail).lineLimit(2)
                             // The path alone, as the design has it; what to do with it is the tooltip and the button beside.
                             Text(header.path).textStyle(.mono, .subtle).textSelection(.enabled)
@@ -32,8 +37,10 @@ struct TaskPageView: View {
                         Text(note).role(.caption).textSelection(.enabled)
                     }
                     if let result = store.tasks.result(of: entry.id, in: store.project) { ResultLine(result: result) }
-                    RunTonightCard(tonight: tonight, perform: perform).id(entry.id)
-                    if store.tasks.isEditShown(entry.id, in: store.project) {
+                    if let note = state.note { Message(entry.summary.archived ? .info : .warning, note) }
+                    // An archived task never runs, so there is no tonight to ask about and nothing to edit.
+                    if !entry.summary.archived { RunTonightCard(tonight: tonight, perform: perform).id(entry.id) }
+                    if !entry.summary.archived, store.tasks.isEditShown(entry.id, in: store.project) {
                         TaskEditCard(store: store, entry: entry).id(Self.editCardID(entry.id))
                     }
                     if entry.runs.isEmpty {
@@ -97,6 +104,7 @@ struct TaskPageView: View {
             guard let project = store.project else { return }
             NSWorkspace.shared.activateFileViewerSelecting([TaskRunLog(project: project, name: entry.id).url])
         case .approve, .reapprove: Task { await store.tasks.approve(store.project, entry.id) }
+        case .enable: Task { await store.tasks.change(store.project, entry.id, .enable) }
         case .openThread(let id): Task { await store.select(thread: id) }
         case .openLog(let path): NSWorkspace.shared.open(URL(fileURLWithPath: path))
         case .openReport(let path):
@@ -179,6 +187,7 @@ struct RunTonightCard: View {
         switch warning.action {
         case .approve?: .approve
         case .reapprove?: .reapprove
+        case .enable?: .enable
         case .openThread(let id)?: .openThread(id)
         case .openLog(let path)?: .openLog(path)
         case nil: nil

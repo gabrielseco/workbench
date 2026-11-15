@@ -155,12 +155,19 @@ let workbenchUsage = """
       task list [--pending]      the tasks in .workbench/tasks/<name>/task.md: when each is due, what it may do (fix:
                                  report or pr), whether its approval still matches the file and its pending script,
                                  the next due time and how the last run ended; --pending also runs each approved
-                                 task's pending script and says how many units are left (an edited one is not run)
+                                 task's pending script and says how many units are left (an edited one is not run);
+                                 archived tasks are left out, --archived lists only them
+      task disable|enable <name> turn the task's schedule off or on: a tick does not run a disabled task (a run by hand
+                                 still can); enabling counts the schedule from then, so missed slots are not made up
+      task archive|restore <name>
+                                 put the task away or bring it back: an archived task is off the list and never runs, its
+                                 task.md, reports and runs are kept; restoring keeps it enabled or disabled as it was.
+                                 exit 6 while a run of it is going, 7 for no such task
       task run <name> [--dry]    run the task now: take its next units; fix: pr does the work in a thread, accepts it when
                                  the check passed and opens the pull request; fix: report asks a read-only agent and keeps
                                  its answer under the task's reports/ (--dry only lists the units, no agent);
-                                 exit 6 when skipped (a thread is active, the approval is stale, or max_open of its
-                                 pull requests are still open), 1 failed, 5 over budget
+                                 exit 6 when skipped (a thread is active, the approval is stale, the task is archived,
+                                 or max_open of its pull requests are still open), 1 failed, 5 over budget
       task tick [--all]          run the tasks whose time has come, one after the other; what a timer calls; --all does it
                                  for every project that has a timer installed (a missing project is said and fails it)
       task timer install [--every <5m..1h>] [--pull-main]

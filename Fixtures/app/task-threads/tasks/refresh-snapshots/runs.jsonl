@@ -1,0 +1,5 @@
+{"v":1,"seq":1,"ts":"2026-10-19T09:00:00.000Z","turn":0,"kind":"task.approved","data":{"hash":"1efe96715f8075fd9b1cb96387bb0461a62be15f65a591bc6af02e57969e725f"}}
+{"v":1,"seq":2,"ts":"2026-10-20T03:00:04.000Z","turn":0,"kind":"task.run.started","data":{"trigger":"tick"}}
+{"v":1,"seq":3,"ts":"2026-10-20T03:00:04.000Z","turn":0,"kind":"task.run.thread","data":{"hash":"h","thread":"refresh-snapshots-1","units":["snapshots"]}}
+{"v":1,"seq":4,"ts":"2026-10-20T03:09:04.000Z","turn":0,"kind":"task.run.ended","data":{"outcome":"pr-opened","pr":"https://github.com/example/remote-flows/pull/401","thread":"refresh-snapshots-1","units":["snapshots"]}}
+{"v":1,"seq":5,"ts":"2026-10-21T10:00:00.000Z","turn":0,"kind":"task.disabled","data":{}}
