@@ -20,7 +20,7 @@ full list. Don't re-flag what `scripts/check.sh` (CI) already enforces; flag onl
 
 ## Step 2 — Check against this repo's invariants
 
-**Process layer** (`docs/archive/P1-runner.md`, "Process layer rules")
+**Process layer** (`docs/ARCHITECTURE.md`, "The process layer"; original wording in `docs/archive/P1-runner.md`)
 - Children start only through `Spawner`; no `Process`, `waitUntilExit` or `readDataToEndOfFile` anywhere under `Sources/`. New spawn paths get stdin `/dev/null`, their own group, an explicit
   environment, a timeout with SIGTERM then SIGKILL, and a swept process tree.
 - Exit comes from `ChildExitWatcher`; a new place that waits on a child by any other means is a finding.

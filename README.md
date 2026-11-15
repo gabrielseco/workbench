@@ -112,7 +112,7 @@ Workbench starts agents and commands as child processes, so most of its rules ar
 
 ## Contributing
 
-Read [`AGENTS.md`](AGENTS.md): commands, conventions, the toolchain, and how a change ships (a pull request per task,
+Start with [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), then read [`AGENTS.md`](AGENTS.md): commands, conventions, the toolchain, and how a change ships (a pull request per task,
 reviewed by a second agent, never merged by the author). Design rules for the app are in
 [`docs/DESIGN.md`](docs/DESIGN.md). Before pushing, `scripts/check-changed.sh` lints and tests what your branch changed;
 CI runs the full check.
