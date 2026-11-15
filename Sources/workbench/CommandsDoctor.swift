@@ -101,16 +101,24 @@ extension Commands {
 
     static func printVerifier(_ verifier: DoctorVerifier, base: String) {
         let config = verifier.config
-        let model = verifier.model ?? "the claude CLI default"
+        let provider = config.resolvedProvider
+        let model = verifier.model ?? "the \(provider) CLI default"
         if let skill = verifier.skill {
             let cut = skill.truncated ? ", cut at \(VerifierSkill.sizeLimit) bytes" : ""
             out("verifier: \(skill.path) at \(base) (\(skill.bytes) bytes, sha256 \(skill.sha256.prefix(12))\(cut))")
         } else {
             out("verifier: \(config.skill)")
         }
+        out("  provider: \(provider)\(config.provider == nil ? " (not set: the default)" : "")")
         out("  model:  \(model)")
-        out("  tools:  \(config.tools.joined(separator: ", "))")
-        out("  budget: $\(config.budgetUSD)  timeout: \(config.timeoutMin) min")
+        if provider == .codex {
+            // Codex takes no tool list and no dollar cap; the config refuses both beside it.
+            out("  tools:  codex sandbox: writes the worktree (not .git), the proof folder and a scratch folder; no network")
+            out("  budget: no dollar cap  timeout: \(config.timeoutMin) min")
+        } else {
+            out("  tools:  \(config.tools.joined(separator: ", "))")
+            out("  budget: $\(config.budgetUSD)  timeout: \(config.timeoutMin) min")
+        }
         if let problem = verifier.problem { out("  warning: \(problem)") }
         if let missing = verifier.screenRecording { out("  warning: \(missing)") }
     }

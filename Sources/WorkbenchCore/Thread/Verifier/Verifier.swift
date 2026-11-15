@@ -64,10 +64,48 @@ public enum Verifier {
         return args
     }
 
+    /// The argv of a Codex verifier, prompt last. Codex has no per-command allowlist, so the project's helpers (a skill's
+    /// `scripts/verify-app.sh`, which builds under the checkout's `.build`) run inside its sandbox, not beside it as the
+    /// Claude verifier's allowed `Bash` patterns do. Its workspace is therefore the worktree, writable as a coding turn's
+    /// is (`.git` stays read-only), so those helpers can build; the proof directory and its own temporary directory are
+    /// the other places it may write. No network, nothing the user's own Codex setup could allow or approve, and no
+    /// dollar cap: `timeout_min` bounds it, which is why the config refuses `budget_usd` and `tools` beside
+    /// `provider = "codex"`. Its last message is written to `answerFile`, outside the proof directory so it is never
+    /// taken for proof.
+    public static func codexArguments(
+        verifier: VerifierConfig, prompt: String, worktree: URL, proofDirectory: URL, scratch: URL, answerFile: URL
+    ) -> [String] {
+        var args = ["exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral"]
+        if let model = verifier.model { args += ["-m", model] }
+        args += ["--ignore-user-config", "--ignore-rules", "-c", "approval_policy=\"never\""]
+        args += ["-c", "sandbox_workspace_write.network_access=false"]
+        args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
+        args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
+        let roots = [proofDirectory, scratch].map { CodexProvider.tomlString($0.path) }.joined(separator: ", ")
+        args += ["-c", "sandbox_workspace_write.writable_roots=[\(roots)]"]
+        args += ["-s", "workspace-write", "-C", worktree.path, "-o", answerFile.path, "--", prompt]
+        return args
+    }
+
+    /// The argv of the configured provider, as `verifier.started` records it (the prompt left out by the caller).
+    static func arguments(
+        provider: AgentProviderID, config: Config, verifier: VerifierConfig, prompt: String, worktree: URL,
+        proofDirectory: URL, scratch: URL, answerFile: URL, sessionID: UUID
+    ) -> [String] {
+        if provider == .codex {
+            return codexArguments(
+                verifier: verifier, prompt: prompt, worktree: worktree, proofDirectory: proofDirectory, scratch: scratch,
+                answerFile: answerFile)
+        }
+        return arguments(
+            config: config, verifier: verifier, prompt: prompt, proofDirectory: proofDirectory, sessionID: sessionID)
+    }
+
     /// What the verifier is told: its role, the skill as the project wrote it, the goal's criteria, and where to
     /// leave the proof. The paths are real here (the model needs them), unlike in the judge's brief.
     public static func prompt(
-        skill: VerifierSkill, goal: Goal, proofDirectory: URL, threadID: String, goalPath: String, app: RunningApp? = nil
+        skill: VerifierSkill, goal: Goal, proofDirectory: URL, threadID: String, goalPath: String, app: RunningApp? = nil,
+        checkout: URL? = nil
     ) -> String {
         var parts: [String] = [
             """
@@ -84,7 +122,13 @@ public enum Verifier {
             saw. Your words are a note for the person reviewing; they decide nothing.
             """
         ]
-        parts.append("## Environment\n\n" + environmentLines(proofDirectory, threadID, goalPath, app: app))
+        var environment = environmentLines(proofDirectory, threadID, goalPath, app: app)
+        if let checkout {
+            // A Codex verifier runs the project's helpers inside its sandbox, so where it may write is said.
+            environment += "\n- The checkout to verify is your working directory, \(checkout.path). Do not edit its files; "
+                + "the project's helpers may build in it. Screenshots go in the proof directory."
+        }
+        parts.append("## Environment\n\n" + environment)
         if app != nil {
             parts.append(
                 """
@@ -204,30 +248,60 @@ public enum Verifier {
         return kept.isEmpty ? marker : kept + "\n" + marker
     }
 
-    /// Why a `claude` run produced no answer to read, nil when it ended on its own with status 0.
-    static func processProblem(_ exit: ProcessExit?, timeout: TimeInterval) -> String? {
-        guard let exit else { return "claude did not report how it ended" }
+    /// Why a Codex verifier left no answer: its answer file, bounded, or the failure. Codex reports tokens, not dollars, so
+    /// there is no cost.
+    static func codexAnswer(answerFile: URL, sawCapacity: Bool) -> Answer {
+        guard let text = ThreadService.readAnswer(answerFile) else {
+            return Answer(
+                text: nil, costUSD: nil,
+                failure: sawCapacity ? "codex's model is at capacity" : "codex left no answer")
+        }
+        return Answer(text: text, costUSD: nil, failure: nil)
+    }
+
+    /// Why a verifier run (`name` is its executable, as said) produced no answer to read, nil when it ended on its own
+    /// with status 0.
+    static func processProblem(_ exit: ProcessExit?, timeout: TimeInterval, name: String = "claude") -> String? {
+        guard let exit else { return "\(name) did not report how it ended" }
         switch exit.cause {
         case .stopped: return "the verifier was stopped"
-        case .timedOut: return "claude did not finish within \(Int(timeout))s"
+        case .timedOut: return "\(name) did not finish within \(Int(timeout))s"
         case .natural: break
         }
         switch exit.termination {
         case .exited(0): return nil
-        case .exited(let code): return "claude exited with status \(code)"
-        case .signaled(let signal): return "claude was ended by signal \(signal)"
-        case .lost: return "claude ended in a way that was not recorded"
+        case .exited(let code): return "\(name) exited with status \(code)"
+        case .signaled(let signal): return "\(name) was ended by signal \(signal)"
+        case .lost: return "\(name) ended in a way that was not recorded"
         }
     }
 
     // MARK: Recovery
 
-    /// Ends what a verifier left behind (the app, also detached) and closes its `verifier.started`. Run by every
-    /// command that opens the log, so the next one of any kind finds it closed. Returns whether there was one.
+    /// Every directory a verifier or its helpers may run in: the worktree, the thread's proof folders (a Codex verifier's
+    /// helpers may work in one) and the verifier's own folder (its temporary directory). An orphan is looked for in each.
+    static func executionDirectories(worktree: URL, threadDirectory: URL) -> [URL] {
+        [
+            worktree, threadDirectory.appendingPathComponent("proof", isDirectory: true),
+            threadDirectory.appendingPathComponent("verifier", isDirectory: true),
+        ]
+    }
+
+    /// SIGKILLs the orphans found in any of the verifier's execution directories and returns their pids.
     @discardableResult
-    static func recoverOrphan(log: EventLogWriter, worktree: URL) async throws -> Bool {
+    static func sweepOrphans(worktree: URL, threadDirectory: URL) -> [pid_t] {
+        executionDirectories(worktree: worktree, threadDirectory: threadDirectory).flatMap {
+            OrphanSweeper.sweep(inside: $0)
+        }
+    }
+
+    /// Ends what a verifier left behind (the app, also detached, and a helper working outside the worktree) and closes its
+    /// `verifier.started`. Run by every command that opens the log, so the next one of any kind finds it closed. Returns
+    /// whether there was one.
+    @discardableResult
+    static func recoverOrphan(log: EventLogWriter, worktree: URL, threadDirectory: URL) async throws -> Bool {
         guard await log.hasOpenVerifier else { return false }
-        OrphanSweeper.sweep(inside: worktree)
+        sweepOrphans(worktree: worktree, threadDirectory: threadDirectory)
         try await log.recoverOrphanedVerifier()
         return true
     }

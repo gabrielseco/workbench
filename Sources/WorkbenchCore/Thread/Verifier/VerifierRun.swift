@@ -16,8 +16,10 @@ struct VerifierRun {
     var worktree: URL
     var proofDirectory: URL
     var threadDirectory: URL
-    var claude: URL
-    /// The parent environment; what `claude` sees is the allowlisted part of it.
+    /// The resolved executable of `verifier.resolvedProvider`: `claude` or `codex`, never one for the other.
+    var executable: URL
+    /// The parent environment; what the verifier sees is the allowlisted part of it (the project's for Claude, Codex's own
+    /// minimal set for Codex).
     var environment: [String: String]
     var timeout: TimeInterval
     var killGrace: TimeInterval = 5
@@ -29,12 +31,26 @@ struct VerifierRun {
         // The prompt names the app, which is only known once it is up; the attempt below is recorded first, so the
         // recorded argv has the prompt left out as it always has.
         let sessionID = UUID()
-        let shown = PRDescriber.displayArguments(
+        let provider = verifier.resolvedProvider
+        let name = provider.rawValue
+        let scratch = threadDirectory.appendingPathComponent("verifier/tmp", isDirectory: true)
+        let answerFile = threadDirectory.appendingPathComponent("verifier/answer-turn-\(turn).txt")
+        func arguments(_ prompt: String) -> [String] {
             Verifier.arguments(
-                config: config, verifier: verifier, prompt: "", proofDirectory: proofDirectory, sessionID: sessionID))
+                provider: provider, config: config, verifier: verifier, prompt: prompt, worktree: worktree,
+                proofDirectory: proofDirectory, scratch: scratch, answerFile: answerFile, sessionID: sessionID)
+        }
+        var shown = arguments("")
+        if provider == .codex, let end = shown.firstIndex(of: "--") { shown = Array(shown[..<end]) }
+        shown = PRDescriber.displayArguments(shown)
+        if provider == .codex {
+            // A previous attempt's answer is never read as this one's.
+            try? FileManager.default.removeItem(at: answerFile)
+            try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        }
 
-        // A `claude` or an app a killed verifier left is found by the worktree it ran in, and ended first.
-        OrphanSweeper.sweep(inside: worktree)
+        // A `claude`, a `codex`, a helper or an app a killed verifier left is found by the directory it ran in, and ended first.
+        Verifier.sweepOrphans(worktree: worktree, threadDirectory: threadDirectory)
         try? FileManager.default.createDirectory(at: proofDirectory, withIntermediateDirectories: true)
         let before = Self.snapshot(proofDirectory, threadDirectory)
 
@@ -43,7 +59,8 @@ struct VerifierRun {
             .verifierStarted, turn: turn,
             data: [
                 "argv": .array(shown.map { .string($0) }), "skill": .string(skill.path), "sha256": .string(skill.sha256),
-                "bytes": .int(skill.bytes), "truncated": .bool(skill.truncated),
+                "bytes": .int(skill.bytes), "truncated": .bool(skill.truncated), "provider": .string(name),
+                "model": verifier.model.map { .string($0) } ?? .null,
             ])
         let began = Date()
 
@@ -64,15 +81,14 @@ struct VerifierRun {
             let info = app.map { Verifier.RunningApp(pid: $0.pid, port: $0.port, url: $0.url) }
             let prompt = Verifier.prompt(
                 skill: skill, goal: goal, proofDirectory: proofDirectory, threadID: threadID, goalPath: goalPath,
-                app: info)
-            let arguments = Verifier.arguments(
-                config: config, verifier: verifier, prompt: prompt, proofDirectory: proofDirectory,
-                sessionID: sessionID)
+                app: info, checkout: provider == .codex ? worktree : nil)
+            var childEnvironment = Verifier.environment(
+                base: provider == .codex
+                    ? CodexProvider.environment(from: environment) : config.childEnvironment(from: environment),
+                proofDirectory: proofDirectory, threadID: threadID, goalPath: goalPath, app: info)
+            if provider == .codex { childEnvironment["TMPDIR"] = scratch.path }
             var request = SpawnRequest(
-                executable: claude, arguments: arguments,
-                environment: Verifier.environment(
-                    base: config.childEnvironment(from: environment), proofDirectory: proofDirectory,
-                    threadID: threadID, goalPath: goalPath, app: info),
+                executable: executable, arguments: arguments(prompt), environment: childEnvironment,
                 workingDirectory: worktree, timeout: timeout)
             request.killGrace = killGrace
             request.maxLineBytes = Verifier.maxOutputBytes
@@ -87,7 +103,7 @@ struct VerifierRun {
                     case .started: break
                     }
                 }
-            } catch { startError = "claude could not be started" }
+            } catch { startError = "\(name) could not be started" }
         }
 
         // The app goes with the turn, however the turn ended. Nothing between its start and here can throw.
@@ -95,12 +111,16 @@ struct VerifierRun {
         if let app { appEnd = await app.stop() }
         if let app, let appEnd { try await recordRunEnd(app: app, end: appEnd, turn: turn, log: log) }
 
-        // The run ended; whatever it started and left (the app, also in a new session) goes with it.
-        let swept = OrphanSweeper.sweep(inside: worktree)
+        // The run ended; whatever it started and left (the app, also in a new session) goes with it, wherever it ran.
+        let swept = Verifier.sweepOrphans(worktree: worktree, threadDirectory: threadDirectory)
 
         var answer = Verifier.Answer(text: nil, costUSD: nil, failure: startError)
         if startError == nil {
-            answer = Self.answer(lines: lines, oversized: oversized, exit: exit, timeout: timeout, budget: verifier.budgetUSD)
+            if provider == .codex {
+                answer = Self.codexAnswer(lines: lines, exit: exit, timeout: timeout, answerFile: answerFile)
+            } else {
+                answer = Self.answer(lines: lines, oversized: oversized, exit: exit, timeout: timeout, budget: verifier.budgetUSD)
+            }
         }
         let after = Self.snapshot(proofDirectory, threadDirectory)
         let changed = after.filter { file in before.first { $0.name == file.name }?.sha256 != file.sha256 }
@@ -229,6 +249,16 @@ struct VerifierRun {
             parsed.failure = Verifier.processProblem(exit, timeout: timeout) ?? parsed.failure
         }
         return parsed
+    }
+
+    /// A Codex verifier is read from its answer file, and only after it ended on its own with status 0; its stream is a
+    /// transcript, read only for an "at capacity" that explains a missing answer.
+    static func codexAnswer(lines: [String], exit: ProcessExit?, timeout: TimeInterval, answerFile: URL) -> Verifier.Answer {
+        if let problem = Verifier.processProblem(exit, timeout: timeout, name: "codex") {
+            return Verifier.Answer(text: nil, costUSD: nil, failure: problem)
+        }
+        let capacity = lines.contains { CodexDecoder.atCapacity($0) } || CodexDecoder.atCapacity(exit?.stderrTail ?? "")
+        return Verifier.codexAnswer(answerFile: answerFile, sawCapacity: capacity)
     }
 
     static func clean(_ text: String) -> String {

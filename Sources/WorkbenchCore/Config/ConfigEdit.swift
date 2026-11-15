@@ -1,7 +1,7 @@
 import Foundation
 
-/// Changes one agent key in a project's `.workbench/config.toml` (`agents.<role>.provider`, `.model`, `.reasoning_effort`) and nothing
-/// else: every other line, comment and table stays where it was. The result is parsed as a config before anything is written, so a
+/// Changes one agent key in a project's `.workbench/config.toml` (`agents.<role>.provider`, `.model`, `.reasoning_effort`, or
+/// `verifier.provider` and `.model`) and nothing else: every other line, comment and table stays where it was. The result is parsed as a config before anything is written, so a
 /// value the config would not load leaves the file exactly as it was. One writer of the config: `GoalAgentSetup` calls it too.
 public enum ConfigEdit {
     /// A config bigger than this is not read into memory to be edited.
@@ -14,15 +14,30 @@ public enum ConfigEdit {
     }
 
     public struct Key: Sendable, Equatable, CustomStringConvertible {
-        public var role: AgentRole
+        /// The `[agents.<role>]` table the key is in; nil is the `[verifier]` table.
+        public var role: AgentRole?
         public var field: Field
-        public var description: String { "agents.\(role.rawValue).\(field.rawValue)" }
+        public var description: String { "\(table).\(field.rawValue)" }
         public init(role: AgentRole, field: Field) {
             self.role = role
             self.field = field
         }
 
-        var table: String { "agents.\(role.rawValue)" }
+        private init(verifier field: Field) {
+            self.role = nil
+            self.field = field
+        }
+
+        /// `verifier.provider` or `verifier.model`: the verifier has no `reasoning_effort`.
+        public static func verifier(_ field: Field) throws -> Key {
+            guard verifierFields.contains(field) else { throw Failure.badKey("verifier.\(field.rawValue)") }
+            return Key(verifier: field)
+        }
+
+        public var isVerifier: Bool { role == nil }
+        static let verifierFields: [Field] = [.provider, .model]
+
+        var table: String { role.map { "agents.\($0.rawValue)" } ?? VerifierConfig.table }
     }
 
     /// What a successful edit did: the key's value before and after (nil is not set).
@@ -49,7 +64,7 @@ public enum ConfigEdit {
             switch self {
             case .badKey(let text):
                 "'\(text)' is not a key this can change: use agents.<role>.<provider|model|reasoning_effort>, with <role> one of "
-                    + AgentRole.allCases.map(\.rawValue).joined(separator: ", ") + "."
+                    + AgentRole.allCases.map(\.rawValue).joined(separator: ", ") + ", or verifier.<provider|model>."
             case .badValue(let key, let why): "'\(key)' cannot be set to that: \(why)"
             case .notSet(let key): "\(key) is not set in the config, so there is nothing to remove."
             case .noConfig: "this project has no .workbench/config.toml yet: run `workbench init` first."
@@ -66,6 +81,10 @@ public enum ConfigEdit {
     /// `agents.goal.provider` to a key.
     public static func parseKey(_ text: String) throws -> Key {
         let parts = text.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        if parts.count == 2, parts[0] == VerifierConfig.table {
+            guard let field = Field(rawValue: parts[1]), Key.verifierFields.contains(field) else { throw Failure.badKey(text) }
+            return try Key.verifier(field)
+        }
         guard parts.count == 3, parts[0] == "agents", let role = AgentRole(rawValue: parts[1]),
             let field = Field(rawValue: parts[2])
         else { throw Failure.badKey(text) }
@@ -134,7 +153,14 @@ public enum ConfigEdit {
                 guard stringValue(TOMLSubset.parse(text).document, key) == value else {
                     throw Failure.invalid("the key was not read back")
                 }
-                if key.field == .provider, let value, config.agents.selection(key.role).provider?.rawValue != value {
+                if key.field == .provider, let value, let role = key.role,
+                    config.agents.selection(role).provider?.rawValue != value {
+                    throw Failure.invalid("the provider was not read back")
+                }
+                if key.isVerifier, config.verifier == nil {
+                    throw Failure.invalid("the verifier is turned off ([verifier] enabled = false): turn it on first")
+                }
+                if key.isVerifier, key.field == .provider, config.verifier?.provider?.rawValue != value {
                     throw Failure.invalid("the provider was not read back")
                 }
             } catch let failure as Failure {

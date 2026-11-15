@@ -15,22 +15,33 @@ public struct VerifierConfig: Sendable, Equatable {
     public var tools: [String]
     /// `--model` for the verifier; unset is the CLI's default.
     public var model: String?
+    /// `provider`: who runs the verifier. Nil is what a project without the key always had, Claude
+    /// (`resolvedProvider`); a name with no verifier adapter is refused when the config loads, never replaced.
+    public var provider: AgentProviderID?
     public var budgetUSD: Decimal
     public var timeoutMin: Int
 
     public init(
         skill: String = VerifierConfig.defaultSkill, tools: [String] = VerifierConfig.defaultTools, model: String? = nil,
-        budgetUSD: Decimal = VerifierConfig.defaultBudgetUSD, timeoutMin: Int = VerifierConfig.defaultTimeoutMin
+        budgetUSD: Decimal = VerifierConfig.defaultBudgetUSD, timeoutMin: Int = VerifierConfig.defaultTimeoutMin,
+        provider: AgentProviderID? = nil
     ) {
         self.skill = skill
         self.tools = tools
         self.model = model
+        self.provider = provider
         self.budgetUSD = budgetUSD
         self.timeoutMin = timeoutMin
     }
 
+    /// The provider that runs: the configured one, else Claude, as before `provider` existed.
+    public var resolvedProvider: AgentProviderID { provider ?? .claude }
+
+    /// The providers a verifier can run on, in the order a message lists them.
+    public static let supportedProviders: [AgentProviderID] = [.claude, .codex]
+
     static let table = "verifier"
-    static let keys: Set<String> = ["skill", "tools", "model", "enabled", "budget_usd", "timeout_min"]
+    static let keys: Set<String> = ["skill", "tools", "model", "provider", "enabled", "budget_usd", "timeout_min"]
 
     /// Whether `Config.parse` should leave this table to `parse(_:fail:)`.
     static func owns(table name: String) -> Bool { name == table }
@@ -48,6 +59,36 @@ public struct VerifierConfig: Sendable, Equatable {
             return "gives the model any command; name the helpers, like \"Bash(scripts/snap.sh:*)\""
         }
         return nil
+    }
+
+    /// `provider`, when it names a provider the verifier runs on, and the keys beside it that provider cannot honour.
+    private static func parseProvider(_ table: TOMLTable, fail: ReviewConfig.Fail) -> AgentProviderID? {
+        guard let entry = table.entries["provider"] else { return nil }
+        guard case .string(let value) = entry.value else {
+            fail(.wrongType, entry.line, "'provider' must be a string, found \(entry.value.typeName)")
+            return nil
+        }
+        guard let provider = AgentProviderID(value), supportedProviders.contains(provider) else {
+            let supported = AgentsConfig.list(supportedProviders)
+            fail(.invalidValue, entry.line, "'provider' must be \(supported): the verifier has no adapter for \"\(value)\"")
+            return nil
+        }
+        // Codex has no tool allowlist and no dollar cap: a setting it cannot honour is refused, never run weaker.
+        if provider == .codex {
+            if let tools = table.entries["tools"] {
+                fail(
+                    .conflict, tools.line,
+                    "'tools' are Claude Code permission patterns and a codex verifier cannot honour them: remove 'tools' "
+                        + "or set provider = \"claude\"")
+            }
+            if let budget = table.entries["budget_usd"] {
+                fail(
+                    .conflict, budget.line,
+                    "codex cannot enforce a dollar limit, so 'budget_usd' cannot bound a codex verifier (its timeout_min "
+                        + "does): remove 'budget_usd' or set provider = \"claude\"")
+            }
+        }
+        return provider
     }
 
     /// Nil only when the project turned the verifier off with `enabled = false`.
@@ -124,6 +165,8 @@ public struct VerifierConfig: Sendable, Equatable {
             }
         }
 
+        let provider = parseProvider(table, fail: fail)
+
         var budget = defaultBudgetUSD
         if let entry = table.entries["budget_usd"] {
             switch entry.value {
@@ -143,6 +186,7 @@ public struct VerifierConfig: Sendable, Equatable {
         }
 
         guard enabled else { return nil }
-        return VerifierConfig(skill: skill, tools: tools, model: model, budgetUSD: budget, timeoutMin: timeout)
+        return VerifierConfig(
+            skill: skill, tools: tools, model: model, budgetUSD: budget, timeoutMin: timeout, provider: provider)
     }
 }

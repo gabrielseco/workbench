@@ -364,7 +364,8 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # [verifier]                            # P10: a skill run as its own turn that drives the app and leaves proof
 # skill = ".claude/skills/verify/SKILL.md"  # the default; an explicit repo path, read from the base commit
 # tools = ["Read", "Bash(scripts/verify-app.sh:*)"]  # what the verifier may use; default ["Read"]; no bare Bash
-# model = "sonnet"                      # --model for the verifier; unset = the CLI default
+# provider = "claude"                   # "claude" (unset is claude) or "codex"; codex takes no tools or budget_usd
+# model = "sonnet"                      # --model (codex: -m) for the verifier; unset = the CLI default
 # enabled = false                       # the verifier is on by default; this turns it off
 # budget_usd = 1.00                     # default 1.00
 # timeout_min = 10                      # default 10 (1 to 240)
@@ -486,7 +487,16 @@ Notes:
   `.agents/skills/…` both work; nothing is discovered): no empty value, no absolute path, no `..`. `tools` are
   Claude Code permission patterns; a bare `Bash`, `Bash(*)` and the like are refused, and the list may not be empty.
   `model` is a model name, `enabled` a boolean (`false` turns the verifier off; it is on with no table at all), `budget_usd` a positive number, `timeout_min` 1 to 240; any other key
-  (there is no `provider`) is refused with its name. The skill is read from the thread's base commit, never the
+  is refused with its name. `provider` is `"claude"` or `"codex"`; unset is Claude, as before the key existed, and
+  any other name is refused at its line, never replaced by another provider. Codex has no tool allowlist and no
+  dollar cap, so `tools` or `budget_usd` beside `provider = "codex"` is refused (a conflict) rather than run without
+  them; such a verifier is bounded by `timeout_min`. The Agents card and `workbench config set verifier.provider|model`
+  write these two keys. A Codex verifier is one `codex exec --json -s workspace-write` run whose working directory
+  (`-C`) is the worktree: Codex has no per-command allowlist, so the skill's helpers (a build under the checkout's `.build`)
+  run inside its sandbox and need to write there, as a coding turn's commands do (`.git` stays read-only). Besides the
+  worktree it may write only the turn's proof folder and a temporary folder of its own; it has no network, ignores the user's Codex config and rules, approves nothing, writes
+  its last message to a file outside the proof folder (`-o`), and reports no cost. A missing `codex` is refused by
+  `workbench verifier` and skipped, with the reason, after a turn: Claude never stands in. The skill is read from the thread's base commit, never the
   worktree, as a regular file: a symlink, or a path through one (this repository's `.claude/skills/<name>` points
   into `.agents/`), is refused with the real path to use; missing and empty are refused with the path; text over
   32 KiB is cut with a marker. `doctor` reads it at its `--base` and prints the path, size, sha256, model, tools and

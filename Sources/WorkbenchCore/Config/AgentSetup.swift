@@ -125,11 +125,13 @@ public struct AgentSetup: Sendable, Equatable {
             return row
         case .ship: return make(config.resolvedShipAgent, config.agents.ship)
         case .verifier:
-            // The verifier is Claude only, and on unless `[verifier] enabled = false`.
-            guard config.verifier != nil else { return off() }
-            return Row(
-                role: role, provider: .claude, model: config.verifierModel, reasoningEffort: nil,
-                source: config.verifierModel == nil ? .providerDefault : .configured)
+            // On unless `[verifier] enabled = false`; Claude unless `[verifier] provider` names another. It has no effort to set.
+            guard let verifier = config.verifier else { return off() }
+            var row = Row(
+                role: role, provider: verifier.resolvedProvider, model: verifier.model, reasoningEffort: nil,
+                source: verifier.provider == nil && verifier.model == nil ? .providerDefault : .configured)
+            row.lockedFields = [.reasoningEffort]
+            return row
         }
     }
 

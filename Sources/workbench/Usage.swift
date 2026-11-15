@@ -14,7 +14,8 @@ let workbenchUsage = """
       config                     show the resolved config and the command a turn would run
       config set <key> <value>   change one agent key in .workbench/config.toml, keeping the rest of the file as it is;
                                  <key> is agents.<role>.<provider|model|reasoning_effort>, <role> one of goal, plan,
-                                 run, judge, review, ship; refused, with the file untouched, when the config would not
+                                 run, judge, review, ship, or verifier.<provider|model> (claude or codex runs the
+                                 verifier); refused, with the file untouched, when the config would not
                                  load; prints the old and the new value; allowed while a thread is active
       config unset <key>         remove that key, so the role runs its provider's default again
       doctor [--base <branch>] [--editor <name-or-command>] [--json]
