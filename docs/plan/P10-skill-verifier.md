@@ -58,7 +58,7 @@ helper the skill may call.
 8. **Its words are never a pass.** The report is stored bounded and shown by `review` as a note; a screenshot is
    still something a person looks at.
 9. **The project owns its safety helpers.** Workbench does not know `ax.swift`. Triage's helpers keep their
-   refusal list and PID targeting; the tool list decides which helpers the model may run at all.
+   refusal list and PID targeting; the tool list decides which helpers the model may run at all. (Under `permissions = "auto"` the classifier decides instead; see P24.)
 
 10. **The skill is an explicit path, never discovered.** Projects keep skills under `.claude/skills/` or `.agents/skills/`
     (this repo links the first to the second). `skill` names the file; both work. It must be a regular file at the base

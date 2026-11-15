@@ -42,7 +42,8 @@ public enum Verifier {
 
     /// The argv, prompt last. Always `--safe-mode` and `--disable-slash-commands` (rule 3), whatever the project's
     /// `safe_mode` says: the skill is text in the prompt. The tools are the project's `[verifier] tools` and
-    /// nothing else (rule 2); the project's `[tools] denied` still applies on top.
+    /// nothing else (rule 2), except that `permissions = "auto"` adds `--permission-mode auto` and makes `Bash` available;
+    /// the project's `[tools] denied` still applies on top.
     ///
     /// `--add-dir` names the turn's proof directory: `--restricted` confines the file tools to the worktree, and the
     /// proof directory is in the thread's folder, so without it the verifier could write a screenshot (through the
@@ -57,7 +58,14 @@ public enum Verifier {
             "--safe-mode", "--disable-slash-commands", "--add-dir", proofDirectory.path,
         ]
         if let model = config.verifierModel { args += ["--model", model] }
-        args += ["--tools"] + availableTools(verifier.tools)
+        // Under `permissions = "auto"` the classifier decides which commands are safe, as in a coding run, so `Bash` exists without
+        // the project listing its helpers in `[verifier] tools`; `[tools] denied` still wins over it.
+        var available = availableTools(verifier.tools)
+        if config.permissions == .auto {
+            args += ["--permission-mode", "auto"]
+            if !available.contains("Bash") { available.append("Bash") }
+        }
+        args += ["--tools"] + available
         args += ["--allowedTools"] + verifier.tools
         if !config.tools.denied.isEmpty { args += ["--disallowedTools"] + config.tools.denied }
         args += ["--", prompt]
