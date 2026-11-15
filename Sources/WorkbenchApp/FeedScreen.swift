@@ -75,6 +75,9 @@ struct FeedScreen: View {
         let draftCard = DraftGoalCard.hidesDecisionCard(editable: canEditGoal)
         if case .next(let step, let why)? = snapshot.feed.last?.kind, !draftCard, runCard?.stop == nil {
             let decision = store.feedDecision(for: snapshot)
+            if decision.takesGuidance, let findings = store.review?.findings, !findings.isEmpty {
+                FindingsCard(findings: findings)
+            }
             DecisionCard(
                 step: step, why: why, decision: decision, perform: perform,
                 route: snapshot.base.map { "\(WorktreeManager.branch(for: snapshot.id)) → \($0)" })

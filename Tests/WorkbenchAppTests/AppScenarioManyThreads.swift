@@ -21,7 +21,7 @@ extension AppScenario {
     }
 
     /// Whether `verify-app.sh start` cuts a worktree for the scenario's thread (it needs the repository and worktree files).
-    var hasWorktree: Bool { self == .reviewChanges || self == .reviewBaseMoved }
+    var hasWorktree: Bool { self == .reviewChanges || self == .reviewBaseMoved || self == .reviewFindings }
 
     /// What the base gained after the thread's worktree was cut (`verify-app.sh start` commits it on `refs/remotes/origin/main`, as
     /// after a fetch, and leaves the project's own `main` where the thread started): one file the thread changed too, and a new one.

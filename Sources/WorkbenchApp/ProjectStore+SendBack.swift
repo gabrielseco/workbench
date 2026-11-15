@@ -25,6 +25,20 @@ extension ProjectStore {
         startRun(project, thread, generation: generation, options: RunOptions(feedback: note))
     }
 
+    /// The next turn with what the judge and the review steps found, and whatever is written in the guidance field after it.
+    func sendFindings() {
+        guard let findings = review?.findings, !findings.isEmpty else { return }
+        let written = guidanceNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let project, let thread = currentThread, !starting else { return }
+        guard grantsInFlight == 0 else {
+            actionError = "A decision is still being saved. Send once it is."
+            return
+        }
+        actionError = nil
+        let note = written.isEmpty ? findings.feedback : findings.feedback + "\n\nAlso from the reviewer:\n\(written)"
+        startRun(project, thread, generation: generation, options: RunOptions(feedback: note))
+    }
+
     /// Drops every written note and the grant rows: another project's are not this one's.
     func clearGuidance() {
         (guidanceNotes, sendBackGrants) = ([:], [])
