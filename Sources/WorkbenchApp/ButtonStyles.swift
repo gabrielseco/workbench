@@ -71,12 +71,10 @@ struct WorkbenchButtonStyle: ButtonStyle {
 }
 
 extension View {
-    /// The button the screen's one main action uses.
     func primaryButton(size: ButtonSize = .regular) -> some View {
         buttonStyle(WorkbenchButtonStyle(kind: .primary, size: size))
     }
 
-    /// Any other button that is a button (not an icon or a link).
     func plainButton(fill: Bool = false, size: ButtonSize = .compact) -> some View {
         buttonStyle(WorkbenchButtonStyle(kind: .plain, size: size, fill: fill))
     }

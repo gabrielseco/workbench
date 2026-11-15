@@ -70,7 +70,6 @@ public struct ProjectCreator: Sendable {
 
     public init(git: GitRunner) { self.git = git }
 
-    /// A seed, checked: what to copy and where.
     struct PlannedSeed {
         var source: URL
         var name: String

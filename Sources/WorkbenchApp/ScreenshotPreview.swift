@@ -47,7 +47,6 @@ import SwiftUI
             note: "Not sent yet. Closing keeps it attached.", staged: (staging, item.id), needsFeed: false)
     }
 
-    /// The verifier's screenshots, opened at one of them.
     static func proof(_ shots: [ProofShot], at index: Int) -> ScreenshotPreviewModel {
         ScreenshotPreviewModel(
             shots: shots.map { Shot(url: $0.url, caption: $0.caption) }, index: min(max(index, 0), max(shots.count - 1, 0)),
@@ -171,7 +170,6 @@ struct ScreenshotPreviewControls: View {
     }
 }
 
-/// The picture, in an area sized to it.
 struct ScreenshotPreviewBody: View {
     var model: ScreenshotPreviewModel
     @Environment(\.displayScale) private var displayScale

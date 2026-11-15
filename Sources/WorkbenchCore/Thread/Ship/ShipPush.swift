@@ -24,10 +24,9 @@ extension ThreadService {
     }
 
     /// Runs the preflight, then pushes `workbench/<id>` to `origin` (to the goal's `push_to` branch when it has
-    /// one) with its upstream set. A rejected,
-    /// timed-out or killed push changes nothing the next attempt depends on: preflight reads the remote
-    /// again and a plain push is repeated. Writes only `branch.ahead`, before the push, when the head is not the
-    /// accepted commit; the PR is task 4.
+    /// one) with its upstream set. A rejected, timed-out or killed push changes nothing the next attempt depends on:
+    /// preflight reads the remote again and a plain push is repeated. Writes only `branch.ahead`, before the push,
+    /// when the head is not the accepted commit.
     ///
     /// - Parameter shown: the plan the person confirmed. If the thread, tip, base or origin differ now,
     ///   nothing is pushed: the answer was about something else.

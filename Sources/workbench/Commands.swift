@@ -51,7 +51,6 @@ struct Context {
 }
 
 enum CLIError: Error, CustomStringConvertible {
-    /// A failure that is not one of the others.
     case message(String)
     case usage(String)
     /// A precondition is not met and nothing was changed (no terminal to ask on, say).

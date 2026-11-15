@@ -1,6 +1,5 @@
 import Foundation
 
-/// The values `config.toml` may contain.
 enum TOMLValue: Equatable, Sendable {
     case string(String)
     case int(Int)

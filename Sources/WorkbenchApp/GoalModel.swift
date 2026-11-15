@@ -24,9 +24,9 @@ struct GoalModel: Equatable {
         var warning: String?
         var suggestion: String?
 
-        /// What kind of proof it is, for the chip: `test`, `screenshot`, `command` (a backticked command) or `by hand`.
         var isCommand: Bool { kind == "command" }
 
+        /// What kind of proof it is, for the chip: `test`, `screenshot`, `command` (a backticked command) or `by hand`.
         var kind: String {
             let trimmed = proof.trimmingCharacters(in: .whitespaces)
             let lower = trimmed.lowercased()

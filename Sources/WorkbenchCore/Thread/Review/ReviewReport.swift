@@ -478,7 +478,6 @@ public struct ReviewLoader: Sendable {
             base: summary.base, files: summary.files, worktree: WorktreeManager(repoRoot: project.root, git: git).path(for: id))
     }
 
-    /// One file's patch, by its path in the diff.
     public func patch(id: String, path: String) async throws -> FilePatch? {
         guard case .summary(let summary) = await diff(id: id, goalBase: nil, events: readEvents(id), limit: Int.max),
             let file = summary.files.first(where: { $0.path == path })

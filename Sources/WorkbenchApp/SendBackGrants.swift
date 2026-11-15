@@ -24,7 +24,6 @@ struct GrantRow: Identifiable, Equatable {
         }
     }
 
-    /// What was decided, as the row says it.
     var decided: String? {
         switch status {
         case .open: nil

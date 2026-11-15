@@ -121,7 +121,6 @@ public enum TranscriptFile {
         return (lines, start - data.startIndex)
     }
 
-    /// The `data` of the complete lines of the file.
     public static func lines(at url: URL) -> [JSONValue] {
         read(at: url).lines.map(\.data)
     }

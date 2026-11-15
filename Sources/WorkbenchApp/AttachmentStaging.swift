@@ -20,11 +20,10 @@ import WorkbenchCore
     nonisolated static let thumbnailPixels = 104
 
     private(set) var items: [Item] = []
-    /// Images being read and converted: Create waits for them, so none that was just added is left out.
     /// Screenshots are taken from a paste only while the card has somewhere to show them.
     @ObservationIgnored var takesPastedImages = true
+    /// Images being read and converted: Create waits for them, so none that was just added is left out.
     private(set) var pending = 0
-    /// Why the last image was not added.
     private(set) var problem: String?
     /// Bumped by `clear`: an image prepared before it is dropped, and its copy removed, never added to a sheet that has moved on.
     @ObservationIgnored private var generation = 0

@@ -6,7 +6,6 @@ public struct JudgeResult: Sendable, Equatable {
     public var turn: Int
     public var verdict: JudgeVerdict?
     public var costUSD: Double?
-    /// Why there is no verdict.
     public var failure: String?
 }
 

@@ -11,7 +11,6 @@ extension View {
             .feedModals(store)
     }
 
-    /// The cards that belong to the window, not to a screen: the agents and the projects.
     private func windowCards(_ store: ProjectStore) -> some View {
         modal(
             Self.agentsTitle(store), isPresented: Bindable(store).showingAgents, size: .medium, layer: Layer.agents.rawValue

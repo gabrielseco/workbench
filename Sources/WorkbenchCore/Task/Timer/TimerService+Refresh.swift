@@ -1,7 +1,6 @@
 import Foundation
 
 extension TimerService {
-    /// What `refresh` did to one project's timer.
     public struct RefreshResult: Sendable, Equatable {
         public enum Outcome: String, Sendable, Equatable {
             /// Nothing differed: no file was written and the agent was not touched.

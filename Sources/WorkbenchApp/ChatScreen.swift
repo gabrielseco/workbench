@@ -8,7 +8,6 @@ struct ChatComposerState: Equatable {
     var text = ""
     /// A turn is going: the log shows a message with no end yet, or this app holds the turn (a new chat the log does not show yet).
     var replying = false
-    /// The goal agent is drafting a goal from this chat.
     var drafting = false
     /// The agent has answered at least once: there is a conversation to make a goal from.
     var hasExchange = false
@@ -66,7 +65,6 @@ struct ChatRows: View {
 extension ChatMessage {
     /// Who said it, for VoiceOver: the bubbles and the avatar carry no label on screen.
     var speaker: String { role == .user ? "You" : "Goal agent" }
-    /// What VoiceOver reads for the message: the speaker, then the words.
     var spoken: String { "\(speaker): \(text)" + (images.isEmpty ? "" : " (with \(images.count) screenshot(s))") }
 }
 
@@ -122,7 +120,6 @@ struct ReplyingRow: View {
     }
 }
 
-/// The foot of a chat: what the last action said, the text box, and the two buttons.
 /// The composer's Send button: a 30 pt rounded square with an up arrow, dimmed while there is nothing to send.
 struct ComposerSendButton: View {
     var enabled: Bool

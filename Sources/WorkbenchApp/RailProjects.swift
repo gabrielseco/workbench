@@ -25,12 +25,10 @@ enum RailBadge: Equatable {
     }
 }
 
-/// One tile of the project rail: a project the person keeps at hand.
 struct RailProject: Equatable, Identifiable {
     var path: String
     /// The folder name, with its parent when two tiles share one.
     var name: String
-    /// Two letters on the tile.
     var initials: String
     /// Why the project cannot be opened now (the folder is gone, it is no longer a git repository); nil when it can.
     var unavailable: String?

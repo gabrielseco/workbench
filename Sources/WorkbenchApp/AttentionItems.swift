@@ -1,7 +1,6 @@
 import Foundation
 import WorkbenchCore
 
-/// Where an attention item takes you.
 enum AttentionRoute: Equatable, Sendable {
     case thread(String)
     case task(String)
@@ -24,9 +23,7 @@ enum AttentionRoute: Equatable, Sendable {
 struct AttentionItem: Equatable, Identifiable {
     var id: String
     var route: AttentionRoute
-    /// The thread's title or the task's name.
     var title: String
-    /// Why, in one line.
     var reason: String
     /// Amber for a decision, red for something that broke.
     var tone: TaskTone
@@ -34,7 +31,6 @@ struct AttentionItem: Equatable, Identifiable {
     var at: Date?
 }
 
-/// What the thread on screen says about itself.
 struct ThreadAttention: Equatable {
     var id: String
     var title: String?

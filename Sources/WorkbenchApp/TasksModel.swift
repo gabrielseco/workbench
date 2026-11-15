@@ -122,7 +122,6 @@ struct TasksSnapshot: Equatable {
     /// The archived tasks: not in `entries` (nothing counts, notifies or runs them), listed apart so they can be opened and restored.
     var archived: [TaskEntry] = []
 
-    /// Every task the page can show: the active ones, then the archived.
     var allEntries: [TaskEntry] { entries + archived }
 }
 
@@ -216,7 +215,6 @@ struct TasksReader: Sendable {
     /// Why the last read failed; the last good snapshot stays on screen next to it.
     private(set) var error: String?
     var selection: String?
-    /// The list's `Archived · N` fold is open.
     var archivedShown = false
     private(set) var reads = 0
 

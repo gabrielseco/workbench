@@ -37,7 +37,6 @@ extension ProjectStore {
     /// The project this app has a run going in, if any (the first, when threads of several projects are running).
     var runningProjectPath: String? { ownedRuns.first?.project.root.path }
 
-    /// Every project this app has a run going in.
     var runningProjectPaths: Set<String> { Set(ownedRuns.map(\.project.root.path)) }
 
     /// Whether a thread run is going in `project` itself: a run in another project must not hold this one's tasks back.

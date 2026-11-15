@@ -2,7 +2,6 @@ import Foundation
 import WorkbenchCore
 
 extension ProjectStore {
-    /// What is written in the guidance field of the thread on screen.
     var guidanceNote: String {
         get { currentThread.flatMap { guidanceNotes[$0] } ?? "" }
         set { if let thread = currentThread { guidanceNotes[thread] = newValue.isEmpty ? nil : newValue } }

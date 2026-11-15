@@ -24,7 +24,6 @@ import os
         self.backend = backend
     }
 
-    /// Whether the assertion is held right now.
     var isActive: Bool { assertion != nil }
 
     /// Takes the assertion, once: a second call while it is held does nothing. A failure is logged and kept, never thrown.

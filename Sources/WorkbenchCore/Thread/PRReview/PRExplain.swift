@@ -71,13 +71,11 @@ public enum PRExplain {
 /// What `explain-pr` came to. A failed run is a result with a reason, never a file reported as written.
 public struct PRExplainResult: Sendable, Equatable {
     public var pr: Int
-    /// The head the explanation is of.
     public var headSHA: String
     /// The explanation's file, absolute; nil when the run failed.
     public var file: URL?
     /// True when the file was kept from an earlier run of the same head and no agent ran.
     public var reused: Bool
-    /// Why there is no explanation.
     public var failure: String?
     /// The agent's transcript, relative to the project root; nil when no agent ran.
     public var transcriptPath: String?

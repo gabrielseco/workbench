@@ -28,10 +28,10 @@ import WorkbenchCore
     /// The tasks as last read, kept when a read fails so the count does not drop to zero on a hiccup.
     @ObservationIgnored private var lastTasks: [TaskEntry] = []
     @ObservationIgnored private var lastThread: ThreadAttention?
-    /// The project's tasks have been read once: until then the baseline is only what the thread said, and the first read of the
-    /// tasks completes it (it is not news that yesterday's run failed).
     /// Why the last read of the tasks failed, nil when it worked: the popover says the tasks could not be checked.
     private(set) var taskReadError: String?
+    /// The project's tasks have been read once: until then the baseline is only what the thread said, and the first read of the
+    /// tasks completes it (it is not news that yesterday's run failed).
     @ObservationIgnored private var tasksBaselined = false
     /// The thread's CI has been read once, for the same reason.
     @ObservationIgnored private var threadBaselined = true

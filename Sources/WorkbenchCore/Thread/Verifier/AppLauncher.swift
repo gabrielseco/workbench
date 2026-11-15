@@ -18,7 +18,6 @@ struct AppLauncher {
     var lifetime: TimeInterval
     var killGrace: TimeInterval
 
-    /// A running app, and what to say about it.
     final class Running: @unchecked Sendable {
         let pid: Int32
         let port: Int

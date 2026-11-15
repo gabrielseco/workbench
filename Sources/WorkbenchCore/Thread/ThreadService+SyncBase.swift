@@ -4,7 +4,6 @@ import Foundation
 public struct BaseMovement: Sendable, Equatable {
     /// The goal's base branch, as `origin` knows it.
     public var base: String
-    /// The commit `origin/<base>` is at.
     public var tip: String
     /// Commits on `origin/<base>` that the thread's branch does not have.
     public var behind: Int

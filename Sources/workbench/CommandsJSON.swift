@@ -54,7 +54,6 @@ extension Commands {
         }
     }
 
-    /// `status --all`: one entry per thread on disk, newest first. Read-only; nothing in it can be started.
     /// A chat thread's conversation summary; null on any other thread.
     static func chatJSON(_ state: ThreadState) -> JSONValue {
         guard let chat = state.chat else { return .null }
@@ -66,6 +65,7 @@ extension Commands {
         ]
     }
 
+    /// `status --all`: one entry per thread on disk, newest first. Read-only; nothing in it can be started.
     static func statusAllJSON(_ states: [ThreadState]) -> JSONValue {
         [
             "v": .int(jsonVersion),

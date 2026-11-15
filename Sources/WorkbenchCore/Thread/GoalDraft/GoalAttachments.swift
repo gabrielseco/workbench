@@ -191,7 +191,6 @@ public enum GoalAttachments {
             + names.enumerated().map { "![screenshot \($0.offset + 1)](\(folder)/\($0.element))" }.joined(separator: "\n")
     }
 
-    /// Writes the images into `directory`, creating it.
     static func write(_ items: [Loaded], into directory: URL) throws -> [URL] {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return try zip(names(items), items).map { name, item in

@@ -62,7 +62,6 @@ public struct ReviewStageConfig: Sendable, Equatable {
 
     public init(name: String) { self.name = name }
 
-    /// The file the stage's rubric comes from, if it has one of its own.
     public var rubric: String? { skill ?? prompt }
 
     /// The most files a stage may read: each goes whole into the brief, up to `PRReview.checklistLimit`.
@@ -73,7 +72,6 @@ public struct ReviewStageConfig: Sendable, Equatable {
         inputs.compactMap { if case .path(let path) = $0 { path } else { nil } }
     }
 
-    /// Whether the stage reads the verifier's proof.
     public var needsProof: Bool { inputs.contains(.proof) }
 }
 

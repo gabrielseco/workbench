@@ -17,7 +17,6 @@ public struct LatestPlan: Sendable, Equatable {
     public var baseCommit: String?
 }
 
-/// A plan as the first prompt carries it.
 public struct PlanForRun: Sendable, Equatable {
     public var text: String
     public var source: PlanSource
@@ -27,9 +26,7 @@ public struct PlanForRun: Sendable, Equatable {
     public var plannedAt: String?
 }
 
-/// What `run` does about a plan.
 public enum PlanChoice: Sendable, Equatable {
-    /// There is none.
     case none
     case use(PlanForRun)
     /// There is one and it is not used, and why.

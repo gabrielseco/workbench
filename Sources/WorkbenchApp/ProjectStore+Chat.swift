@@ -4,13 +4,11 @@ import WorkbenchCore
 /// The chat before a goal (P22 slice 6c): the store's side of what the chat screen does. Core runs every turn and draft; this holds
 /// what the window knows about them, per thread, so an answer for a thread that is no longer on screen lands on its own session.
 extension ProjectStore {
-    /// The composer of the chat on screen.
     var chatDraft: String {
         get { current.chatDraft }
         set { current.chatDraft = newValue }
     }
 
-    /// The screenshots staged for the next message of the chat on screen.
     var chatStaging: AttachmentStaging { current.chatStaging }
 
     /// A chat turn is going in the thread on screen. A chat just started is held under no thread until its turn ends, so it counts

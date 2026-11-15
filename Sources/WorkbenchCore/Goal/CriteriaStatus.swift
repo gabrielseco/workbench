@@ -34,7 +34,6 @@ public struct CriterionStatus: Sendable, Equatable {
         public var present: Bool { path != nil }
     }
 
-    /// What a person sees in the first column.
     public var label: String {
         switch state {
         case .passed: "✔ passed"

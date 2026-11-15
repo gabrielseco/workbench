@@ -254,7 +254,6 @@ public enum GoalEditor {
                 lines.remove(at: index)
             }
         } else if let value {
-            // Before the closing `---`.
             lines.insert(FrontMatterLine(key: key, value: value).rendered, at: file.bodyStartLine - 1)
         }
     }

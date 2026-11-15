@@ -12,7 +12,6 @@ extension ProjectStore {
         await readRailSummaries()
     }
 
-    /// Back to the open project's own inbox.
     func leaveAllProjects() { allProjects = false }
 
     func toggleAllDoneOpen() { allInboxDoneOpen.toggle() }

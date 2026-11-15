@@ -32,7 +32,6 @@ public struct EditorCommand: Sendable, Equatable {
     public var executable: String
     public var arguments: [String]
 
-    /// The command line as one readable string, for messages.
     public var display: String { ([executable] + arguments).joined(separator: " ") }
 }
 

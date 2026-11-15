@@ -5,7 +5,6 @@ import WorkbenchCore
 /// The staged screenshots as small thumbnails, each with a remove button: the new-thread screen's and the chat composer's. Clicking
 /// one shows it large in a modal; closing that leaves it staged.
 struct StagedThumbnails: View {
-    /// A staged screenshot's thumbnail is this square.
     static let side: CGFloat = 44
     var staging: AttachmentStaging
     @Environment(\.openScreenshotPreview) private var openPreview

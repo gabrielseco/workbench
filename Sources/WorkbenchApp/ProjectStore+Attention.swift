@@ -2,7 +2,6 @@ import Foundation
 import WorkbenchCore
 
 extension ProjectStore {
-    /// The thread's own attention, as the screen shows it, for the attention centre.
     private var threadAttention: ThreadAttention? {
         guard case .thread(let shown) = screen else { return nil }
         // With a pull request open its CI arrives a moment after the thread: until it does, a CI failure cannot be told from none.
@@ -40,7 +39,6 @@ extension ProjectStore {
         }
     }
 
-    /// Where a click on a notification (or an `Open` in the popover) goes. The window is brought forward by the caller.
     /// What `Open` and `Send back…` in the popover do before the window is brought forward: show the place, and for a send back open
     /// the guidance field (the popover itself decides nothing).
     func openFromPopover(_ route: AttentionRoute, sendBack: Bool) {

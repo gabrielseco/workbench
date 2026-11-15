@@ -65,7 +65,6 @@ struct TaskFiles {
     }
 }
 
-/// One input file, as it goes into the prompt.
 public struct TaskInput: Sendable, Equatable {
     /// Path from the project root.
     public var path: String

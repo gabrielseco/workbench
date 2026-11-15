@@ -12,7 +12,6 @@ enum DoctorChip: Equatable {
     case problem(String)
 }
 
-/// A project the app has opened, as the project menu lists it.
 struct RecentProject: Equatable, Identifiable {
     var path: String
     var name: String
@@ -33,7 +32,6 @@ struct RecentProject: Equatable, Identifiable {
     private(set) var project: Project? { didSet { rebindSession() } }
     /// The thread screens or the tasks: the rail's switch. The tasks are the project's, so the thread on screen is not changed by it.
     var mode: WindowMode = .thread
-    /// The Tasks screen's data, read from the core while that screen is shown.
     let tasks = TasksModel()
     /// What the inbox keeps for the session: which Done sections are open, where rows are drawn while they settle.
     let inboxRail = InboxRailState()
@@ -78,7 +76,6 @@ struct RecentProject: Equatable, Identifiable {
     var newThread = false
     /// What is typed on it: kept while another row is looked at, cleared when a thread is made.
     var newThreadText = ""
-    /// The project card under the project pill is up.
     var pickingProject = false
     /// The project whose Agents card is up, by path: any project of the rail, not only the open one (`showAgents(for:)`).
     var agentsProject: String?
@@ -308,7 +305,6 @@ struct RecentProject: Equatable, Identifiable {
         }
     }
 
-    /// The window is no longer waiting for a run to show up.
     private func endRunStart(_ session: ThreadSession) {
         guard session.awaitingRun else { return }
         session.awaitingAfterTurn = nil

@@ -54,11 +54,9 @@ import WorkbenchCore
     @ObservationIgnored let chatStaging = AttachmentStaging()
     /// A chat turn is going in this thread (or, under a key with no thread, in a chat the log does not show yet).
     var replying = false
-    /// What ends the chat turn this session holds.
     @ObservationIgnored var chatStop: DraftStop?
     /// A decision (accept, ship, merge, discard) is being recorded in this thread.
     var deciding = false
-    /// An approval is going through.
     var starting = false
     /// A turn the user is stopping: set from Stop until the log says it ended.
     var stopping = false

@@ -73,7 +73,6 @@ public protocol AgentRecorder: Sendable {
 
 /// Reads one child's stdout. Created per execution, so it may keep state.
 public protocol AgentDecoder: Sendable {
-    /// One complete line. Returns the activity it carries, possibly none.
     mutating func consume(line: String) -> [AgentActivity]
     /// A line over the size limit was dropped after its first bytes. Required: whether losing it makes the answer
     /// unusable (a lost result record) or harmless (a long assistant message) is the provider's call, and a

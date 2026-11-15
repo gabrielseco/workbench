@@ -35,7 +35,6 @@ public struct BranchCommit: Sendable, Equatable {
 public struct BranchAhead: Sendable, Equatable {
     public typealias Commit = BranchCommit
 
-    /// The commit the `accepted` decision recorded.
     public var accepted: String
     public var head: String
     /// How many commits `accepted..head` holds; `commits` lists at most ten of them.

@@ -11,7 +11,6 @@ public enum ClaudeSession {
     /// A single line larger than this is skipped (a pasted file or a huge tool result), not parsed.
     static let lineLimit = 16 << 20
 
-    /// One message of the conversation, in order.
     public struct Message: Equatable, Sendable {
         public enum Role: Sendable { case person, assistant }
         public var role: Role
@@ -28,7 +27,6 @@ public enum ClaudeSession {
         public var source: String
     }
 
-    /// The session found, rendered and bounded.
     public struct Rendered: Equatable, Sendable {
         public var id: String
         public var file: URL
@@ -201,7 +199,6 @@ public enum ClaudeSession {
         return (parts.joined(separator: "\n\n"), from)
     }
 
-    /// The session picked, read and bounded.
     public static func load(id: String?, project root: URL, places: [Place]) throws -> Rendered {
         let picked = try pick(id: id, project: root, places: places)
         let data: Data

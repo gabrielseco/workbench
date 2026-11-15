@@ -42,7 +42,6 @@ enum ProjectLock {
     static func release(_ fd: Int32) { close(fd) }
 }
 
-/// How one declared command did when doctor ran it.
 public struct DoctorStep: Sendable, Equatable {
     public enum Outcome: Sendable, Equatable {
         case passed
@@ -75,7 +74,6 @@ public struct DoctorVerifier: Sendable, Equatable {
     public var screenRecording: String?
 }
 
-/// What one responsibility resolves to, as `doctor` shows it.
 public struct DoctorAgent: Sendable, Equatable {
     public var role: AgentRole
     /// Nil only for goal drafting with no `[agents.goal]`: it stays manual.
@@ -116,7 +114,9 @@ public struct DoctorReport: Sendable, Equatable {
     public var setup: DoctorStep
     public var check: DoctorStep
     public var appType: AppType = .web
+    /// Nil when the config has no `[verifier]`.
     public var verifier: DoctorVerifier?
+    /// Nil when the config has no `[run]`.
     public var run: DoctorRun?
     /// What is odd about the review stages (`review.stages`, `[review.stage.<name>]`). Warnings: they never fail doctor.
     public var reviewWarnings: [String] = []

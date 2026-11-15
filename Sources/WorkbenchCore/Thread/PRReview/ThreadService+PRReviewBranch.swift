@@ -1,7 +1,6 @@
 import Foundation
 
 extension ThreadService {
-    /// The commit `origin` has for a branch.
     func originBranchTip(_ branch: String) async throws -> String {
         let result: GitResult
         do { result = try await git.run(["ls-remote", "origin", "refs/heads/\(branch)"], in: project.root) } catch {

@@ -54,7 +54,6 @@ struct FeedActionContext {
     var grantsInFlight = false
     /// "Fix failed checks" is going (`CIFixProgress.active`): it is not offered a second time.
     var ciFixing = false
-    /// What the judge and the review stages say is wrong with the work in review.
     var findings = OpenFindings()
 }
 
@@ -261,7 +260,6 @@ enum FeedActions {
         return true
     }
 
-    /// What the merge waits for, in words.
     private static func waiting(_ s: ThreadSnapshot) -> String {
         s.ci?.mergeBlocker ?? "CI is not known."
     }

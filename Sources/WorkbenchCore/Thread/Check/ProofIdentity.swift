@@ -71,7 +71,6 @@ extension ProofIdentity {
     }
 }
 
-/// Whether a proof still describes the work.
 public enum ProofFreshness: String, Sendable, Equatable {
     case current
     /// The work changed after the proof was taken.

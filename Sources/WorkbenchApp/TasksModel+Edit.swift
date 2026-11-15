@@ -16,7 +16,6 @@ struct TaskEditing: Equatable {
 }
 
 extension TasksModel {
-    /// The edit shown for this task of this project, if one is.
     func editing(_ name: String, in project: Project?) -> TaskEditing? {
         guard let editing, editing.task == name, editing.project == project?.root.path else { return nil }
         return editing

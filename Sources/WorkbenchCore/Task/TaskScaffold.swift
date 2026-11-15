@@ -24,7 +24,6 @@ public enum TaskScaffoldError: Error, Equatable, Sendable, CustomStringConvertib
     }
 }
 
-/// What `task new` made.
 public struct TaskScaffoldResult: Sendable, Equatable {
     public var directory: URL
     /// Paths named for `include` or `inputs` that do not exist yet: approving the task refuses them until they do.

@@ -45,7 +45,6 @@ extension TasksModel {
         return creating
     }
 
-    /// Whether the New task screen is what the main area shows now.
     func isNewShown(in project: Project?) -> Bool { newShown && draft(in: project) != nil }
 
     /// Closes the screen. The words are dropped with it; Discard, on a proposal, keeps them.

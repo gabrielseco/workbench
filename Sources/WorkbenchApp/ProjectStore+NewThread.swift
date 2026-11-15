@@ -3,7 +3,6 @@ import WorkbenchCore
 
 /// The new-thread screen's side of the store (design parity 6): how it opens and closes, and what its three buttons do.
 extension ProjectStore {
-    /// Every "new goal" button opens the new-thread screen.
     func beginNewGoal() { openNewThread() }
 
     func openNewThread() {

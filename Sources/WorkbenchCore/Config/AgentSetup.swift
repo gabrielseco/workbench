@@ -8,7 +8,6 @@ public struct AgentSetup: Sendable, Equatable {
         case goal, plan, run, judge, review, ship, verifier
         public var id: String { rawValue }
 
-        /// What the role does, in a few words.
         public var summary: String {
             switch self {
             case .goal: "Chat, and drafting a goal"

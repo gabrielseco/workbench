@@ -2,7 +2,6 @@ import Foundation
 
 /// Where a thread stands for the person deciding about it.
 public enum ReviewStatus: Sendable, Equatable {
-    /// No turn has started.
     case empty
     /// A turn or its check is open.
     case running
@@ -89,9 +88,11 @@ public struct Review: Sendable, Equatable {
     public var check: Check?
     /// The latest verifier run, nil when none has run or been skipped. Advisory.
     public var verifier: Verifier?
+    /// The latest judge run, nil when none has run. Advisory.
     public var judge: Judge?
     public var notes: [Note]
     public var deniedTools: [DeniedTool]
+    /// The latest pull request review round, nil when none has run.
     public var prReview: PRReview?
     /// The review stages (not the pull request review) that have started and not finished, in start order: what an auto run is
     /// doing after the judge. Empty when none is open.
@@ -153,7 +154,6 @@ public struct PlanRecord: Sendable, Equatable {
 public struct ThreadLineage: Sendable, Equatable {
     /// The thread this one follows (itself a follow-up from the second round on).
     public var parent: String
-    /// The thread that opened the pull request.
     public var root: String
     /// 1 for the first follow-up of the root, 2 for the next.
     public var round: Int
@@ -235,6 +235,7 @@ public struct ThreadState: Sendable, Equatable {
     public var chat: ChatState?
     /// A thread made by `workbench chat`: it has no goal until one is made from it, and no worktree.
     public var isChat = false
+    /// Nil when no turn has ended.
     public var lastTurnEndedSeq: Int?
     /// What the latest ended turn cost; nil when it reported none (never 0).
     public var lastTurnCostUSD: Double?

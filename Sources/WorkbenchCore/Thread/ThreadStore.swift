@@ -49,7 +49,6 @@ public struct ThreadStore: Sendable {
         state(from: (try? EventLogReader.read(at: project.eventsURL(id)))?.events ?? [], id: id)
     }
 
-    /// The state for events already replayed.
     public func state(from events: [Event], id: String) -> ThreadState {
         ThreadState.derive(from: events, id: id)
     }
@@ -125,7 +124,7 @@ public struct ThreadStore: Sendable {
         return index
     }
 
-    /// Every thread's summary, in id order.
+    /// In id order.
     public func summaries() -> [Summary] { threadIDs().map { summary(of: $0) } }
 
     /// The thread that opened the pull request this thread belongs to: itself, unless it is a review follow-up.
@@ -172,8 +171,7 @@ public struct ThreadStore: Sendable {
         return (pid, true)
     }
 
-    /// The one thread that has not ended, if any. If a copied or hand-edited directory makes it
-    /// ambiguous, the newest wins; `create` refuses to make a second, so this should be one.
+    /// The threads that have not ended, newest first. `create` caps them at `max_active_threads`.
     public func activeThreadIDs() -> [String] {
         summaries()
             .filter(\.isActive)

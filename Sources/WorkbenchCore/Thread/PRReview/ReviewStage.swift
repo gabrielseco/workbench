@@ -4,7 +4,6 @@ import Foundation
 /// (docs/plan/P6-review-stages.md). The runner in `ThreadService+PRReview.swift` runs a stage; `pr-review` is the
 /// first instance and keeps its `pr_review.*` events, every other stage is recorded as `review_stage.*`.
 public struct ReviewStage: Sendable, Equatable {
-    /// The events one round is recorded with.
     struct Events: Sendable, Equatable {
         var started: EventKind
         var finished: EventKind
@@ -50,7 +49,6 @@ public struct ReviewStage: Sendable, Equatable {
         return ReviewStage(name: name, config: stage, events: .stage(name))
     }
 
-    /// The brief for one round.
     func brief(for input: PRReviewInput) -> String { PRReview.prompt(for: input) }
 
     static let skillHeader =

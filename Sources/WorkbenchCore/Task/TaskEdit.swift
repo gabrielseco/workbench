@@ -9,7 +9,6 @@ public struct TaskSettingChange: Sendable, Equatable {
     public init(key: String, old: String?, new: String?) { (self.key, self.old, self.new) = (key, old, new) }
 }
 
-/// One line of the instructions in a diff.
 public struct TaskDiffLine: Sendable, Equatable {
     public enum Kind: Sendable, Equatable { case same, added, removed }
     public var kind: Kind

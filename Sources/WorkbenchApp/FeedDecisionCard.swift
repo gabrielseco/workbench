@@ -11,10 +11,10 @@ struct DecisionCard: View {
     /// `branch → base`, for the ready-to-ship bar's line.
     var route: String?
 
-    /// The artboard's foot when the next press is Ship: the work is accepted and the person either ships it or asks for more.
     /// What the ship bar's `…` keeps: every other action of the decision, so Open worktree and New goal do not vanish.
     static func shipMenu(_ decision: FeedDecision) -> [FeedAction] { decision.more }
 
+    /// The artboard's foot when the next press is Ship: the work is accepted and the person either ships it or asks for more.
     static func isReadyToShip(_ decision: FeedDecision) -> Bool { decision.primary?.kind == .ship }
 
     /// The decision's own line when it has one, else the spine's without the step name it repeats under the heading.

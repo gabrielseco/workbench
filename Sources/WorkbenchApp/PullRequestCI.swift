@@ -8,7 +8,6 @@ enum PullRequestCI: Equatable {
     case known(PRStatus)
     case unavailable(String)
 
-    /// One check as a row shows it.
     struct Row: Equatable, Hashable {
         enum Kind: Equatable, Hashable { case passed, skipped, running, failed }
         var name: String

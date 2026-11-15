@@ -15,7 +15,6 @@ protocol Preferences: AnyObject, Sendable {
     /// The identities already announced, per project, so a reason that went away and came back (a CI failure on the same commit) is not
     /// announced twice, and not again after a relaunch. The latest 200.
     var announcedAttention: [String] { get set }
-    /// The chat feed (P22) in place of the step screens inside a thread, while it is a preview. Off unless a person turns it on.
     /// The feed's Run settings inspector is shown (P22). On until a person turns it off: the artboard shows it open beside a draft goal.
     var runSettings: Bool { get set }
     /// A person has opened or closed it, so a window too narrow to hold it beside the feed may open it over the feed; until then the default
