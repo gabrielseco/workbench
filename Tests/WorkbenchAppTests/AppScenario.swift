@@ -7,7 +7,7 @@ import WorkbenchCore
 /// `.workbench/`, which `.gitignore` ignores). This is the one place that writes them, so a change to the log format is a change here,
 /// and `FixtureScenarioTests` fails when a committed file differs from what this writes. To rewrite them:
 ///   WORKBENCH_WRITE_FIXTURES=Fixtures/app swift test --filter FixtureScenarioTests/writeTheScenarios
-enum AppScenario: String, CaseIterable {
+enum AppScenario: String, CaseIterable {  // swiftlint:disable:this type_body_length
     case draft
     case goalWarning = "goal-warning"
     case goalApproved = "goal-approved"
@@ -22,7 +22,7 @@ enum AppScenario: String, CaseIterable {
     case cleaned
     case discarded
     case reviewChanges = "review-changes"
-    case reviewBaseMoved = "review-base-moved"
+    case reviewBaseMoved = "review-base-moved", reviewFindings = "review-findings"
     case verifyShots = "verify-shots", designStage = "design-stage", designStageRunning = "design-stage-running"
     case corrupt
     case noThread = "no-thread"
@@ -54,7 +54,7 @@ enum AppScenario: String, CaseIterable {
             // Shows the screen's "Also reads" line: the folder is only named on screen, nothing opens it.
             "read_also = [\"../expenses-backend\"]\n\n"
                 + "[tools]\navailable = [\"Read\", \"Bash\"]\nallowed = [\"Read\", \"Bash(swift test:*)\"]\n"
-        case .reviewChanges, .reviewBaseMoved:
+        case .reviewChanges, .reviewBaseMoved, .reviewFindings:
             // An editor that only writes down what it was asked to open; verify-app.sh puts its path in.
             // A config that does not load is ignored and the person's own global editor is used: it needs [tools].
             "editor = \"@EDITOR_STUB@\"\n\n[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n"
@@ -124,7 +124,7 @@ enum AppScenario: String, CaseIterable {
             try fixture.activity(id, ["type": "tool", "name": "Read", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "tool", "name": "Edit", "summary": "Sources/Invoices/List.swift"])
             try fixture.activity(id, ["type": "permission_denied", "tool": "Bash", "input": "git push origin main"])
-        case .needsYou, .reviewChanges, .reviewBaseMoved, .projectRail:
+        case .needsYou, .reviewChanges, .reviewBaseMoved, .reviewFindings, .projectRail:
             try await fixture.addThread(id, approved: true, title: Self.title)
             if hasWorktree {
                 // verify-app.sh start fills in the base commit and the worktree it makes.
@@ -144,6 +144,7 @@ enum AppScenario: String, CaseIterable {
             try fixture.append(id, .checkStarted, turn: 1)
             try fixture.append(
                 id, .checkRan, turn: 1, data: ["result": "passed", "tests_passed": ["a", "b", "c"], "tests_failed": []])
+            try writeFindings(in: fixture, id: id)
         case .verifyShots, .designStage, .designStageRunning:
             try await writeVerifyShots(in: fixture, id: id)
         case .accepted:
@@ -476,6 +477,29 @@ extension AppScenario {
 }
 
 extension AppScenario {
+    /// A judge that found one criterion unmet and one concern, and a design review with findings: what the decision card lists.
+    @MainActor fileprivate func writeFindings(in fixture: AppFixture, id: String) throws {
+        guard self == .reviewFindings else { return }
+        let verdict: JSONValue = [
+            "ok": true,
+            "criteria": [
+                ["id": "c1", "met": true, "evidence": ["The list shows 20 rows a page"]],
+                ["id": "c2", "met": false, "evidence": ["No test covers the last, shorter page"]],
+            ],
+            "concerns": ["The page size is hard-coded in two places"],
+        ]
+        try fixture.append(id, .judgeRan, turn: 1, data: verdict)
+        let folder = fixture.project.threadDirectory(id).appendingPathComponent("design")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try "- The page buttons sit 6 pt below the row baseline\n- The empty page has no message".write(
+            to: folder.appendingPathComponent("round-1.findings.md"), atomically: true, encoding: .utf8)
+        let found: JSONValue = [
+            "stage": "design", "round": 1, "verdict": "fix", "ok": true, "head_sha": "abc1234",
+            "findings_path": "design/round-1.findings.md",
+        ]
+        try fixture.append(id, .reviewStageFinished, turn: 1, data: found)
+    }
+
     /// After `verify-shots`, the project's `design` stage: it read the verifier's three screenshots and found something to fix. With
     /// `running`, a second round has started and not finished, which is what the feed says while an auto run is still on it.
     @MainActor fileprivate func writeDesignStage(in fixture: AppFixture, id: String, running: Bool) throws {

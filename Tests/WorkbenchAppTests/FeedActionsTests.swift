@@ -44,6 +44,10 @@ import Testing
         #expect(decision.primary?.kind == .fixFindings && decision.primary?.enabled == true)
         #expect(decision.secondary?.kind == .acceptAndShip, "a person who read them can still go on")
         #expect(decision.why == "Judge: 1 criterion not met" && decision.takesGuidance)
+        let typing = decide(shown) {
+            $0.reviewShown = true; $0.reviewCanDecide = true; $0.findings = findings; $0.guidance = "also dark mode"
+        }
+        #expect(typing.primary?.kind == .fixFindings, "typed guidance goes after the findings, never instead of them")
         let clean = decide(shown) { $0.reviewShown = true; $0.reviewCanDecide = true }
         #expect(clean.primary?.kind == .acceptAndShip, "nothing found: Ship is the press, as before")
     }

@@ -129,7 +129,8 @@ enum FeedActions {
             more.append(FeedAction(kind: .refreshReview, title: "Refresh", help: "Reads the worktree again after editing it"))
             // Open findings make the fix the primary press, so the work does not go through on a path that never showed them;
             // Ship stays beside it for a person who read them and decided to go on.
-            if !writing, !c.findings.isEmpty {
+            // Typing guidance does not drop them: Fix findings sends what is typed after them.
+            if !c.findings.isEmpty {
                 more.insert(diff, at: 0)
                 let fix = FeedAction(
                     kind: .fixFindings, title: "Fix findings",

@@ -34,7 +34,7 @@ public struct OpenFindings: Sendable, Equatable {
         }
         var seen = Set<String>()
         for item in items where item.source != Self.judgeSource && seen.insert(item.source).inserted {
-            parts.append("\(item.source): findings to fix")
+            parts.append("\(Self.capitalized(item.source)): findings to fix")
         }
         return parts.joined(separator: " · ")
     }
@@ -58,6 +58,8 @@ public struct OpenFindings: Sendable, Equatable {
         }
         return out
     }
+
+    private static func capitalized(_ name: String) -> String { name.prefix(1).uppercased() + name.dropFirst() }
 
     public static let judgeSource = "Judge"
 
@@ -92,7 +94,7 @@ public struct OpenFindings: Sendable, Equatable {
             else { continue }
             items.append(
                 Item(
-                    id: "stage:\(name)", source: name, title: "\(name) review: findings to fix",
+                    id: "stage:\(name)", source: name, title: "\(Self.capitalized(name)) review: findings to fix",
                     detail: findings(at: event.data["findings_path"]?.stringValue, in: threadDirectory)))
         }
         return OpenFindings(items: items)
@@ -101,7 +103,16 @@ public struct OpenFindings: Sendable, Equatable {
     /// The stage's findings file, whose path the log records relative to the thread; nothing when it is gone or leaves the thread.
     private static func findings(at path: String?, in directory: URL?) -> String? {
         guard let path, let directory, !path.hasPrefix("/"), !path.split(separator: "/").contains("..") else { return nil }
-        guard let data = try? Data(contentsOf: directory.appendingPathComponent(path)) else { return nil }
+        // A link in the file or any folder above it can point out of the thread: the real path must stay inside the real folder.
+        let root = directory.resolvingSymlinksInPath().path
+        let file = directory.appendingPathComponent(path).resolvingSymlinksInPath()
+        guard file.path.hasPrefix(root + "/"),
+            (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+            let handle = try? FileHandle(forReadingFrom: file)
+        else { return nil }
+        defer { try? handle.close() }
+        // One byte past the limit says whether it was cut; the rest of a large file is never read.
+        let data = (try? handle.read(upToCount: stageTextLimit + 1)) ?? Data()
         let text = String(decoding: data.prefix(stageTextLimit), as: UTF8.self)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed + (data.count > stageTextLimit ? "\n…(cut)" : "")

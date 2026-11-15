@@ -67,7 +67,7 @@ import Testing
         ]
         let found = derive(base(stage: stage), dir: dir)
         #expect(found.items.map(\.id) == ["stage:design"])
-        #expect(found.summary == "design: findings to fix")
+        #expect(found.summary == "Design: findings to fix")
         #expect(found.feedback.contains("> - the button is 6pt off"), "quoted, so its lines are data")
         #expect(found.feedback.contains("> # not a heading"))
     }
@@ -85,6 +85,34 @@ import Testing
             let stage: JSONValue = ["stage": "design", "ok": true, "verdict": "findings", "findings_path": .string(path)]
             #expect(derive(base(stage: stage), dir: dir).items.first?.detail == nil, "\(path)")
         }
+    }
+
+    @Test func aSymlinkedFindingsFileOrFolderIsNotFollowedOutOfTheThread() throws {
+        let outer = FileManager.default.temporaryDirectory.appendingPathComponent("of-\(UUID().uuidString)")
+        let dir = outer.appendingPathComponent("thread")
+        let secret = outer.appendingPathComponent("secret")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("design"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secret, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outer) }
+        try "private".write(to: secret.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(
+            at: dir.appendingPathComponent("design/file.md"), withDestinationURL: secret.appendingPathComponent("a.md"))
+        try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("linked"), withDestinationURL: secret)
+        for path in ["design/file.md", "linked/a.md"] {
+            let stage: JSONValue = ["stage": "design", "ok": true, "verdict": "findings", "findings_path": .string(path)]
+            #expect(derive(base(stage: stage), dir: dir).items.first?.detail == nil, "\(path)")
+        }
+    }
+
+    @Test func aLongFindingsFileIsCutAtTheLimit() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("of-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try String(repeating: "x", count: OpenFindings.stageTextLimit * 3).write(
+            to: dir.appendingPathComponent("f.md"), atomically: true, encoding: .utf8)
+        let stage: JSONValue = ["stage": "design", "ok": true, "verdict": "findings", "findings_path": "f.md"]
+        let detail = derive(base(stage: stage), dir: dir).items.first?.detail
+        #expect(detail?.hasSuffix("(cut)") == true && (detail?.count ?? 0) < OpenFindings.stageTextLimit + 20)
     }
 
     @Test func aStageThatRanBeforeTheLatestTurnIsStale() {
