@@ -365,6 +365,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # skill = ".claude/skills/verify/SKILL.md"  # the default; an explicit repo path, read from the base commit
 # tools = ["Read", "Bash(scripts/verify-app.sh:*)"]  # what the verifier may use; default ["Read"]; no bare Bash; with permissions = "auto" Bash is available and the classifier decides
 # provider = "claude"                   # "claude" (unset is claude) or "codex"; codex takes no tools or budget_usd
+# sandbox = "workspace"                 # codex only: "workspace" (default) or "full" (no sandbox, for a verifier that builds and photographs the app)
 # model = "sonnet"                      # --model (codex: -m) for the verifier; unset = the CLI default
 # enabled = false                       # the verifier is on by default; this turns it off
 # budget_usd = 1.00                     # default 1.00
@@ -495,7 +496,14 @@ Notes:
   (`-C`) is the worktree: Codex has no per-command allowlist, so the skill's helpers (a build under the checkout's `.build`)
   run inside its sandbox and need to write there, as a coding turn's commands do (`.git` stays read-only). Besides the
   worktree it may write only the turn's proof folder and a temporary folder of its own; it has no network, ignores the user's Codex config and rules, approves nothing, writes
-  its last message to a file outside the proof folder (`-o`), and reports no cost. A missing `codex` is refused by
+  its last message to a file outside the proof folder (`-o`), and reports no cost. That sandbox cannot build the app or
+  photograph it (the build's caches are outside the worktree, and macOS lets a sandboxed process neither capture the screen
+  nor drive the app), so a project whose verifier does that sets `sandbox = "full"`: the Codex verifier then runs with
+  `-s danger-full-access`, with no network or write limit, the same trust a Claude verifier with `Bash` has. `sandbox`
+  is for the verifier only and only with `provider = "codex"` (beside Claude, or with no provider, it is refused as a
+  conflict); no other Codex run takes it. A Codex verifier that leaves no `<name>.png` for a `screenshot:` proof the goal
+  names ends `ok = false` with the missing names as its reason (its report is kept), so a run that could not look at the
+  screen is not shown as verified. A missing `codex` is refused by
   `workbench verifier` and skipped, with the reason, after a turn: Claude never stands in. The skill is read from the thread's base commit, never the
   worktree, as a regular file: a symlink, or a path through one (this repository's `.claude/skills/<name>` points
   into `.agents/`), is refused with the real path to use; missing and empty are refused with the path; text over

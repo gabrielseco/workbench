@@ -123,6 +123,16 @@ struct VerifierRun {
             }
         }
         let after = Self.snapshot(proofDirectory, threadDirectory)
+        // A Codex verifier that could not drive the app (its sandbox, a missing permission) still ends its run and writes a
+        // report, so a screenshot the goal asks for that is not there means nothing on screen was checked: not a pass.
+        if provider == .codex, answer.failure == nil {
+            let missing = Verifier.missingScreenshots(goal: goal, present: Set(after.map(\.name)))
+            if !missing.isEmpty {
+                let more = missing.count > 5 ? ", and \(missing.count - 5) more" : ""
+                let shown = missing.prefix(5).joined(separator: ", ") + more
+                answer.failure = "codex left no screenshot the goal asks for (\(shown)), so nothing on screen was checked"
+            }
+        }
         let changed = after.filter { file in before.first { $0.name == file.name }?.sha256 != file.sha256 }
             .prefix(Verifier.maxFiles)
         let files = changed.map { VerifierFile(name: $0.name, bytes: $0.bytes, sha256: $0.sha256) }

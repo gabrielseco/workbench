@@ -171,4 +171,74 @@ private func problems(_ verifier: String, root: String = "") -> [ConfigProblem] 
         let args = try argv("")
         #expect(!args.contains("--permission-mode") && !args.contains("Bash"))
     }
+
+    // MARK: sandbox (a Codex verifier only)
+
+    @Test func sandboxDefaultsToTheWorkspaceAndIsOnlyForCodex() throws {
+        #expect(try parse("[verifier]\nprovider = \"codex\"").verifier?.sandbox == .workspace)
+        #expect(try parse("[verifier]\nprovider = \"codex\"\nsandbox = \"full\"").verifier?.sandbox == .full)
+        #expect(try parse("[verifier]\nprovider = \"codex\"\nsandbox = \"workspace\"").verifier?.sandbox == .workspace)
+        // Claude's verifier is confined by its tool list, so the key is refused beside it, and when no provider is named.
+        #expect(problems("[verifier]\nprovider = \"claude\"\nsandbox = \"full\"").map(\.code) == [.conflict])
+        #expect(problems("[verifier]\nsandbox = \"full\"").map(\.code) == [.conflict])
+        #expect(problems("[verifier]\nprovider = \"codex\"\nsandbox = \"none\"").map(\.code) == [.invalidValue])
+        #expect(problems("[verifier]\nprovider = \"codex\"\nsandbox = true").map(\.code) == [.wrongType])
+    }
+
+    private func codexArgv(_ verifier: VerifierConfig) -> [String] {
+        Verifier.codexArguments(
+            verifier: verifier, prompt: "p", worktree: URL(fileURLWithPath: "/wt"),
+            proofDirectory: URL(fileURLWithPath: "/proof"), scratch: URL(fileURLWithPath: "/scratch"),
+            answerFile: URL(fileURLWithPath: "/answer"))
+    }
+
+    @Test func aFullSandboxVerifierRunsWithoutOneAndAnyOtherKeepsTheWorkspace() {
+        func value(_ args: [String], after flag: String) -> String? { args.firstIndex(of: flag).map { args[$0 + 1] } }
+        let tight = codexArgv(VerifierConfig(provider: .codex))
+        #expect(value(tight, after: "-s") == "workspace-write")
+        #expect(tight.contains { $0.hasPrefix("sandbox_workspace_write.writable_roots=") })
+        #expect(tight.contains("sandbox_workspace_write.network_access=false"))
+
+        let full = codexArgv(VerifierConfig(provider: .codex, sandbox: .full))
+        #expect(value(full, after: "-s") == "danger-full-access")
+        #expect(!full.contains { $0.hasPrefix("sandbox_workspace_write.") })
+        // What the project's and the user's Codex setup could add is still left out, and nothing asks for approval.
+        #expect(full.contains("--ignore-user-config") && full.contains("--ignore-rules"))
+        #expect(full.contains("approval_policy=\"never\""))
+        #expect(value(full, after: "-C") == "/wt" && value(full, after: "-o") == "/answer" && full.last == "p")
+    }
+
+    @Test func screenshotsTheGoalNamesThatAreNotInTheProofAreReportedMissing() throws {
+        let goal = try GoalFile.parse(
+            """
+            ---
+            id: g-1
+            title: T
+            base: main
+            budget_usd: 1
+            turn_timeout_min: 5
+            ---
+
+            ## Request
+
+            Do it.
+
+            ## Criteria
+
+            - [c1] a
+              - proof: screenshot: one, two
+            - [c2] b
+              - proof: screenshot: two
+            - [c3] c
+              - proof: `scripts/check-changed.sh`
+
+            ## Out of scope
+
+            - none
+            """
+        ).goal
+        #expect(Verifier.missingScreenshots(goal: goal, present: []) == ["one.png", "two.png"])
+        #expect(Verifier.missingScreenshots(goal: goal, present: ["one.png"]) == ["two.png"])
+        #expect(Verifier.missingScreenshots(goal: goal, present: ["one.png", "two.png", "other.png"]).isEmpty)
+    }
 }

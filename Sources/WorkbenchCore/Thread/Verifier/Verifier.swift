@@ -80,18 +80,28 @@ public enum Verifier {
     /// dollar cap: `timeout_min` bounds it, which is why the config refuses `budget_usd` and `tools` beside
     /// `provider = "codex"`. Its last message is written to `answerFile`, outside the proof directory so it is never
     /// taken for proof.
+    ///
+    /// With `[verifier] sandbox = "full"` there is no sandbox at all (`danger-full-access`): a verifier that builds the app and
+    /// photographs it cannot work inside one, since the build's caches live outside the worktree and macOS does not let a
+    /// sandboxed process capture the screen. That is the project's choice for the verifier alone; every other Codex run keeps
+    /// its own sandbox.
     public static func codexArguments(
         verifier: VerifierConfig, prompt: String, worktree: URL, proofDirectory: URL, scratch: URL, answerFile: URL
     ) -> [String] {
         var args = ["exec", "--json", "--color", "never", "--skip-git-repo-check", "--ephemeral"]
         if let model = verifier.model { args += ["-m", model] }
         args += ["--ignore-user-config", "--ignore-rules", "-c", "approval_policy=\"never\""]
-        args += ["-c", "sandbox_workspace_write.network_access=false"]
-        args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
-        args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
-        let roots = [proofDirectory, scratch].map { CodexProvider.tomlString($0.path) }.joined(separator: ", ")
-        args += ["-c", "sandbox_workspace_write.writable_roots=[\(roots)]"]
-        args += ["-s", "workspace-write", "-C", worktree.path, "-o", answerFile.path, "--", prompt]
+        if verifier.sandbox == .full {
+            args += ["-s", "danger-full-access"]
+        } else {
+            args += ["-c", "sandbox_workspace_write.network_access=false"]
+            args += ["-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
+            args += ["-c", "sandbox_workspace_write.exclude_slash_tmp=true"]
+            let roots = [proofDirectory, scratch].map { CodexProvider.tomlString($0.path) }.joined(separator: ", ")
+            args += ["-c", "sandbox_workspace_write.writable_roots=[\(roots)]"]
+            args += ["-s", "workspace-write"]
+        }
+        args += ["-C", worktree.path, "-o", answerFile.path, "--", prompt]
         return args
     }
 
@@ -254,6 +264,19 @@ public enum Verifier {
         let cut = window.lastIndex(of: UInt8(ascii: "\n")) ?? window.count
         let kept = String(decoding: window[..<cut], as: UTF8.self)
         return kept.isEmpty ? marker : kept + "\n" + marker
+    }
+
+    /// The screenshots the goal's criteria name that are not in the proof directory, as `<name>.png`, in the order the goal
+    /// lists them. Empty when none is missing, and for a goal with no `screenshot:` proof (a quick goal asks for none by name).
+    static func missingScreenshots(goal: Goal, present: Set<String>) -> [String] {
+        var missing: [String] = []
+        for criterion in goal.criteria {
+            for name in ScreenshotProof.names(in: criterion.proof) ?? [] {
+                let file = ScreenshotProof.fileName(for: name)
+                if !present.contains(file), !missing.contains(file) { missing.append(file) }
+            }
+        }
+        return missing
     }
 
     /// Why a Codex verifier left no answer: its answer file, bounded, or the failure. Codex reports tokens, not dollars, so

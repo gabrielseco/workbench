@@ -214,4 +214,25 @@ private struct SelectionFixture {
         }
         #expect(try s.verifierEvents(id).map(\.kind) == [.verifierSkipped], "nothing started on another provider")
     }
+
+    /// A Codex verifier that left no screenshot the goal names has checked nothing on screen, whatever its report says.
+    @Test func aCodexVerifierWithoutTheScreenshotsTheGoalNamesDoesNotPass() async throws {
+        let s = try await SelectionFixture(verifier: "provider = \"codex\"\n")
+        let id = try await s.fx.approvedThread()
+        _ = try await s.fx.runner(id).run(s.fx.options("write=a.txt"))
+        // The goal asks for `header.png`; the stand-in leaves `selection.png` only.
+        let goalURL = s.fx.project.goalURL(id)
+        let goal = try String(contentsOf: goalURL, encoding: .utf8)
+        let criterion = "## Criteria\n\n- [c9] the header\n  - proof: screenshot: header\n"
+        let named = goal.replacingOccurrences(of: "## Criteria", with: criterion)
+        try named.write(to: goalURL, atomically: true, encoding: .utf8)
+        let config = try Config.load(from: s.fx.project.configURL)
+        let report = try await s.fx.service.verifier(
+            id: id, config: config, again: true, environment: s.fx.options().parentEnvironment, timeout: 20, killGrace: 2)
+        #expect(!report.ok)
+        #expect(report.reason?.contains("header.png") == true, "\(String(describing: report.reason))")
+        #expect(report.report == "c1 holds: the header is blue", "the report is kept for the person")
+        let ended = try #require(try s.verifierEvents(id).last { $0.kind == .verifierEnded })
+        #expect(ended.data["ok"] == false)
+    }
 }

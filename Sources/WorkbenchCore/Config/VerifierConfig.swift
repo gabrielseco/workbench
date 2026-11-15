@@ -20,11 +20,23 @@ public struct VerifierConfig: Sendable, Equatable {
     public var provider: AgentProviderID?
     public var budgetUSD: Decimal
     public var timeoutMin: Int
+    /// How much of the machine a Codex verifier may touch (`sandbox`). Only Codex has the setting: Claude's verifier is confined by
+    /// its tool list, so the key is refused beside any other provider.
+    public var sandbox: Sandbox
+
+    public enum Sandbox: String, Sendable, Equatable, CaseIterable {
+        /// The worktree, the proof folder and the verifier's own temporary folder, no network: the default, enough for a
+        /// verifier that reads and runs tests.
+        case workspace
+        /// No sandbox. What a verifier that builds the app and takes screenshots needs: the build writes caches outside
+        /// the worktree and macOS lets a sandboxed process neither capture the screen nor drive the app.
+        case full
+    }
 
     public init(
         skill: String = VerifierConfig.defaultSkill, tools: [String] = VerifierConfig.defaultTools, model: String? = nil,
         budgetUSD: Decimal = VerifierConfig.defaultBudgetUSD, timeoutMin: Int = VerifierConfig.defaultTimeoutMin,
-        provider: AgentProviderID? = nil
+        provider: AgentProviderID? = nil, sandbox: Sandbox = .workspace
     ) {
         self.skill = skill
         self.tools = tools
@@ -32,6 +44,7 @@ public struct VerifierConfig: Sendable, Equatable {
         self.provider = provider
         self.budgetUSD = budgetUSD
         self.timeoutMin = timeoutMin
+        self.sandbox = sandbox
     }
 
     /// The provider that runs: the configured one, else Claude, as before `provider` existed.
@@ -41,7 +54,7 @@ public struct VerifierConfig: Sendable, Equatable {
     public static let supportedProviders: [AgentProviderID] = [.claude, .codex]
 
     static let table = "verifier"
-    static let keys: Set<String> = ["skill", "tools", "model", "provider", "enabled", "budget_usd", "timeout_min"]
+    static let keys: Set<String> = ["skill", "tools", "model", "provider", "sandbox", "enabled", "budget_usd", "timeout_min"]
 
     /// Whether `Config.parse` should leave this table to `parse(_:fail:)`.
     static func owns(table name: String) -> Bool { name == table }
@@ -89,6 +102,27 @@ public struct VerifierConfig: Sendable, Equatable {
             }
         }
         return provider
+    }
+
+    /// `sandbox`: `"workspace"` or `"full"`, and only for a Codex verifier; beside Claude, or with no provider, it is refused.
+    private static func parseSandbox(_ table: TOMLTable, provider: AgentProviderID?, fail: ReviewConfig.Fail) -> Sandbox {
+        guard let entry = table.entries["sandbox"] else { return .workspace }
+        guard case .string(let value) = entry.value else {
+            fail(.wrongType, entry.line, "'sandbox' must be a string, found \(entry.value.typeName)")
+            return .workspace
+        }
+        guard let sandbox = Sandbox(rawValue: value) else {
+            let names = Sandbox.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
+            fail(.invalidValue, entry.line, "'sandbox' must be \(names)")
+            return .workspace
+        }
+        if provider != .codex {
+            fail(
+                .conflict, entry.line,
+                "'sandbox' sets how much a codex verifier may touch and the verifier is not on codex: set provider = \"codex\" "
+                    + "or remove 'sandbox'")
+        }
+        return sandbox
     }
 
     /// Nil only when the project turned the verifier off with `enabled = false`.
@@ -166,6 +200,7 @@ public struct VerifierConfig: Sendable, Equatable {
         }
 
         let provider = parseProvider(table, fail: fail)
+        let sandbox = parseSandbox(table, provider: provider, fail: fail)
 
         var budget = defaultBudgetUSD
         if let entry = table.entries["budget_usd"] {
@@ -187,6 +222,7 @@ public struct VerifierConfig: Sendable, Equatable {
 
         guard enabled else { return nil }
         return VerifierConfig(
-            skill: skill, tools: tools, model: model, budgetUSD: budget, timeoutMin: timeout, provider: provider)
+            skill: skill, tools: tools, model: model, budgetUSD: budget, timeoutMin: timeout, provider: provider,
+            sandbox: sandbox)
     }
 }
