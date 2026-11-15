@@ -113,7 +113,7 @@ extension Commands {
         out("  model:  \(model)")
         if provider == .codex {
             // Codex takes no tool list and no dollar cap; the config refuses both beside it.
-            out("  tools:  codex sandbox: writes only the proof folder, no network")
+            out("  tools:  codex sandbox: writes the worktree (not .git), the proof folder and a scratch folder; no network")
             out("  budget: no dollar cap  timeout: \(config.timeoutMin) min")
         } else {
             out("  tools:  \(config.tools.joined(separator: ", "))")
