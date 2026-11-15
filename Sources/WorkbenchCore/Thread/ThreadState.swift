@@ -43,7 +43,6 @@ public struct Review: Sendable, Equatable {
     public struct PRReview: Sendable, Equatable {
         public var round: Int
         public var pr: Int?
-        /// The commit of the pull request that was reviewed.
         public var headSHA: String?
         /// `clean` or `fix`; nil when the round has no verdict.
         public var verdict: String?
@@ -90,11 +89,9 @@ public struct Review: Sendable, Equatable {
     public var check: Check?
     /// The latest verifier run, nil when none has run or been skipped. Advisory.
     public var verifier: Verifier?
-    /// The latest judge run, nil when none has run. Advisory.
     public var judge: Judge?
     public var notes: [Note]
     public var deniedTools: [DeniedTool]
-    /// The latest pull request review round, nil when none has run.
     public var prReview: PRReview?
     /// The review stages (not the pull request review) that have started and not finished, in start order: what an auto run is
     /// doing after the judge. Empty when none is open.
@@ -168,7 +165,6 @@ public struct PullRequestRecord: Sendable, Equatable {
     public var url: String
     /// The commit the pull request was opened at; nil when the event carries none.
     public var headSHA: String?
-    /// The `seq` of the `pr.opened` event.
     public var seq: Int
 }
 
@@ -239,7 +235,6 @@ public struct ThreadState: Sendable, Equatable {
     public var chat: ChatState?
     /// A thread made by `workbench chat`: it has no goal until one is made from it, and no worktree.
     public var isChat = false
-    /// The `seq` of the latest `turn.ended`, nil when none has ended.
     public var lastTurnEndedSeq: Int?
     /// What the latest ended turn cost; nil when it reported none (never 0).
     public var lastTurnCostUSD: Double?

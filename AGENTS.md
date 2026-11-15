@@ -195,7 +195,9 @@ in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
   either a check (`scripts/check-banned-apis.sh`, `check-ui-tokens.sh`) or an item of the `design-review` rubric, so the next one is
   caught by a tool and not by the person again. Where a component can be made unable to do the wrong thing (a prop removed), do that
   first. A new variant of a component (a size, a placement, a prop) is not added for one screen: DESIGN.md names it first.
-- **Comments say why**, in one line, and are not added to restate code.
+- **Comments say what the code cannot:** a contract (what nil means, who may set it), a unit or bound, an invariant, a surprise, or why
+  it works as it does. A comment that restates the declaration's name or type ("The `seq` of the `pr.opened` event." on `seq`) is
+  noise: delete it rather than add it. Keep it short, and next to what it describes, so it does not drift onto another line.
 
 ## Using Workbench on this repo
 

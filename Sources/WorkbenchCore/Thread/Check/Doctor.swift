@@ -51,7 +51,6 @@ public struct DoctorStep: Sendable, Equatable {
         case stopped
         /// Not run, with why ("setup failed", "interrupted").
         case skipped(String)
-        /// The config does not declare it.
         case notDeclared
     }
 
@@ -117,9 +116,7 @@ public struct DoctorReport: Sendable, Equatable {
     public var setup: DoctorStep
     public var check: DoctorStep
     public var appType: AppType = .web
-    /// Nil when the config has no `[verifier]`.
     public var verifier: DoctorVerifier?
-    /// Nil when the config has no `[run]`.
     public var run: DoctorRun?
     /// What is odd about the review stages (`review.stages`, `[review.stage.<name>]`). Warnings: they never fail doctor.
     public var reviewWarnings: [String] = []

@@ -59,7 +59,7 @@ public enum GoalDraft {
     ///   - request: the person's rough request, quoted as data.
     ///   - instructions: the project's own instructions file at the base, when there is one.
     ///   - paths: tracked files at the base, in git's order; `pathsCut` when there were more than `pathLimit`.
-    ///   - attachments: how many of the user's screenshots there are, in order.
+    ///   - attachments: how many of the user's screenshots there are.
     ///   - readFiles: their names in the drafter's folder, for a drafter that opens files rather than being sent images.
     public static func prompt(
         request: String, instructions: String?, paths: [String], pathsCut: Bool, attachments: Int = 0,

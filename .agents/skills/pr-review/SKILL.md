@@ -77,7 +77,8 @@ full list. Don't re-flag what `scripts/check.sh` (CI) already enforces; flag onl
 - Spec and plan change in the same PR as the behaviour. Acceptance boxes are ticked only for what is
   demonstrated.
 
-**Comments** are one line saying why; flag ones restating code, never a missing comment.
+**Comments** explain what the code cannot say: a contract, a unit or bound, an invariant, a surprise, or why it works as it does.
+Flag one that restates its declaration's name or type, or that has drifted away from what it describes; never flag a missing comment.
 
 Focus on changed code; raise a pre-existing issue only if the diff makes it worse. When unsure of
 intent, ask as a question.

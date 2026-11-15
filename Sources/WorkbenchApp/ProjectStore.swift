@@ -54,9 +54,9 @@ struct RecentProject: Equatable, Identifiable {
     fileprivate(set) var current: ThreadSession
     /// The other sessions that have work going on or something still to show, and this one's if it has any; a session leaves when it has neither.
     fileprivate(set) var sessions: [ThreadSession.Key: ThreadSession] = [:]
-    /// Opens an address in the browser; a test replaces it so none opens.
     /// How long an action waits for goal edits already made before it says they did not finish; tests make it short.
     @ObservationIgnored var goalEditWait: Duration = .seconds(10)
+    /// A test replaces it so no browser opens.
     @ObservationIgnored var openExternal: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
     /// Callers of `untilIdle`, resumed whenever a session's work changes.
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -74,12 +74,11 @@ struct RecentProject: Equatable, Identifiable {
         idleWaiters = []
         waiting.forEach { $0.resume() }
     }
-    /// The goal agent is drafting a goal from a request.
     /// The new-thread screen is up: the main area asks what to work on, and nothing is on screen as a thread.
     var newThread = false
     /// What is typed on it: kept while another row is looked at, cleared when a thread is made.
     var newThreadText = ""
-    /// Whether the project card under the project pill is up.
+    /// The project card under the project pill is up.
     var pickingProject = false
     /// The project whose Agents card is up, by path: any project of the rail, not only the open one (`showAgents(for:)`).
     var agentsProject: String?
@@ -145,7 +144,6 @@ struct RecentProject: Equatable, Identifiable {
     @ObservationIgnored var currentThread: String? { didSet { rebindSession() } }
     /// The thread the person picked in the list; nil follows the active thread, else the newest. Cleared by a project change and by a new goal.
     @ObservationIgnored var selectedThread: String?
-    /// The project's threads as the list shows them, kept current by the store.
     let threads = ThreadListModel()
     @ObservationIgnored var threadRowCache = ThreadListLoader.Cache()
     @ObservationIgnored var lastWatch: ProjectLoader.Watch?
@@ -439,7 +437,6 @@ struct RecentProject: Equatable, Identifiable {
         } catch { return "\(error)" }
     }
 
-    /// Whether this window's thread is the one the app is running.
     var runningHere: Bool { ownedRuns.contains { $0.project == project && $0.thread == currentThread } }
 
     /// Asks the turn to end: through the runner this app holds, else the process a terminal's `workbench run` holds. The turn
