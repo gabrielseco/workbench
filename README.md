@@ -1,81 +1,125 @@
 # Workbench
 
-A small macOS app (the library and CLI also build and pass their tests on Linux) for handing a coding task to Claude and getting back work you can trust.
+Hand a coding task to an AI agent, and get back work you can trust.
+
+Workbench runs the task in an isolated git worktree and gives you back the diff, the check results, a judge's
+verdict and screenshots of the result, with one decision to make: accept, send it back, or discard. It is a
+macOS app and a `workbench` CLI; the library and the CLI also build and pass their tests on Linux.
 
 ```
-Write a Goal → you approve it → Claude works in an isolated worktree
-             → it shows the diff and check results → you accept, send it back or discard
+Write a goal → you approve it → the agent works in a worktree
+             → check, verify, judge, review → you accept, send back or discard
+             → ship opens the pull request → you merge
 ```
 
-Workbench is a sibling of [Triage](../triage) (the PR inbox). It is deliberately a separate app: it is
-prototyped on its own first, and only then do we decide how the two talk to each other.
+![Workbench with three threads in the inbox: one that needs you, one working, one draft](docs/images/feed-threads.png)
 
-**Scope, on purpose:** one project, one thread at a time. Do that well first; concurrency, many projects,
-screenshot proof and Triage integration are in [`docs/later/`](docs/later/README.md).
+## What you get
 
-**Status:** the Swift package and CLI are built, and so is the shell of the SwiftUI app
-([P19](docs/plan/P19-swiftui-app.md): it opens a project and follows its newest thread; the goal, run, review and ship screens
-come next). Provider selection ([P9](docs/plan/P9-agent-providers.md)) is built and its gate accepted.
-Start at [`docs/plan/README.md`](docs/plan/README.md).
+- **A goal first.** A markdown file with the request, checkable acceptance criteria (each can name the test, command
+  or screenshot that proves it) and what is out of scope. You approve it once, before anything runs. A goal can be
+  written by hand, drafted by an agent, or started from a chat.
+- **Isolation.** Every thread has its own worktree and branch. The boundary is the worktree, a tool allowlist
+  and a budget; nothing asks you for permission mid-run, and anything outside the allowlist is denied and shown
+  in the review.
+- **A verified result.** After each turn Workbench runs the project's own check, then optionally a **verifier**
+  (an agent that drives your app and takes the screenshots the goal names), a **judge** (does the diff meet each
+  criterion?) and further **review stages** such as design. A failed step goes back to the agent; a fix starts
+  again at the check.
+- **One decision.** The review card shows the changed files, the check, the judge's findings and the cost. You
+  accept, send it back with a note, or discard.
+- **Ship.** `workbench ship` pushes the accepted branch and opens the pull request with its sections filled in from
+  the goal and the diff, then an automated reviewer can go over the PR. The agent never holds credentials, and
+  Workbench never merges for you.
+- **Several threads at once.** Up to `max_active_threads` per project (default 3), each with its own ports, shown in
+  the inbox rail with a mark for working, needs you and done.
+- **Scheduled tasks.** Tasks in `.workbench/tasks/<name>/` run on a timer through the same thread path and open a
+  pull request.
+- **Your choice of agent.** Claude or Codex, picked separately for drafting, coding, judging and review.
 
-**Building the app (macOS):** `scripts/bundle-app.sh` builds `.build/bundle/Workbench.app`: a release build in a bundle with the
-Dock icon (`Resources/AppIconSource.png`; `scripts/render-icon.sh` renders `Resources/AppIcon.png` from it) and an ad hoc
-signature. `scripts/bundle-app.sh --check` also launches a copy of it, finds its window and renders the Dock icon.
-`scripts/bundle-app.sh --install` builds into `~/Applications/Workbench.app` and opens it; right-click its Dock icon, Options,
-Keep in Dock, to keep it there. A Workbench that is already running from there is not ended: quit it (⌘Q) and open it again.
+![The review card: goal, finished run, passed check, and the decision](docs/images/review-card.png)
 
-## Checking a change
+![Judge and design findings on the review card, with Fix findings as the primary action](docs/images/review-findings.png)
 
-Run `scripts/check.sh` from any directory: it runs the banned-API check, `swift build` and `swift test`, as CI
-does, and stops at the first step that fails.
+## Install
 
-## Starting a project's app
+macOS 14 or later, Xcode 26.6 (the version in [`.xcode-version`](.xcode-version)), and `claude` (and optionally
+`codex`) on your `PATH`.
 
-A project that has a UI says how to start it in `.workbench/config.toml`, and Workbench starts it for the verifier on a
-free port, waits until it is ready and ends it with the turn (see [P16](docs/plan/P16-run.md)):
+```bash
+scripts/bundle-app.sh --install     # builds ~/Applications/Workbench.app and opens it
+swift build                         # just the `workbench` CLI and the library (also works on Linux)
+```
+
+`scripts/wb <args>` rebuilds the CLI first and then runs it, so you never run a stale binary. Right-click the Dock
+icon, Options, Keep in Dock, to keep the app there. A Workbench that is already running is never quit for you.
+
+## Use it
+
+In the app, open a project, press **New goal**, write the request and approve. From the CLI, in a git repository:
+
+```bash
+workbench init                      # writes .workbench/config.toml; edit the check command
+workbench goal new add-retry        # a thread and a draft goal; edit it, then:
+workbench goal approve
+workbench run                       # worktree, agent turn, your check; ends with a result
+workbench review                    # the diff, the check, the findings
+workbench ship                      # accepted? push and open the PR
+```
+
+`workbench help` lists every command and `workbench help <command>` says what one changes. Add `--json` to read
+state from a script ([`docs/spec/cli-json.md`](docs/spec/cli-json.md)).
+
+## Configure a project
+
+`.workbench/config.toml` in the project says how to check it, which tools the agent may use and which reviews run.
+Everything is declared by you; Workbench never guesses a stack.
 
 ```toml
-[run]
+[tools]
+allowed = ["Read", "Edit", "Bash(swift test:*)"]
+
+[review]
+stages = ["pr-review", "design"]
+
+[run]                                  # how to start your app, for the verifier
 command = "npm run dev:mock"
-ready_url = "http://localhost:{port}/"   # or ready_line = "a line the command prints when it is up"
+ready_url = "http://localhost:{port}/"
 ```
 
-## What a thread is
+`workbench doctor` runs the declared setup, check and verify in a throwaway worktree and says what is wrong. The
+goal and event-log formats, exit codes, scheduled tasks and `workbench new` are specified in [`docs/spec/`](docs/spec/).
 
-The thread is the unit of work. There is exactly one active at a time, and it is exactly:
+## How it stays reliable
 
-| Part | What it is |
-|---|---|
-| A **goal** | A markdown file: the request, checkable criteria, out of scope. Approved by you before anything runs. |
-| A **worktree** | An isolated git worktree and branch where the work happens. The safety boundary. |
-| A **session** | One Claude Code session, resumed across turns. |
-| An **event log** | Everything that happened, appended as JSON lines. The source of truth for the UI. |
+Workbench starts agents and commands as child processes, so most of its rules are about those:
 
-## Principles
+1. **A turn always ends, and says how.** Exactly one `turn.ended` per `turn.started`, also on stop, timeout, crash
+   and restart.
+2. **Children start through one function** (`Spawner`), in their own process group, with no inherited descriptors.
+   No blocking waits; exit comes through a watcher.
+3. **The event log is the state.** One writer, appended JSON lines, no gaps; the UI and the CLI derive everything from
+   it. Agent transcripts are stored verbatim beside it.
+4. **Everything is bounded:** line size, log size, output, timeout, budget.
+5. **Untrusted text never reaches git or a path** without validation.
+6. **Hangs, leaks and leftover processes are tested** against a fake agent that can hang, crash and ignore SIGTERM.
 
-These come from what went wrong when this was built inside Triage.
+## Contributing
 
-1. **The boundary is the worktree, the allowlist and the budget.** Not a clever parser. Claude Code enforces
-   permissions; Workbench only decides which tool set a thread runs with.
-2. **No prompts mid-run.** Approval happens once, on the goal. Anything outside the allowlist is denied
-   automatically (`--permission-prompts none`) and shows up in the review.
-3. **One owner per subprocess, no blocking waits.** Every run ends in a recorded terminal state, including when
-   it is killed, times out or crashes. A run that cannot say how it ended is a bug.
-4. **Everything is a file.** Goal, events, result: inspectable, diffable, resumable, easy to test.
-5. **Reliability is an acceptance criterion.** "100 runs, zero hangs" is a gate, not a hope.
-6. **Small slices that end in a demo.** A phase is done when you can use it, not when the checklist is long.
-7. **One thing well before more things.** If a feature needs the word "concurrent", it waits.
-
-## Layout (planned)
+Read [`AGENTS.md`](AGENTS.md): commands, conventions, the toolchain, and how a change ships (a pull request per task,
+reviewed by a second agent, never merged by the author). Design rules for the app are in
+[`docs/DESIGN.md`](docs/DESIGN.md). Before pushing, `scripts/check-changed.sh` lints and tests what your branch changed;
+CI runs the full check.
 
 ```
-workbench/
-  README.md
-  docs/plan/     P1 runner, P2 review, P3 app (this is where we are)
-  docs/spec/     goal file and event log formats
-  docs/later/    deferred: concurrency, proof, Triage
-  Package.swift  WorkbenchCore library + `workbench` CLI, and on macOS the app
-  Sources/WorkbenchApp/  the SwiftUI app (macOS only)
-  Resources/     the Dock icon (SVG and PNG)
-  scripts/       checks, `bundle-app.sh` (builds Workbench.app), verify-cli scenarios
+Sources/WorkbenchCore/   the library: runner, event log, checks, review, ship, config
+Sources/workbench/       the CLI
+Sources/WorkbenchApp/    the SwiftUI app (macOS only)
+Sources/fake-claude/     the test double
+Fixtures/app/            projects the app is checked against on screen
+docs/spec/               formats and contracts
+scripts/                 checks, bundle-app.sh, verify-cli and verify-app scenarios
 ```
+
+The project's history is in its pull requests; `docs/plan/` holds the phase plans and `docs/later/` what is deliberately
+not built yet.
