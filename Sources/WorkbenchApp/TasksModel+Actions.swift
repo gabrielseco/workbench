@@ -112,7 +112,7 @@ extension TasksModel {
         guard runningTask != nil else { return }
         let deadline = ContinuousClock.now + timeout
         await stopRun()
-        while runningTask != nil, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+        await wait(while: { runningTask != nil }, until: deadline)
     }
 
     /// When the run began, as the busy line says it: the runner only reports as each step ends, so a long turn is silent until then.

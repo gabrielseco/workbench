@@ -108,8 +108,7 @@ extension ProjectStore {
     func stopChatAndWait(timeout: Duration = .seconds(8)) async {
         guard chatReplying else { return }
         sessions.values.filter(\.replying).forEach { $0.chatStop?.stop() }
-        let deadline = ContinuousClock.now + timeout
-        while chatReplying, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+        await wait(while: { chatReplying }, atMost: timeout)
     }
 
     /// Has the goal agent draft a goal from the conversation of the chat on screen, into that same thread. A draft that does not
