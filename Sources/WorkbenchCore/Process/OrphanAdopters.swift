@@ -96,6 +96,7 @@ struct AdopterLedger {
 /// PID 1, the adopter this process measured, and the ones earlier runs recorded. A failed measurement is not kept for
 /// good: the next sweep after `retryAfter` seconds tries again, so one slow start does not blind the sweeper for the life
 /// of the process.
+/// State is guarded by `lock`.
 final class AdopterCache: @unchecked Sendable {
     private let lock = NSLock()
     private let ledger: AdopterLedger

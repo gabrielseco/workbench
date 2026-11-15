@@ -15,6 +15,7 @@ public struct GitResult: Sendable, Equatable {
 /// For tests: ends the command a runner is running as its timeout would (SIGTERM, then SIGKILL, the same
 /// `GitError.timedOut`), now. A test that must see a hung command ended waits for the command to say it started,
 /// then calls `expire()`, instead of a timer sized to outlast a loaded runner. Nothing here changes a timeout value.
+/// State is guarded by `lock`.
 public final class CommandExpiry: @unchecked Sendable {
     private let lock = NSLock()
     private var running: [UUID: @Sendable () -> Void] = [:]
@@ -192,6 +193,7 @@ public struct GitRunner: Sendable {
 }
 
 /// One short-lived child: resumes its waiter exactly once, whichever of exit or timeout comes first.
+/// State is confined to `queue`.
 private final class ShortCommand: @unchecked Sendable {
     struct Outcome: Sendable {
         var termination: Termination

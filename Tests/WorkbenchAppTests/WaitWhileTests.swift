@@ -25,6 +25,15 @@ import Testing
         #expect(!ended)
     }
 
+    @Test func waitForFailsTheTestAndStopsTheCallerWhenTheConditionNeverHolds() async {
+        var wentOn = false
+        await withKnownIssue("waitFor reports a timeout as a failure") {
+            try await waitFor("a state that never comes", timeout: .milliseconds(100)) { false }
+            wentOn = true
+        }
+        #expect(!wentOn, "the code after a timed-out wait must not run")
+    }
+
     @Test func aDeadlineAlreadyPastChecksOnceAndStops() async {
         let ended = await wait(while: { true }, until: ContinuousClock.now - .seconds(1))
         #expect(!ended)

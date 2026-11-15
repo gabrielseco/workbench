@@ -2,6 +2,7 @@ import Foundation
 import WorkbenchCore
 
 /// The running `claude`, reachable from a signal handler; a stop that arrives before it has started is kept.
+/// State is guarded by `lock`.
 final class RunHolder: @unchecked Sendable {
     private let lock = NSLock()
     private var stopper: (@Sendable () -> Void)?

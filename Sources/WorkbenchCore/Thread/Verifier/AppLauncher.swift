@@ -18,7 +18,7 @@ struct AppLauncher {
     var lifetime: TimeInterval
     var killGrace: TimeInterval
 
-    final class Running: @unchecked Sendable {
+    final class Running: Sendable {
         let pid: Int32
         let port: Int
         /// The URL with `{port}` filled in, for a `ready_url` check.

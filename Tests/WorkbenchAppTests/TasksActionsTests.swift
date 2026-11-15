@@ -149,7 +149,7 @@ import WorkbenchCore
         let started = Task {
             await tasks.beginRun(first.project, report, threadRunGoing: false)
         }
-        while run.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        try await waitFor { !run.calls.isEmpty }
         try await Task.sleep(for: .milliseconds(30))
         // The other project has a task of the same name: it is not the one running, and has no result.
         #expect(tasks.isRunning("weekly-report", in: first.project))
@@ -191,7 +191,7 @@ import WorkbenchCore
         let started = Task {
             await tasks.beginRun(fixture.project, report, threadRunGoing: false)
         }
-        while run.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        try await waitFor { !run.calls.isEmpty }
         try await Task.sleep(for: .milliseconds(30))
         #expect(tasks.runningTask == "weekly-report")
         #expect(tasks.runSaid == "working on weekly-report")
@@ -213,7 +213,7 @@ import WorkbenchCore
         let started = Task {
             await tasks.beginRun(fixture.project, report, threadRunGoing: false)
         }
-        while run.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        try await waitFor { !run.calls.isEmpty }
         try await Task.sleep(for: .milliseconds(30))
         #expect(run.stop?.isRequested == false)
         await tasks.stopRun()
@@ -234,7 +234,7 @@ import WorkbenchCore
         let started = Task {
             await tasks.beginRun(fixture.project, report, threadRunGoing: false)
         }
-        while run.calls.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        try await waitFor { !run.calls.isEmpty }
         try await Task.sleep(for: .milliseconds(30))
         let other = try entry(tasks, "bump-contract-details")
         #expect(tasks.runUnavailable(other, threadRunGoing: false)?.contains("is going from this window") == true)

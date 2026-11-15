@@ -18,6 +18,7 @@ public struct AutoAdviceResult: Sendable, Equatable {
 /// How a stop reaches the advice a run is followed by: the runner that ended is no longer the thing to stop. The front end hands the
 /// same holder to the signal handler (or the app's Stop) and to `runAutoAdvice`, which attaches each running agent to it and
 /// starts no further step once it was asked.
+/// State is guarded by `lock`.
 public final class AdviceStop: @unchecked Sendable {
     private let lock = NSLock()
     private var requested = false

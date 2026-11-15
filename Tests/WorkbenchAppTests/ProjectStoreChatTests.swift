@@ -79,7 +79,7 @@ private final class Seen: @unchecked Sendable {
         #expect(store.currentThread == first)
         store.chatDraft = "and then?"
         let sending = Task { await store.sendChat() }
-        while !store.chatReplying { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitFor { store.chatReplying }
         #expect(store.chatDraft.isEmpty, "the text left the composer when the turn started")
         #expect(store.current.replying == true && !store.current.isIdle, "a replying chat is never dropped")
         await gate.open()
@@ -131,7 +131,7 @@ private final class Seen: @unchecked Sendable {
         })
         store.chatDraft = "one"
         let sending = Task { await store.sendChat() }
-        while !store.chatReplying { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitFor { store.chatReplying }
         store.chatDraft = "two"
         #expect(await store.sendChat() == false)
         #expect(await store.startChat("three") == false)
@@ -149,7 +149,7 @@ private final class Seen: @unchecked Sendable {
         })
         store.chatDraft = "first message"
         let sending = Task { await store.sendChat() }
-        while !store.chatReplying { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitFor { store.chatReplying }
         store.chatDraft = "second, typed meanwhile"
         await gate.open()
         #expect(await sending.value == false)
@@ -165,7 +165,7 @@ private final class Seen: @unchecked Sendable {
             }, chats: [])
         #expect(!store.replyingHere)
         let starting = Task { await store.startChat("a new idea") }
-        while !store.chatReplying { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitFor { store.chatReplying }
         // Core made the thread and wrote the message; the window follows the active chat.
         try addChat(fixture, "g-2026-11-03-new", ended: false)
         await store.reload()
@@ -217,7 +217,7 @@ private final class Seen: @unchecked Sendable {
         await store.select(thread: a)
         store.chatDraft = "hello"
         let sending = Task { await store.sendChat() }
-        while !store.chatReplying { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitFor { store.chatReplying }
         await store.select(thread: b)
         #expect(store.currentThread == b && store.actionError == nil)
         store.chatDraft = "draft for b"
@@ -247,7 +247,7 @@ private final class Seen: @unchecked Sendable {
         #expect(store.liveWork == nil)
         store.chatDraft = "hello"
         let sending = Task { await store.sendChat() }
-        while !store.chatReplying { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitFor { store.chatReplying }
         #expect(store.liveWork == "a chat turn is still going.")
         await store.stopWorkAndWait()
         #expect(!store.chatReplying)
@@ -257,7 +257,7 @@ private final class Seen: @unchecked Sendable {
 
         store.chatDraft = "again"
         let again = Task { await store.sendChat() }
-        while !store.chatReplying { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitFor { store.chatReplying }
         store.stopChat()
         _ = await again.value
         #expect(!store.chatReplying)
@@ -275,7 +275,7 @@ private final class Seen: @unchecked Sendable {
             return GoalDraftResult(id: thread, provider: .claude)
         })
         let making = Task { await store.makeChatGoal() }
-        while !store.drafting { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitFor { store.drafting }
         #expect(await store.makeChatGoal() == false, "one draft at a time")
         #expect(await store.sendChat() == false)
         try fixture.goalText(id: id, approved: false, title: "Retry uploads", proofs: nil, request: "Do it.")
@@ -313,7 +313,7 @@ private final class Seen: @unchecked Sendable {
             return GoalDraftResult(id: nil, provider: .claude, failure: "stopped")
         })
         let making = Task { await store.makeChatGoal() }
-        while !store.drafting { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitFor { store.drafting }
         #expect(store.liveWork == "a goal draft is still going.")
         await store.stopWorkAndWait()
         #expect(await making.value == false)

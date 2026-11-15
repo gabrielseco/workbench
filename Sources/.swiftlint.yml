@@ -1,0 +1,4 @@
+# Source files are held to a tighter length than the tests (the root config's 600 / 800). Lower it as the next biggest is split.
+file_length:
+  warning: 575
+  error: 700
