@@ -1,7 +1,7 @@
 # P9: Agent providers
 
 Status: built; the acceptance gate was accepted by the user on 2026-10-28 (see the note under the checklist). Written 2026-10-17.
-Required before [P3](P3-app.md) and [P19](P19-swiftui-app.md) start.
+Required before [P3](../plan/P3-app.md) and [P19](../plan/P19-swiftui-app.md) start.
 Supersedes [P7](P7-judge-on-codex.md)'s proposed fixed provider split. The specifications under `docs/spec/`
 describe the shipped CLI.
 

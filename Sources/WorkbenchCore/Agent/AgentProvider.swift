@@ -83,7 +83,7 @@ public protocol AgentDecoder: Sendable {
 }
 
 /// An adapter: argv, environment, output decoding. It knows no criteria, review rounds or workflow state, and
-/// never spawns, sleeps or retries (spec: docs/plan/P9-agent-providers.md, "Boundaries").
+/// never spawns, sleeps or retries (spec: docs/archive/P9-agent-providers.md, "Boundaries").
 public protocol AgentProvider: Sendable {
     var id: AgentProviderID { get }
     var capabilities: AgentCapabilities { get }

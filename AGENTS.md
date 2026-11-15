@@ -5,7 +5,7 @@ imports this file, so edit this one.
 
 Workbench hands a coding task to Claude in an isolated git worktree and gives back a diff, check results
 and a decision. Swift 6, macOS 14+, a `WorkbenchCore` library and a `workbench` CLI. The library and the CLI also build and pass their tests on Linux (the PR gate runs there; macOS runs nightly, by hand and on a PR labelled `macos-test`); the app, screen-recording checks and opening an editor are macOS only. Start at
-`docs/plan/README.md` (phases and the scope rule), `docs/spec/` (goal file, event log) and the current
+`docs/plan/README.md` (open phases and the scope rule; finished ones are in `docs/archive/`), `docs/spec/` (goal file, event log) and the current
 phase's plan.
 
 ## Commands
@@ -145,7 +145,7 @@ not run and why.
 ## Conventions
 
 These came from what went wrong when this was first built inside Triage. The full list with reasons is
-in `docs/plan/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
+in `docs/archive/P1-runner.md` ("Process layer rules") and `docs/plan/README.md`.
 
 - **Children start through `Spawner`.** One function: `posix_spawn` with `POSIX_SPAWN_CLOEXEC_DEFAULT`,
   stdin `/dev/null`, its own process group. Foundation's `Process`, `waitUntilExit` and

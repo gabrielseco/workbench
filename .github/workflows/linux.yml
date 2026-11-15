@@ -32,7 +32,7 @@ jobs:
         with:
           save-cache: "true"
       - name: Test
-        # 16 permits: on a 4-core Linux runner the default (one per core) left the CPU 91% idle (docs/plan/P18-linux.md).
+        # 16 permits: on a 4-core Linux runner the default (one per core) left the CPU 91% idle (docs/archive/P18-linux.md).
         run: |
           set -o pipefail
           runuser -u tester -- env "PATH=$PATH" WORKBENCH_TEST_PERMITS=16 swift test --skip-build 2>&1 | tee test.log

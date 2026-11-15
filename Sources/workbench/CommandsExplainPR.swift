@@ -4,7 +4,7 @@ import WorkbenchCore
 extension Commands {
     /// `explain-pr --pr <n> [--out <file>] [--spec <file>] [--again]`: the review agent explains a pull request in
     /// Markdown, read-only, in a throwaway checkout of its head (the plumbing of `pr-review --pr`). The last stdout line
-    /// is the absolute path of the file, which holds the body only. The contract is docs/plan/explain-pr.md.
+    /// is the absolute path of the file, which holds the body only. The contract is docs/spec/explain-pr.md.
     static func explainPR(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let value = try a.value("--pr")

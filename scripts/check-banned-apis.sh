@@ -1,5 +1,5 @@
 #!/bin/sh
-# Process-layer lessons (docs/plan/P1-runner.md): these calls caused the hangs we are not repeating.
+# Process-layer lessons (docs/archive/P1-runner.md): these calls caused the hangs we are not repeating.
 # Foundation's Process is banned too: children start through Spawner only (rule 8).
 # Fails if any appear in code under Sources/. Comments may name them. A deliberate use needs a design
 # discussion, not an exception here.

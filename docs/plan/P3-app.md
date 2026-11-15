@@ -3,7 +3,7 @@
 **Outcome:** one macOS window where you write a goal, approve it, watch the configured coding agent
 work, review the result and decide. You complete a real task end to end without the terminal.
 
-**Depends on:** P2 accepted and [P9: Agent providers](P9-agent-providers.md)'s acceptance gate complete.
+**Depends on:** P2 accepted and [P9: Agent providers](../archive/P9-agent-providers.md)'s acceptance gate complete.
 Do not start SwiftUI development before run, judge and automated review have validated interchangeable
 providers, normalized activity and interruption recovery. The app links `WorkbenchCore` and adds no
 process or provider logic. P9 does not change the workflow's approval or human decision gates.

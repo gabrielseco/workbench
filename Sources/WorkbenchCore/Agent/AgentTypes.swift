@@ -2,7 +2,7 @@ import Foundation
 
 /// P9: what a stage asks of an agent and what comes back, in terms no provider's CLI leaks into.
 /// Orchestration (run, judge, review, goal drafting) builds an `AgentRequest`; an `AgentProvider` turns it
-/// into one child process; `AgentRunner` runs that child over `ProcessRunner`. See docs/plan/P9-agent-providers.md.
+/// into one child process; `AgentRunner` runs that child over `ProcessRunner`. See docs/archive/P9-agent-providers.md.
 
 /// A provider's stable name: `claude`, `codex`. Built-in providers only, so it is checked like any name
 /// that reaches a path or a log.
@@ -37,7 +37,7 @@ public enum AgentResumeSupport: String, Sendable, Codable {
     case none
 }
 
-/// What an adapter really does, from probes (docs/plan/P9-capabilities.md), not what a CLI might one day do.
+/// What an adapter really does, from probes (docs/archive/P9-capabilities.md), not what a CLI might one day do.
 public struct AgentCapabilities: Sendable, Equatable {
     public var policies: Set<AgentPolicy>
     public var resume: AgentResumeSupport

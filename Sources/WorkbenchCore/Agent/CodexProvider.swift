@@ -1,7 +1,7 @@
 import Foundation
 
 /// The Codex adapter: read-only evidence work (judge, review, goal drafting) and, built but not yet selectable by
-/// `run`, scoped coding. Codex has no dollar cap and cannot confine reads (docs/plan/P9-capabilities.md), so a request
+/// `run`, scoped coding. Codex has no dollar cap and cannot confine reads (docs/archive/P9-capabilities.md), so a request
 /// is timeout-only and the limit is stated in `capabilities`.
 public struct CodexProvider: AgentProvider {
     /// `codex` by name (looked up on PATH) or by path.

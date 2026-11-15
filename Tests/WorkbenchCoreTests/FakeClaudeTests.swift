@@ -24,7 +24,7 @@ enum FakeClaude {
 
     static let fixtures = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("docs/plan/P1-spikes/fixtures")
+        .appendingPathComponent("docs/archive/P1-spikes/fixtures")
 
     static func fixture(_ name: String) -> String { fixtures.appendingPathComponent(name).path }
 

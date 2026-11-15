@@ -4,7 +4,7 @@ import WorkbenchCore
 extension Commands {
     /// `explain-thread --pr <n> --thread <id>`: the review agent explains one review thread of a pull request, read-only,
     /// in a throwaway checkout of its head (the plumbing of `explain-pr`). The last stdout line is one JSON object with
-    /// `reasoning` and `proposed_fix`. The contract is docs/plan/explain-thread.md.
+    /// `reasoning` and `proposed_fix`. The contract is docs/spec/explain-thread.md.
     static func explainThread(_ args: [String]) async throws -> Int32 {
         var a = Arguments(args)
         let value = try a.value("--pr")

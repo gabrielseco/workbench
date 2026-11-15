@@ -224,7 +224,7 @@ Fixtures: `s6-*.jsonl` were not kept (only a few lines, the signal is in the dri
 
 ## Resulting changes to the plan
 
-Applied to [`P1-runner.md`](P1-runner.md) and [`README.md`](README.md) in the same change:
+Applied to [`P1-runner.md`](P1-runner.md) and [`README.md`](../plan/README.md) in the same change:
 
 1. D2 now names the verified shapes (`--restricted`, or `acceptEdits` + scoped `Read`) and forbids bare file
    tools.

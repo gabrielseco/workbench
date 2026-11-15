@@ -1,6 +1,6 @@
 import Foundation
 
-/// The things an agent does for a thread (docs/plan/P9-agent-providers.md). Each picks its own provider and model.
+/// The things an agent does for a thread (docs/archive/P9-agent-providers.md). Each picks its own provider and model.
 public enum AgentRole: String, Sendable, Equatable, CaseIterable {
     case goal
     case run
@@ -283,7 +283,7 @@ extension AgentSelection {
             fail(
                 .invalidValue, line,
                 "[\(table)] cannot use \"\(id)\" yet: \(role.rawValue) runs on \(AgentsConfig.list(role.supportedProviders)) "
-                    + "only until its second provider is enabled (docs/plan/P9-agent-providers.md, task 4)")
+                    + "only until its second provider is enabled (docs/archive/P9-agent-providers.md, task 4)")
             return nil
         }
         return id

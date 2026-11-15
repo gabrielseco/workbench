@@ -2,7 +2,7 @@
 
 Status: built (2026-10-25, tasks 1 to 6 merged; task 6 without shards, see its row). Written 2026-10-25. Starts from the throwaway probe in PR #221 (`probe/linux-build`),
 which ports the package to Linux in one 40-file diff and is not for merge. This phase ships the same result as
-small PRs and keeps Linux green afterwards. Complements [P17](P17-faster-tests.md) (the Linux job must not slow the
+small PRs and keeps Linux green afterwards. Complements [P17](../plan/P17-faster-tests.md) (the Linux job must not slow the
 gate) and [`../later/portability.md`](../later/portability.md) (other stacks, not other operating systems).
 
 ## Why

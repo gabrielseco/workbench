@@ -1,6 +1,6 @@
 # P19: SwiftUI app
 
-Status: built (the window, its five screens, the Tasks screen and the menu bar item with its notifications; the 20-real-tasks gate below is still open). Written 2026-10-27. Starts only after [P9](P9-agent-providers.md)'s acceptance gate passes (task 5
+Status: built (the window, its five screens, the Tasks screen and the menu bar item with its notifications; the 20-real-tasks gate below is still open). Written 2026-10-27. Starts only after [P9](../archive/P9-agent-providers.md)'s acceptance gate passes (task 5
 is open). Refines [P3](P3-app.md): the layout, the screens and the menu bar come from the mockups in
 [`../mac-app/`](../mac-app/) (1 Goal, 2 Run, 3 Review, 4 Ship + PR review, 5 Menu bar), which replace P3's single column.
 P3's acceptance criteria that still hold are carried over below. This document describes future behaviour; `docs/spec/`

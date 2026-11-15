@@ -16,7 +16,7 @@ final class LineSink: AgentRecorder, @unchecked Sendable {
 /// By hand, not in CI: real Codex coding turns through the adapter's exact invocation, on a throwaway repository with a
 /// bare remote, judged by the filesystem and the remote afterwards (what the model says is not evidence). It uses the
 /// ChatGPT login of whoever runs it, so it is off unless `WORKBENCH_CODEX_PROBE=1`. The raw streams go to
-/// `$WORKBENCH_CODEX_PROBE_OUT` (default `docs/plan/P9-probes/fixtures`) as `codex-coding-<name>.stdout`.
+/// `$WORKBENCH_CODEX_PROBE_OUT` (default `docs/archive/P9-probes/fixtures`) as `codex-coding-<name>.stdout`.
 ///   WORKBENCH_CODEX_PROBE=1 swift test --filter CodexCodingProbeTests
 @Suite(.processGate, .enabled(if: ProcessInfo.processInfo.environment["WORKBENCH_CODEX_PROBE"] == "1"))
 struct CodexCodingProbeTests {
@@ -90,7 +90,7 @@ struct CodexCodingProbeTests {
         let probes = Self.probes(rig)
         let out = ProcessInfo.processInfo.environment["WORKBENCH_CODEX_PROBE_OUT"]
             ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("docs/plan/P9-probes/fixtures").path
+            .appendingPathComponent("docs/archive/P9-probes/fixtures").path
         var report: [String] = []
         for probe in probes {
             let request = AgentRequest(

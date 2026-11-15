@@ -6,7 +6,7 @@ import Testing
 /// Hammers one process or Dispatch mechanism at a time with 48 concurrent loops, for as long as `WORKBENCH_STRESS_SECONDS`
 /// says (default 180), and prints how many iterations it got through. Off unless `WORKBENCH_STRESS=<mode>` is set:
 /// `runner` (ProcessRunner), `pipe` (the platform's pipe watch), `reads-raw` (a bare Dispatch read source: crashes libdispatch
-/// on Linux, which is why the platform has its own), `timers`, `exitwatch`. It found that bug (docs/plan/P18-linux.md).
+/// on Linux, which is why the platform has its own), `timers`, `exitwatch`. It found that bug (docs/archive/P18-linux.md).
 private final class Counter: @unchecked Sendable {
     private let lock = NSLock()
     private var n = 0

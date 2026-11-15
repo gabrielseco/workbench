@@ -1,7 +1,7 @@
 import Foundation
 
 /// `[verifier]`: the project's own skill, run as a separate turn that drives the app and leaves proof
-/// (docs/plan/P10-skill-verifier.md). On by default: no table means the default skill, `enabled = false` means none.
+/// (docs/archive/P10-skill-verifier.md). On by default: no table means the default skill, `enabled = false` means none.
 public struct VerifierConfig: Sendable, Equatable {
     public static let defaultBudgetUSD: Decimal = 1
     public static let defaultTimeoutMin = 10

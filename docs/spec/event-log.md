@@ -221,7 +221,7 @@ Implemented in `Sources/WorkbenchCore/Thread/Check/CheckRunner.swift`, called by
   written to the output file.
 - **Stop.** `workbench stop` during a check stops the command and records `stopped`. A stop that arrives
   after the turn ended and before the check started means no check runs.
-- **The verify step** was a project command run after the check; it is gone ([P10](../plan/P10-skill-verifier.md)).
+- **The verify step** was a project command run after the check; it is gone ([P10](../archive/P10-skill-verifier.md)).
   `verify.started`, `verify.ended` and `proof.added` lines without `source` in an older log are skipped.
   The proof now comes from the verifier, which is a `claude` turn with its own events.
 - **Orphaned checks** are state, not damage. `recoverOrphanedCheck()` appends

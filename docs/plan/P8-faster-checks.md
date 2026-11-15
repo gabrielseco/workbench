@@ -1,6 +1,6 @@
 # P8: Faster checks inside a thread
 
-Status: plan; tasks 1 (measure), 2 (tighter mapping) and 3 and 4 (say it, one check) built, see "Measured". Written 2026-10-17. Friction row 49. Follows [P2.6](P2.6-harden.md) (the check after
+Status: plan; tasks 1 (measure), 2 (tighter mapping) and 3 and 4 (say it, one check) built, see "Measured". Written 2026-10-17. Friction row 49. Follows [P2.6](../archive/P2.6-harden.md) (the check after
 each turn) and the diff-scoped `scripts/check-changed.sh` (#86).
 
 ## What was measured

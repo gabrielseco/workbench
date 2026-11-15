@@ -88,7 +88,7 @@ protocol PipeReader: AnyObject, Sendable {
 /// libdispatch there crashes (in `_dispatch_source_refs_finalize_unregistration`, on its manager thread) when a read
 /// source is cancelled as an event for it arrives, which is what a child closing its end and us cancelling at EOF is. Under
 /// 48 concurrent loops of pipe, write, close, cancel it fell over in about one four-minute run in two, and never in timers
-/// or exit watchers alone (docs/plan/P18-linux.md).
+/// or exit watchers alone (docs/archive/P18-linux.md).
 protocol PipeReading {
     /// Starts watching `fd` (a non-blocking read end) and calls `onReadable` on `queue` while it has data or has hung up,
     /// until `cancel()`. The watch owns the descriptor from here on and closes it when it ends.

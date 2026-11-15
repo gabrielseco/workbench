@@ -1,7 +1,7 @@
 # P6: Review stages
 
 Status: tasks 1 and 2 built. Written 2026-10-17. Builds on [P5](P5-review-loop.md) (`pr-review`, `ship --review-loop`)
-and [P4](P4-verify.md) (`verify_command`, screenshot proof).
+and [P4](../archive/P4-verify.md) (`verify_command`, screenshot proof).
 
 `pr-review` is one reviewer with one job: is this PR correct? Projects also have other questions, such as "does the
 UI follow the design guide?" or "is the migration safe?", and today each one is a skill run by hand after the loop
@@ -11,7 +11,7 @@ stages run and in what order, so the loop reviews, fixes and re-reviews through 
 ## Relationship to P9
 
 The Codex-only reviewer and `reviewer = "claude"` rejection below describe the built tasks 1 and 2.
-[P9: Agent providers](P9-agent-providers.md) replaces that restriction with independently configured
+[P9: Agent providers](../archive/P9-agent-providers.md) replaces that restriction with independently configured
 compatible providers and models, shared validators and enforced read-only policy. It retains P6's rubric
 order, proof requirements, skips and round accounting; it does not claim the remaining loop tasks built.
 P9 defines the future config and compatibility alias; the examples below remain the current P6 format.

@@ -5,7 +5,7 @@ import Glibc
 #endif
 
 /// Starts the project's `[run]` command for one verifier turn and stops it when the turn ends
-/// (docs/plan/P16-run.md). It is the check's machinery (one `ProcessRunner` child, its streams merged, its whole
+/// (docs/archive/P16-run.md). It is the check's machinery (one `ProcessRunner` child, its streams merged, its whole
 /// process tree swept on every ending) with a ready check in front: the verifier is only started once the app is up.
 struct AppLauncher {
     /// What the app is told besides the allowlisted environment.

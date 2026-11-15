@@ -3,7 +3,7 @@ import Foundation
 /// How an evaluation (judge, review) is bounded, decided before anything is spawned. A provider with a hard dollar
 /// cap gets one; one without runs on its timeout alone, since choosing that provider is the consent, unless the config
 /// forbids it with `allow_unpriced = false`. The legacy Codex review has always run timeout-only and still does
-/// (docs/plan/P9-agent-providers.md, "Capabilities and permission policy"). A refusal names the key that forbade it.
+/// (docs/archive/P9-agent-providers.md, "Capabilities and permission policy"). A refusal names the key that forbade it.
 enum AgentSpendPolicy {
     /// - Parameters:
     ///   - cap: the dollar cap used when the provider can enforce one.
