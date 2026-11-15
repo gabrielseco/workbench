@@ -184,7 +184,8 @@ private final class Calls: @unchecked Sendable {
         let actions = TaskActions(
             inspect: TaskActions.core.inspect, approve: TaskActions.core.approve,
             run: { _, _, stop, _ in
-                await wait(while: { !stop.isRequested }, atMost: .seconds(30), every: .milliseconds(10))
+                let asked = await wait(while: { !stop.isRequested }, atMost: .seconds(30), every: .milliseconds(10))
+                guard asked else { return TaskRunResult(outcome: .failed, reason: "the stop was never requested") }
                 switchSeen.stop()
                 return TaskRunResult(outcome: .interrupted, reason: "stopped")
             })
