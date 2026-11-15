@@ -193,10 +193,10 @@ private func run(_ arguments: [String], in fixture: LegacyProject) async throws 
             let fixture = try await project(scenario.name)
             let now = try await run(["doctor"], in: fixture)
             // What later changes add to the text: problems and notes per agent, the approved line, the ship and plan
-            // agents.
+            // agents, the verifier's provider line.
             let kept = now.split(separator: "\n", omittingEmptySubsequences: false).filter {
                 !$0.hasPrefix("  problem:") && !$0.hasPrefix("  note:") && !$0.hasPrefix("approved:")
-                    && !$0.hasPrefix("agent ship:") && !$0.hasPrefix("agent plan:")
+                    && !$0.hasPrefix("agent ship:") && !$0.hasPrefix("agent plan:") && !$0.hasPrefix("  provider:")
             }
             // With the root `model` removed, the hint names [agents.run], and the verifier no longer inherits the
             // coding model.
