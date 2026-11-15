@@ -163,7 +163,7 @@ final class RecordingNotifier: Notifier, @unchecked Sendable {
         let (a, b) = (try await failed("alpha", at: 100), try await failed("beta", at: 200))
         await look(center, "one", tasks: [])
         let looking = Task { await look(center, "one", tasks: [a, b]) }
-        await waitFor { slow.waiting != 0 }
+        try await waitFor { slow.waiting != 0 }
         // The system is still asking: the person opens another project.
         await look(center, "two", tasks: [])
         slow.release()

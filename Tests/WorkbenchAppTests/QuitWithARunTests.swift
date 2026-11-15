@@ -45,7 +45,7 @@ private final class Calls: @unchecked Sendable {
         #expect(await store.open(fixture.root))
         #expect(store.liveWork == nil)
         let drafting = Task { await store.draftGoal(request: "x") }
-        await waitFor { store.drafting }
+        try await waitFor { store.drafting }
         #expect(store.liveWork == "a goal draft is still going.", "a draft alone is confirmed too")
         await store.stopWorkAndWait()
         #expect(!store.drafting)
@@ -70,7 +70,7 @@ private final class Calls: @unchecked Sendable {
         let store = ProjectStore(preferences: MemoryPreferences(projectPath: nil), actions: actions)
         #expect(await store.open(fixture.root))
         let drafting = Task { await store.draftGoal(request: "x") }
-        await waitFor { store.drafting }
+        try await waitFor { store.drafting }
         await store.runAgain()
         let began = ContinuousClock.now
         await store.stopWorkAndWait(timeout: .milliseconds(400))
@@ -184,7 +184,7 @@ private final class Calls: @unchecked Sendable {
         let actions = TaskActions(
             inspect: TaskActions.core.inspect, approve: TaskActions.core.approve,
             run: { _, _, stop, _ in
-                await waitFor { stop.isRequested }
+                await wait(while: { !stop.isRequested }, atMost: .seconds(30), every: .milliseconds(10))
                 switchSeen.stop()
                 return TaskRunResult(outcome: .interrupted, reason: "stopped")
             })
@@ -194,7 +194,7 @@ private final class Calls: @unchecked Sendable {
         let started = Task {
             await tasks.beginRun(fixture.project, entry, threadRunGoing: false)
         }
-        await waitFor { tasks.runningTask != nil }
+        try await waitFor { tasks.runningTask != nil }
         await tasks.stopAndWait(timeout: .seconds(3))
         await started.value
         #expect(switchSeen.stopped == 1 && tasks.runningTask == nil)

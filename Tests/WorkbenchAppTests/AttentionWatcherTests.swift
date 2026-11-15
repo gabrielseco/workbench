@@ -163,7 +163,7 @@ import WorkbenchCore
         let looks = Counter()
         center.startPolling { looks.increment() }
         defer { center.stopPolling() }
-        await waitFor { looks.count >= 1 }
+        try await waitFor { looks.count >= 1 }
         try await Task.sleep(for: .milliseconds(50))
         let before = looks.count
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
