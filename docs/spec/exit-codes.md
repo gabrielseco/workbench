@@ -115,7 +115,7 @@ meanwhile. They are allowed while a thread is active; changing `agents.run` says
 |---|---|---|
 | 0 |  | approved |
 | 2 | `invalid-goal` | the goal file does not parse or is incomplete |
-| 6 | `refused` | a proof names a command a run cannot execute (`--allow-unrunnable-proofs` goes ahead) |
+| 6 | `refused` | a proof names a command a run cannot execute (`--allow-unrunnable-proofs` goes ahead); under `permissions = "auto"` only a command `[tools] denied` covers, or no `Bash` tool, counts |
 | 7 | `not-found` | no such thread |
 
 ### `run`

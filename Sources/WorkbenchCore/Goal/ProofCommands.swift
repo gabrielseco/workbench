@@ -38,6 +38,8 @@ public enum ProofCommands {
         let denied = config.tools.denied.compactMap(bashPattern)
         let known = Set((allowed + denied).compactMap { $0.literal.split(separator: " ").first.map(String.init) })
         let bashAvailable = config.tools.available.contains("Bash")
+        // Under `permissions = "auto"` claude's classifier decides what is safe, so `allowed` does not gate a
+        // command; `denied` and a missing Bash tool still do.
 
         var out: [ProofWarning] = []
         var seen = Set<String>()
@@ -66,7 +68,7 @@ public enum ProofCommands {
                         ProofWarning(
                             criterion: criterion.id, command: span,
                             reason: "it is denied by `Bash(\(hit.display))`", suggestion: nil))
-                } else if !allowed.contains(where: { $0.matches(span) }) {
+                } else if config.permissions != .auto, !allowed.contains(where: { $0.matches(span) }) {
                     out.append(
                         ProofWarning(
                             criterion: criterion.id, command: span, reason: "it is not in [tools] allowed",

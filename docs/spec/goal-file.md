@@ -292,7 +292,8 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   tool set already names or a path under `./`, `scripts/` or `bin/`, so code identifiers in backticks are
   left alone. A span joined with `&&`, `||`, `;` or `|` is judged part by part. `check_command` counts as
   allowed. The config is not in the hash, so `run` and `send-back` check again against the config as it is
-  then and refuse before a turn is spent. `--allow-unrunnable-proofs` (on `goal approve`, `run`,
+  then and refuse before a turn is spent. Under `permissions = "auto"` only a denied command and a missing
+  `Bash` count: `allowed` does not gate a command there, since `claude`'s classifier decides. `--allow-unrunnable-proofs` (on `goal approve`, `run`,
   `send-back`) goes ahead anyway, for a proof that only looks like a command; `approve` then prints the
   warnings.
 - **Errors are collected**, in file order, with line numbers, so one pass fixes the file.
