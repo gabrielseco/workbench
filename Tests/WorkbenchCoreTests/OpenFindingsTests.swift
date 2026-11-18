@@ -44,6 +44,13 @@ import Testing
         #expect(found.summary == "Judge: 1 criterion not met, 1 concern")
     }
 
+    @Test func aLongConcernIsKeptWhole() {
+        let long = String(repeating: "word ", count: 60).trimmingCharacters(in: .whitespaces)
+        let judge: JSONValue = ["ok": true, "criteria": [], "concerns": [.string(long)]]
+        let found = derive(base(judge: judge))
+        #expect(found.items[0].title == "Concern: " + long)
+    }
+
     @Test func aLongCriterionAndAllItsEvidenceAreKeptWhole() {
         let long = String(repeating: "word ", count: 60)
         let judge: JSONValue = [
