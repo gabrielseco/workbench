@@ -87,7 +87,7 @@ import WorkbenchCore
         ("check-passed", .check(result: "passed", command: "swift test", durationMs: 48_000)),
         ("check-failed", .check(result: "failed", command: "swift test", durationMs: 12_000)),
         ("judge-agrees", .judge(ok: true, criteria: 5, unmet: 0, concerns: 0)),
-        ("judge-disagrees", .judge(ok: true, criteria: 5, unmet: 2, concerns: 1)),
+        ("judge-disagrees", .judge(ok: true, criteria: 5, unmet: 2, concerns: 1, unmetIds: ["c2", "c4"])),
         ("judge-silent", .judge(ok: false, criteria: 0, unmet: 0, concerns: 0)),
         ("verify-passed", .verify(ok: true, reason: nil, proofs: ["list-states.png", "feed.png"])),
         ("verify-failed", .verify(ok: false, reason: "the app did not start", proofs: [])),

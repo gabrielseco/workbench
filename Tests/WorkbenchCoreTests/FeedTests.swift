@@ -103,7 +103,7 @@ import Testing
             ev(6, 1, .verifierEnded, ["ok": true, "files": [["name": "shot.png", "bytes": 1, "sha256": "h"]]]),
         ])
         #expect(items.contains { $0.kind == .check(result: "passed", command: "swift test", durationMs: 5000) })
-        #expect(items.contains { $0.kind == .judge(ok: true, criteria: 2, unmet: 1, concerns: 1) })
+        #expect(items.contains { $0.kind == .judge(ok: true, criteria: 2, unmet: 1, concerns: 1, unmetIds: ["c2"]) })
         #expect(items.contains { $0.kind == .verify(ok: true, reason: nil, proofs: ["shot.png"]) })
     }
 

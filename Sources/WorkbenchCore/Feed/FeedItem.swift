@@ -46,7 +46,8 @@ public struct FeedItem: Sendable, Equatable, Identifiable {
         /// A call the run refused, with what it was for when the turn recorded it.
         case denied(tool: String, input: String?)
         case check(result: String, command: String?, durationMs: Int?)
-        case judge(ok: Bool, criteria: Int, unmet: Int, concerns: Int)
+        /// `unmetIds` are the ids of the criteria the judge found not met, in the judge's order (the event has no criterion text).
+        case judge(ok: Bool, criteria: Int, unmet: Int, concerns: Int, unmetIds: [String] = [])
         case verify(ok: Bool, reason: String?, proofs: [String])
         case decision(String)
         case pullRequest(number: Int?, url: String?)
