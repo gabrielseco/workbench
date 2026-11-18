@@ -31,7 +31,9 @@ private func goal(proofs: [String], outOfScope: String = "- Nothing else.") thro
     ).goal
 }
 
-private func config(allowed: [String], denied: [String] = [], check: String? = nil, bash: Bool = true, auto: Bool = false) throws -> Config {
+private func config(
+    allowed: [String], denied: [String] = [], check: String? = nil, bash: Bool = true, auto: Bool = false
+) throws -> Config {
     let list = { (items: [String]) in items.map { "\"\($0)\"" }.joined(separator: ", ") }
     return try Config.parse(
         """
