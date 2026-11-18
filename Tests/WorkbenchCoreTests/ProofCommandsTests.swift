@@ -31,11 +31,14 @@ private func goal(proofs: [String], outOfScope: String = "- Nothing else.") thro
     ).goal
 }
 
-private func config(allowed: [String], denied: [String] = [], check: String? = nil, bash: Bool = true) throws -> Config {
+private func config(
+    allowed: [String], denied: [String] = [], check: String? = nil, bash: Bool = true, auto: Bool = false
+) throws -> Config {
     let list = { (items: [String]) in items.map { "\"\($0)\"" }.joined(separator: ", ") }
     return try Config.parse(
         """
         \(check.map { "check_command = \"\($0)\"" } ?? "")
+        \(auto ? "permissions = \"auto\"" : "")
         [tools]
         available = [\(bash ? "\"Read\", \"Bash\"" : "\"Read\"")]
         allowed = [\(list(allowed))]
@@ -112,6 +115,28 @@ private func config(allowed: [String], denied: [String] = [], check: String? = n
         let g = try goal(proofs: ["`mix format` then `mix format` again"])
         let c = try config(allowed: ["Bash(mix test:*)"])
         #expect(ProofCommands.warnings(goal: g, config: c).count == 1)
+    }
+}
+
+@Suite(.processGate) struct ProofCommandsAutoTests {
+    @Test func autoModeDoesNotRequireAnAllowlistEntryForACommand() throws {
+        let g = try goal(proofs: ["`./scripts/seed.sh` runs", "`mix api.contract.check` passes"])
+        let narrow = ["Read", "Bash(mix test:*)"]
+        #expect(try ProofCommands.warnings(goal: g, config: config(allowed: narrow, auto: true)).isEmpty)
+        #expect(try ProofCommands.warnings(goal: g, config: config(allowed: narrow)).count == 2)
+    }
+
+    @Test func autoModeStillRefusesADeniedCommand() throws {
+        let g = try goal(proofs: ["`git push origin main` happened"])
+        let c = try config(allowed: ["Read"], denied: ["Bash(git push:*)"], auto: true)
+        let warning = try #require(ProofCommands.warnings(goal: g, config: c).first)
+        #expect(warning.reason.contains("denied by `Bash(git push:*)`"))
+    }
+
+    @Test func autoModeStillReportsAMissingBashTool() throws {
+        let g = try goal(proofs: ["`./scripts/seed.sh` runs"])
+        let c = try config(allowed: ["Read"], bash: false, auto: true)
+        #expect(ProofCommands.warnings(goal: g, config: c).first?.reason == "the Bash tool is not available")
     }
 }
 
