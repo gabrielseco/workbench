@@ -80,7 +80,7 @@ public struct OpenFindings: Sendable, Equatable {
                         detail: entry.evidence.isEmpty ? nil : entry.evidence.map(Judge.oneLine).joined(separator: "\n")))
             }
             for (index, concern) in verdict.concerns.enumerated() {
-                let title = "Concern: \(ReviewReport.oneLine(concern))"
+                let title = "Concern: \(Judge.oneLine(concern))"
                 items.append(Item(id: "concern:\(index)", source: judgeSource, title: title, detail: nil))
             }
         }
