@@ -14,7 +14,7 @@
 # and no pull request). Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in gate clear every candidate: "the dry run holds TUR and takes ROU and PAN", "the real run
 # takes ROU and PAN and leaves TUR", "task held lists TUR with the gate's reason" and "a held unit is not offered or asked about
-# again" must FAIL.
+# again" must FAIL (the rest of the run then differs, so later steps fail too).
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight

@@ -25,6 +25,7 @@ inputs: [countries.txt, fixtures/]      # files or directories the agent reads, 
 pending: .workbench/tasks/bump/pending.sh
 fix: pr                         # report (default) | pr
 # history: 3                    # with `fix: report` only (a pr task is refused it): the data blocks of the last 3 reports, 1 to 6
+# gate: inline                  # `fix: pr` only: an agent decides which units can be done now, before the worker runs (see "The gate")
 budget: 3.00                    # USD per run
 ---
 Bump the next countries. Follow the skill exactly.
@@ -45,6 +46,10 @@ Bump the next countries. Follow the skill exactly.
 | `labels` | 1 to 5 labels put on the pull request a `fix: pr` run opens, `labels: [seed-preview, bot]`. Each name is 1 to 50 of letters, digits and `- _ . : /`, with no duplicates (case is ignored, as GitHub does); anything else is refused at load with the line and key. Part of the approval only when the file sets it, so editing them makes the task STALE. Only a task run adds them; `workbench ship` of an ordinary thread adds none |
 | `mcp_tools` | `fix: pr` or `fix: report`: MCP tools the task's runs may call, `mcp_tools: mcp__linear__get_issue, mcp__linear__save_issue` (1 to 10, each exactly `mcp__<server>__<tool>`: no wildcard, no duplicate; anything else is refused at load with the line and key). The servers are **never** defined here: each name's server must have a `[mcp_servers.<name>]` table in `.workbench/config.toml`, or the task is refused at load (`task list` shows PROBLEM, `workbench doctor` warns). Part of the approval only when the file sets it, so editing the list makes the task STALE. See "MCP tools" below |
 | `history` | `fix: report` only, 1 to 6 (anything else is refused at load with the line and key; `fix: pr` is refused too, see "Report history"): the last N reports of this task from before today are read from `reports/` and added to the prompt, newest first, each as its final `data` block fenced as untrusted data. Part of the approval only when the file sets it, so editing it makes the task STALE. See "Report history" below |
+| `gate` | `fix: pr` only, and it needs `pending`: `inline` (the criteria are the body's `## Gate` section, which the worker does not see) or a file in the project (up to 16 KiB). Before the worker's thread exists, a read-only agent decides for each candidate unit whether it can be done now; the ones it finds gated are held. See "The gate". Without the key nothing about a run differs. Part of the approval: the criteria (or the file's bytes) and the keys below, only when the file sets them |
+| `gate_allow` | with `gate`: 1 to 10 commands the gate's agent may run besides reading, each an exact pattern of words with an optional final `:*` (`git -C /repo show:*`). Nothing else runs: the agent has `Read`, `Grep`, `Glob` and exactly these, so a command not listed is denied. Claude only. Anything a shell would read as more (`;`, `|`, `$`, a backtick, a `*` that is not the last) is refused at load |
+| `gate_rounds` | with `gate`: how many times the gate may ask about further units to fill the batch, 1 to 5, default 3 |
+| `run_budget` | with `gate`: USD for the whole run, the gate's turns and the worker's together. The gate may spend `run_budget` less the worker's `budget` (or the project's default budget); without it, `gate_rounds` turns of up to $1.00 each. `budget` stays what it was: the cap for one worker turn |
 | `budget` | USD cap for the coding turns of one run. The read-only turn that describes the change for the pull request has its own allowance of up to $0.50 on top, so a `fix: pr` task costs at most `budget` + $0.50 |
 
 A task with neither `at` nor `every` is run by hand only.
@@ -135,6 +140,61 @@ pull request, failed with its thread left for `workbench ship`, or died), as `gh
 is missing or unreachable) the unit stays out: work done twice costs more than waiting a day. Only units a past run recorded are checked; a pull
 request opened by hand for a unit is not seen. A `report` run does the work of no unit.
 
+## The gate
+
+A `fix: pr` task whose batch must not contain every unit the script lists (the use case: a country whose new version depends on a backend
+setting that is not enabled yet, which a script cannot always tell) can name a **gate**. It runs before anything is taken: after the
+pending script and the pull request states, and before the thread, the goal and the worker exist, so a run that dies in it has taken no unit.
+
+```markdown
+---
+fix: pr
+batch: 5
+pending: .workbench/tasks/bump/pending.sh
+gate: inline
+gate_allow: [git -C /home/me/tiger show:*, git -C /home/me/tiger log:*]
+---
+Bump the next countries.
+
+## Gate
+A country is gated when the version it moves to depends on a backend setting that is not enabled. Read the changelog of every
+version between the pinned one and the target and check each setting it names. Quote what you found.
+```
+
+1. The candidates are the units the script lists, in the order a run would take them (held units and units with an open or merged pull
+   request are already out). Units the gate cleared in an earlier run need no new answer: their id carries the version they were cleared at.
+2. The gate asks one **read-only agent** (`[agents.judge]`, one turn of up to $1.00 and 10 minutes) about the next `batch` less what is
+   already clear. It runs in a checkout of the base as committed, with `Read`, `Grep`, `Glob` and exactly the `gate_allow` commands. It
+   answers one JSON object, `{"units": [{"id", "verdict": "clear" | "gated", "reason"}], "concerns": []}`, with every candidate exactly
+   once; a `gated` verdict needs a reason, which quotes what it found. An answer that is not that, or a turn that fails, ends the run
+   `failed` ("the gate could not decide") before any thread: nothing from that answer is recorded.
+3. Each verdict is recorded at once: a gated unit is **held** (`task.unit.held`), a clear one **cleared** (`task.unit.cleared`), then
+   the round (`task.run.gate`). A held unit is never offered again: `PendingUnits.select` leaves it out before anything else, so a unit
+   is never both held and pending.
+4. The gate asks again about the next candidates until the batch is full of clear units, the list has none left, `gate_rounds` rounds
+   have been asked, or the budget (`run_budget`) leaves no room for another turn. The worker then runs on the clear units alone, in the
+   script's order, and the run goes on as in "A run" from step 7. Fewer than `batch` clear units is a smaller batch, not a failure.
+5. When no unit is clear the run ends `nothing-to-do` (exit 0) with a reason that names each held unit and what the gate found, and no
+   thread or pull request is made.
+
+**Held units.** Workbench holds a unit by its id; the pending script's id carries the version (`ARE-v7`), so a newer version is a new id.
+`workbench task held <name>` lists them with the pending script's title (which names the versions), the reason and the time. A held unit
+leaves the list when a person releases it (`task held <name> --release <unit>`: the next run offers it and asks the gate again) or when the
+pending script stops listing its id (`task.unit.released`, `why: no longer listed`, written at the start of the next gate). They are
+events in the run log, derived on read, like everything else about a task; there is no second file.
+
+**What the gate may do.** It cannot change a file, push, or open anything: its tools are the read ones plus the commands in `gate_allow`,
+which `task approve` prints (a command listed there runs with nobody watching, so list read-only ones). `permissions = "auto"` does not
+widen it: the project's classifier is not consulted. The unit titles come from the pending script and are fenced as data; the criteria
+are the approved task file's text and are not.
+
+**`task run <name> --dry`** on a task with a gate runs the gate and prints each verdict (`gate: TUR held: <reason>`), then ends `reported`
+with `dry run (gate): would take ROU, PAN; held: TUR (<reason>)`. It starts no thread and records no verdict: the log gets only the
+run's start and end, as for any dry run, and the gate's turns cost what they cost.
+
+**Not built:** a judge after the worker's turn that undoes dropped units and refills the batch; the gate decides before the work is done.
+The held list is not in the app.
+
 ## In the app
 
 The Tasks screen of the app (a `Thread | Tasks` switch on the rail) shows the same data and no other: a task's `task list` line
@@ -190,7 +250,7 @@ run log), and a newer failure of the same task is a new reason. `Pause notificat
 ## Approval
 
 `workbench task approve <name>` records `task.approved` with a hash of what runs unattended: the settings, the instructions (whitespace
-normalised), the bytes of the pending script and of the `include` file (the skill is instructions the agent follows with nobody watching). Editing any of them revokes the approval (`task list` says STALE) until it is approved
+normalised), the bytes of the pending script and of the `include` file (the skill is instructions the agent follows with nobody watching), and, for a task with a `gate`, its criteria (inline or the file's bytes), `gate_allow`, `gate_rounds` and `run_budget`. Editing any of them revokes the approval (`task list` says STALE) until it is approved
 again. The input files are data and are not in the hash, so a new list needs no approval. Nothing runs unapproved.
 
 ## Disabling and archiving
@@ -227,6 +287,10 @@ its own kinds. A run that cannot start a thread still has a place to say how it 
 | `task.run.started` | a run is about to begin, before anything is spent | `trigger` (`tick`, `manual`) |
 | `task.run.thread` | the run created its thread, before the turn starts | `thread`, `units`, `hash` (the approval the run ran under) |
 | `task.run.ended` | always, exactly once per start | `outcome`, `reason`, `units`, `thread` when one was started, `report` (the report file, relative to the project root) for a `fix: report` run |
+| `task.unit.held` | the gate held a unit back (see "The gate"); written before the run's thread exists | `unit`, `title`, `reason`, `round` |
+| `task.unit.cleared` | the gate found a unit can be done now | `unit`, `title`, `reason`, `round` |
+| `task.run.gate` | one round of the gate, after its `task.unit.*` events | `round`, `candidates`, `clear`, `gated` (each `unit` and `reason`), `concerns`, `cost_usd` when known |
+| `task.unit.released` | a person released a held unit (`task held --release`), or the pending script stopped listing a held or cleared one | `unit`, `why` (`person` or `no longer listed`) |
 | `task.disabled`, `task.enabled` | `task disable`, `task enable` (only when the state changes) | none |
 | `task.archived`, `task.restored` | `task archive`, `task restore` (only when the state changes) | none |
 
@@ -255,6 +319,10 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
   the outcome, the full reason, the units, the thread and pull request, then from the thread the setup result, the check result with the last
   lines of its output when it failed, how many tool calls were denied, and the agent's last message. `--all` is one line per run. A task that
   never ran says so; exit 7 for no such task. Read only.
+- `workbench task held <name> [--release <unit>]`: the units the task's gate holds back, one per unit with its title, when it was held and
+  the reason it found (`the gate holds nothing` when none). `--release <unit>` forgets one, so the next run offers it and asks the gate
+  again. Read only without `--release`. Exit 6 while a run of the task holds its log, for a damaged log, and for a unit that is not held;
+  7 for no such task. `task list` says `held: N` under a task that holds some.
 - `workbench task new <name> [--include <file>] [--input <path>]...`: starts a task. It writes `.workbench/tasks/<name>/task.md` with every
   setting present and explained (the schedule keys commented out, `fix: report`, `batch: 1`, `pending` pointing at the stub) and an executable
   `pending.sh` that prints `[]`, and runs no agent. `--include` and `--input` fill those lines; a path that does not exist yet is a note.
@@ -271,7 +339,7 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
   (a restore says enabled or disabled). Exit 6 while a run of it holds its log, 7 for no such task.
   `task list` leaves archived tasks out and ends with `N archived: workbench task list --archived`; `--archived` lists only them.
 
-- `workbench task run <name> [--dry]`: runs the task now (below); `--dry` makes a `fix: report` task list what it would take instead of asking the agent. Exit 0 when it did its work or found none (`pr-opened`, `needs-you`, `reported`,
+- `workbench task run <name> [--dry]`: runs the task now (below); `--dry` makes a `fix: report` task list what it would take instead of asking the agent, and a `fix: pr` task with a `gate` run only the gate (see "The gate"). Exit 0 when it did its work or found none (`pr-opened`, `needs-you`, `reported`,
   `nothing-pending`, `nothing-to-do`), 6 when it was skipped or refused (`skipped-project-busy`, `skipped-already-running`,
   `skipped-disabled` for an archived task, `stale-approval`; nothing was changed), 5 over budget, 1 failed, 7 no such task.
 - `workbench task tick [--all]`: runs the tasks whose next due time has passed, the earliest first, one after the other, and prints how each ended. A
@@ -305,7 +373,7 @@ In order, ending the run with an outcome at the first step that stops it:
    apart; any other failure is not. When it still cannot answer, or the list is as long as the limit and may be cut, the run is
    skipped saying why (gh missing, timed out, gh's first line of complaint with credentials removed, and "looks like no internet connection"
    when it reads that way), never started on a guess.
-5. The `pending` script, the pull request states, the batch: no units left is `nothing-pending`; a script that fails is `failed` with its reason.
+5. The `pending` script, the pull request states, the batch: no units left is `nothing-pending` (the reason says how many the gate holds); a script that fails is `failed` with its reason. With a `gate` the batch is then chosen by the gate (see "The gate"), which can end the run `nothing-to-do` or `failed` here.
 6. `fix: report` stops here: it asks the read-only agent (above), saves the answer under `reports/` and records `reported` with the first line of the report and where it is, or `failed` with why (no config, the agent is not installed or ran out of budget, an empty answer). `task run <name> --dry` instead lists the units it would take and starts no agent: `reported` with `dry run: would take ...`.
 7. `fix: pr` needs `check_command` in the project's config, else `failed: no check configured`: work is not accepted unchecked. The goal is a
    quick goal built from the instructions, the included skill, the input files and the units (data fenced with a boundary the content cannot
