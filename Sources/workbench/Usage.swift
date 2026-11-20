@@ -160,8 +160,8 @@ let workbenchUsage = """
       task held <name> [--release <unit>]
                                  the units the task's gate holds back (a task with a gate: in task.md), each with the
                                  reason it found; --release forgets one so the next run offers it and asks the gate
-                                 again; a unit the pending script stops listing is released by itself. exit 6 while a
-                                 run is going or for a unit that is not held, 7 for no such task
+                                 again; a unit the pending script stops listing is released by itself. --release exits 6
+                                 while a run is going or for a unit that is not held; 7 for no such task
       task disable|enable <name> turn the task's schedule off or on: a tick does not run a disabled task (a run by hand
                                  still can); enabling counts the schedule from then, so missed slots are not made up
       task archive|restore <name>

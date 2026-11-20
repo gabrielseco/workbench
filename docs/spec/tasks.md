@@ -321,8 +321,8 @@ run once at a time: a second run finds it taken and ends as `skipped-already-run
   never ran says so; exit 7 for no such task. Read only.
 - `workbench task held <name> [--release <unit>]`: the units the task's gate holds back, one per unit with its title, when it was held and
   the reason it found (`the gate holds nothing` when none). `--release <unit>` forgets one, so the next run offers it and asks the gate
-  again. Read only without `--release`. Exit 6 while a run of the task holds its log, for a damaged log, and for a unit that is not held;
-  7 for no such task. `task list` says `held: N` under a task that holds some.
+  again. Reading takes no lock and is allowed while a run goes. `--release` is exit 6 while a run of the task holds its log and for a unit
+  that is not held; any command is exit 6 for a damaged log and 7 for no such task. `task list` says `held: N` under a task that holds some.
 - `workbench task new <name> [--include <file>] [--input <path>]...`: starts a task. It writes `.workbench/tasks/<name>/task.md` with every
   setting present and explained (the schedule keys commented out, `fix: report`, `batch: 1`, `pending` pointing at the stub) and an executable
   `pending.sh` that prints `[]`, and runs no agent. `--include` and `--input` fill those lines; a path that does not exist yet is a note.

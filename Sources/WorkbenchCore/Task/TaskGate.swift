@@ -132,7 +132,10 @@ public enum TaskGateCheck {
         guard missing.isEmpty else {
             throw TaskGateError.invalidOutput("no verdict for " + missing.map { "[\($0)]" }.joined(separator: ", "))
         }
-        let concerns = ((json["concerns"] as? [String]) ?? []).map(Judge.oneLine).filter { !$0.isEmpty }
+        guard let list = json["concerns"] as? [String] else {
+            throw TaskGateError.invalidOutput("no list of strings 'concerns'")
+        }
+        let concerns = list.map(Judge.oneLine).filter { !$0.isEmpty }
             .prefix(TaskGate.maxConcerns).map { String($0.prefix(TaskGate.maxReason)) }
         let order = Dictionary(uniqueKeysWithValues: units.enumerated().map { ($1.id, $0) })
         verdicts.sort { (order[$0.id] ?? 0) < (order[$1.id] ?? 0) }

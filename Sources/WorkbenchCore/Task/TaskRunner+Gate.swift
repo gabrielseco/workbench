@@ -18,8 +18,44 @@ extension TaskRunner {
         case budget = "the run's budget leaves no room for another gate turn"
     }
 
-    func runGate(
-        name: String, loaded: LoadedTask, queue: [TaskUnit], listed: Set<String>, history: TaskHistory, writer: EventLogWriter
+    /// A unit the script no longer names (its version moved on, or its work was merged) is forgotten: a held unit leaves the list. Done
+    /// before anything else about the run, so it happens when no candidate is left too. Nil when it worked, else why not.
+    func forgetUnlisted(history: TaskHistory, listed: Set<String>, writer: EventLogWriter) async -> String? {
+        for id in history.held.map(\.id) + history.cleared.sorted() where !listed.contains(id) {
+            do { try await writer.append(.taskUnitReleased, data: ["unit": .string(id), "why": "no longer listed"]) } catch {
+                return "the gate could not record that \(id) is no longer listed: \(error)"
+            }
+        }
+        return nil
+    }
+
+    /// The units this run takes: the script's, less what is done or held, at most `batch`; with a gate, the ones it clears. A task with no
+    /// script has one unit, the run itself, and no batching.
+    func chooseUnits(name: String, loaded: LoadedTask, history: TaskHistory, writer: EventLogWriter) async -> GateEnd {
+        let task = loaded.definition
+        guard let script = task.pending else { return .proceed([]) }
+        let all: [TaskUnit]
+        do {
+            all = try await PendingUnits.run(script: script, project: project, environment: environment)
+        } catch { return .end(fail("\(error)")) }
+        if task.gate != nil, !dryRun {
+            let listed = Set(all.map(\.id))
+            if let why = await forgetUnlisted(history: history, listed: listed, writer: writer) { return .end(fail(why)) }
+        }
+        let states = await TaskPullRequests.states(units: history.unitsWithThreads, gh: gh, project: project)
+        // With a gate every candidate is in play, and the gate fills the batch from them; the held ones are already out.
+        let batch = task.gate == nil ? task.batch : all.count
+        let units = PendingUnits.select(units: all, history: history, pullRequests: states, batch: batch)
+        if units.isEmpty {
+            let held = history.held.isEmpty ? "" : " (\(history.held.count) held by the gate: workbench task held \(name))"
+            return .end(TaskRunResult(outcome: .nothingPending, reason: "\(all.count) unit(s) listed, none left to do\(held)"))
+        }
+        guard task.gate != nil else { return .proceed(units) }
+        return await runGate(name: name, loaded: loaded, queue: units, history: history, writer: writer)
+    }
+
+    private func runGate(
+        name: String, loaded: LoadedTask, queue: [TaskUnit], history: TaskHistory, writer: EventLogWriter
     ) async -> GateEnd {
         let task = loaded.definition
         guard let gate = task.gate else { return .proceed(Array(queue.prefix(task.batch))) }
@@ -31,9 +67,18 @@ extension TaskRunner {
         if !dryRun, config.checkCommand == nil {
             return .end(fail("no check configured: set check_command in .workbench/config.toml, so the work is checked"))
         }
+        // Only Claude can be held to a tool list and a dollar cap: Codex's read-only sandbox may run any command and has no cap.
         let agent = config.resolvedJudgeAgent(modelFlag: nil)
-        if !gate.allow.isEmpty, agent.provider != .claude {
-            return .end(fail("gate_allow needs Claude as the gate's agent ([agents.judge] is \(agent.provider))"))
+        if agent.provider != .claude {
+            let why = "[agents.judge] is \(agent.provider), which cannot be held to a tool list"
+            return .end(fail("a gate needs Claude as its agent: \(why)"))
+        }
+        // The worker's turn is capped by `budget` alone, so a run budget below it could not be kept.
+        let workerBudget = task.budgetUSD ?? config.defaultBudgetUSD
+        if let cap = task.runBudgetUSD, cap < workerBudget {
+            let spend = NSDecimalNumber(decimal: workerBudget).stringValue
+            let capText = NSDecimalNumber(decimal: cap).stringValue
+            return .end(fail("run_budget \(capText) is less than the worker's budget \(spend): raise it"))
         }
         let environment = runOptions.parentEnvironment
         let chosen: any ReadOnlyAgent
@@ -59,18 +104,7 @@ extension TaskRunner {
             return .end(fail("the base \(baseName) cannot be read: \(error)"))
         }
 
-        // A unit the script no longer names (its version moved on, or its work was merged) is forgotten: a held unit leaves the list.
-        if !dryRun {
-            let forgotten = history.held.map(\.id) + history.cleared.sorted()
-            for id in forgotten where !listed.contains(id) {
-                do { try await writer.append(.taskUnitReleased, data: ["unit": .string(id), "why": "no longer listed"]) } catch {
-                    return .end(fail("the gate could not record that \(id) is no longer listed: \(error)"))
-                }
-            }
-        }
-
         // What the whole run may spend, less what the worker's turns may: the rest is the gate's.
-        let workerBudget = task.budgetUSD ?? config.defaultBudgetUSD
         let allowance =
             task.runBudgetUSD.map { max($0 - workerBudget, 0) } ?? TaskGate.turnBudgetUSD * Decimal(gate.effectiveRounds)
         var spent: Decimal = 0
