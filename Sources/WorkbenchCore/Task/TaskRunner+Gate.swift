@@ -92,21 +92,19 @@ extension TaskRunner {
             }
         }
         if let why = chosen.unavailable() { return .end(fail(why)) }
-        if let why = await freshBase(task) { return .end(fail(why)) }
-
-        // The gate reads the base as committed, in a checkout of its own, as a report turn does.
-        let service = ThreadService(project: project, git: git)
-        let baseName: String
-        if let base = task.base { baseName = base } else { baseName = await service.defaultBase() }
         let manager = WorktreeManager(repoRoot: project.root, git: git)
         let commit: String
-        do { commit = try await manager.commit(of: baseName) } catch {
-            return .end(fail("the base \(baseName) cannot be read: \(error)"))
+        switch await gateCommit(task, manager: manager) {
+        case .success(let found): commit = found
+        case .failure(let why): return .end(fail(why.reason))
         }
 
         // What the whole run may spend, less what the worker's turns may: the rest is the gate's.
         let allowance =
             task.runBudgetUSD.map { max($0 - workerBudget, 0) } ?? TaskGate.turnBudgetUSD * Decimal(gate.effectiveRounds)
+        if allowance <= 0 {
+            return .end(fail("run_budget leaves nothing for the gate after the worker's budget: raise it"))
+        }
         var spent: Decimal = 0
         var clear: [TaskUnit] = []
         var held: [(unit: TaskUnit, reason: String)] = []
@@ -183,13 +181,35 @@ extension TaskRunner {
                     units: ids))
         }
         guard !clear.isEmpty else {
-            return .end(
-                TaskRunResult(
-                    outcome: .nothingToDo,
-                    reason: "the gate held every candidate it asked about: \(heldText)"
-                        + (stop == .full ? "" : "; it stopped because \(stop.rawValue)")))
+            let said = held.isEmpty ? "the gate cleared nothing" : "the gate held every candidate it asked about: \(heldText)"
+            let why = stop == .full ? "" : "; it stopped because \(stop.rawValue)"
+            return .end(TaskRunResult(outcome: .nothingToDo, reason: said + why))
         }
         return .proceed(clear)
+    }
+
+    struct GateRefusal: Error { var reason: String }
+
+    /// The commit the gate reads: the base as committed, as a report turn reads it, in a checkout of its own. A base on origin is fetched
+    /// first; a local one is brought up to date as the worker will before it cuts its worktree, so the gate reads what the worker starts
+    /// from (origin may still move in the minutes between).
+    private func gateCommit(_ task: TaskDefinition, manager: WorktreeManager) async -> Result<String, GateRefusal> {
+        if let why = await freshBase(task) { return .failure(GateRefusal(reason: why)) }
+        let baseName: String
+        if let base = task.base {
+            baseName = base
+        } else {
+            baseName = await ThreadService(project: project, git: git).defaultBase()
+        }
+        if task.base?.hasPrefix("origin/") != true {
+            do { try await manager.updateBaseFromOrigin(baseName) } catch {
+                let why = "the base \(baseName) could not be brought up to date for the gate: \(error)"
+                return .failure(GateRefusal(reason: why))
+            }
+        }
+        do { return .success(try await manager.commit(of: baseName)) } catch {
+            return .failure(GateRefusal(reason: "the base \(baseName) cannot be read: \(error)"))
+        }
     }
 
     struct GateAnswer {

@@ -163,6 +163,10 @@ version between the pinned one and the target and check each setting it names. Q
 
 1. The candidates are the units the script lists, in the order a run would take them (held units and units with an open or merged pull
    request are already out). Units the gate cleared in an earlier run need no new answer: their id carries the version they were cleared at.
+   The gate reads the base the worker will start from: an `origin/...` base is fetched first (as in `base`), any other is brought up to
+   date from origin the way the worker does before it cuts its worktree; origin can still move in the minutes between the two, and the
+   verdicts are kept for the id, not the commit. A `run_budget` below the worker's budget, or one that leaves the gate nothing, refuses
+   the run (`failed`), and so does a judge agent that is not Claude: only Claude can be held to a tool list.
 2. The gate asks one **read-only agent** (`[agents.judge]`, one turn of up to $1.00 and 10 minutes) about the next `batch` less what is
    already clear. It runs in a checkout of the base as committed, with `Read`, `Grep`, `Glob` and exactly the `gate_allow` commands. It
    answers one JSON object, `{"units": [{"id", "verdict": "clear" | "gated", "reason"}], "concerns": []}`, with every candidate exactly
