@@ -292,7 +292,8 @@ extension TaskRunner {
         let key = Plan.sha256(folder.standardizedFileURL.path).prefix(16)
         let scratch = TurnScratch(url: FileManager.default.temporaryDirectory.appendingPathComponent("workbench-gate-\(key)"))
         var request = ReadOnlyRequest(
-            prompt: TaskGateCheck.prompt(criteria: criteria, units: candidates), workingDirectory: checkout, model: agent.model,
+            prompt: TaskGateCheck.prompt(criteria: criteria, units: candidates, allowed: gate.allow),
+            workingDirectory: checkout, model: agent.model,
             budget: budget, timeout: TaskGate.timeout, reasoningEffort: agent.reasoningEffort, tools: .read, scratch: scratch,
             turn: "gate")
         request.bash = gate.allow

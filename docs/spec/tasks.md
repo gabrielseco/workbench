@@ -172,7 +172,9 @@ version between the pinned one and the target and check each setting it names. Q
    answers one JSON object, `{"units": [{"id", "verdict": "clear" | "gated" | "unknown", "reason"}], "concerns": []}`, with every candidate
    exactly once; a `gated` verdict needs a reason, which quotes what it found. `unknown` is for a unit it could not look at (a file it
    needed could not be read, a command was denied or failed) and needs a reason saying what failed; the agent is told never to say
-   `gated` or `clear` for what it could not check. An answer that is not that, or a turn that fails, ends the run
+   `gated` or `clear` for what it could not check. `concerns` left out is none; present, it must be a list of strings. The prompt names
+   the commands the agent has (`gate_allow`) and does not scrub paths from the criteria, which are the approved file's own text and
+   name the places to read. An answer that is not that, or a turn that fails, ends the run
    `failed` ("the gate could not decide") before any thread: nothing from that answer is recorded.
 3. Each verdict is recorded at once. An `unknown` unit is **not** recorded as a unit event, held or cleared: nothing is known of it, so
    a command that did not work can never become a lasting hold; it is skipped for this run (it does not fill the batch, so the gate asks

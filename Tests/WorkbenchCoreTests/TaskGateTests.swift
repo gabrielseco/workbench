@@ -130,9 +130,10 @@ func gateVerdict(_ entries: [(String, String, String?)], concerns: [String] = []
         }
         #expect(refused("not json")?.contains("not a JSON object") == true)
         #expect(refused("{\"concerns\": []}")?.contains("no list of units") == true)
-        let noConcerns =
-            "{\"units\": [{\"id\": \"ROU\", \"verdict\": \"clear\"}, {\"id\": \"TUR\", \"verdict\": \"clear\"}]}"
-        #expect(refused(noConcerns)?.contains("no list of strings 'concerns'") == true, "required, as the judge's")
+        let units = "{\"id\": \"ROU\", \"verdict\": \"clear\"}, {\"id\": \"TUR\", \"verdict\": \"clear\"}"
+        #expect(refused("{\"units\": [\(units)]}") == nil, "left out, concerns are none")
+        #expect(refused("{\"units\": [\(units)], \"concerns\": \"all fine\"}")?.contains("not a list of strings") == true)
+        #expect(refused("{\"units\": [\(units)], \"concerns\": [1]}")?.contains("not a list of strings") == true)
         #expect(refused(gateVerdict([("ROU", "clear", "ok")]))?.contains("no verdict for [TUR]") == true)
         let twice = gateVerdict([("ROU", "clear", "ok"), ("TUR", "clear", "ok"), ("ROU", "clear", "ok")])
         #expect(refused(twice)?.contains("twice") == true)
@@ -151,6 +152,16 @@ func gateVerdict(_ entries: [(String, String, String?)], concerns: [String] = []
         #expect(refused(bare)?.contains("unknown without a reason") == true)
         // A clear unit needs no reason.
         #expect(refused(gateVerdict([("ROU", "clear", nil), ("TUR", "clear", nil)])) == nil)
+    }
+
+    @Test func thePromptKeepsTheCriteriaPathsAndNamesTheCommandsTheAgentHas() {
+        // The criteria name where to read (a path on this machine); stripping it left the agent with `<path>` and nothing to run.
+        let named = "Read `git -C /Users/me/remote/tiger show origin/master:<file>`; see ~/notes and .workbench/x."
+        let allowed = ["git -C /Users/me/remote/tiger show:*", "curl -s https://example.com/config"]
+        let text = TaskGateCheck.prompt(criteria: named, units: gateUnits("ROU"), allowed: allowed)
+        #expect(text.contains(named) && !text.contains("<path>"))
+        for command in allowed { #expect(text.contains("`\(command)`")) }
+        #expect(TaskGateCheck.prompt(criteria: named, units: gateUnits("ROU")).contains("only read files"))
     }
 
     @Test func aCandidateTitleCannotStartASectionOrLeaveItsFence() {
