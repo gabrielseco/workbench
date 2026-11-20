@@ -9,7 +9,7 @@ public enum TaskApproval {
     /// Made from what the task means, not how the file is laid out: the settings, the instructions with their
     /// whitespace normalised, and the script's bytes. Reordering keys, a blank line or a trailing space does not revoke
     /// an approval; any change to a setting, a word of the instructions or the script does.
-    public static func hash(task: TaskDefinition, pendingScript: Data?, include: Data? = nil) -> String {
+    public static func hash(task: TaskDefinition, pendingScript: Data?, include: Data? = nil, gate: Data? = nil) -> String {
         var fields = [
             version, "schedule=\(task.schedule?.summary ?? "none")", "batch=\(task.batch)", "fix=\(task.fix.rawValue)",
             "budget=\(task.budgetUSD.map { NSDecimalNumber(decimal: $0).stringValue } ?? "none")",
@@ -33,6 +33,18 @@ public enum TaskApproval {
         if !task.mcpTools.isEmpty { fields.append("mcp_tools=\(task.mcpTools.sorted().joined(separator: ","))") }
         // The earlier reports are part of what steers an unattended report, so how many of them it sees is approved.
         if let history = task.history { fields.append("history=\(history)") }
+        // The gate's criteria and the commands its agent may run steer what an unattended run does and does not take, so editing
+        // either (or the file the criteria are in) needs a new approval. Only when the task has a gate.
+        if let spec = task.gate {
+            switch spec.source {
+            case .inline: fields.append("gate=inline")
+            case .file(let path): fields.append("gate=\(path)")
+            }
+            if let gate { fields.append("gate_sha256=" + SHA256.hash(data: gate).map { String(format: "%02x", $0) }.joined()) }
+            fields.append("gate_allow=\(spec.allow.sorted().joined(separator: "\n"))")
+            if let rounds = spec.rounds { fields.append("gate_rounds=\(rounds)") }
+        }
+        if let budget = task.runBudgetUSD { fields.append("run_budget=\(NSDecimalNumber(decimal: budget).stringValue)") }
         fields += ["---", GoalHash.canonicalBody(task.instructions)]
         return SHA256.hash(data: Data(fields.joined(separator: "\n").utf8)).map { String(format: "%02x", $0) }.joined()
     }

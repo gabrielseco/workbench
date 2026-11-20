@@ -30,11 +30,14 @@ public enum TaskStateError: Error, Equatable, CustomStringConvertible {
     case notFound(String)
     /// A run of the task holds its log: the change waits until it ends.
     case running(String)
+    /// `task held --release` named a unit the gate does not hold.
+    case notHeld(String)
 
     public var description: String {
         switch self {
         case .notFound(let name): "no task '\(name)' (.workbench/tasks/\(name)/task.md)"
         case .running(let name): "a run of \(name) is going: try again when it has ended"
+        case .notHeld(let unit): "'\(unit)' is not held (workbench task held lists the held units)"
         }
     }
 }
@@ -112,5 +115,28 @@ extension TaskLibrary {
         }
         await writer.close()
         return try log.history()
+    }
+}
+
+extension TaskLibrary {
+    /// A person releases a held unit: it is offered to the next run again (and the gate will ask about it again). Refused while a run
+    /// holds the log and for a unit the gate does not hold.
+    public func release(
+        _ unit: String, of name: String, now: @escaping @Sendable () -> Date = { Date() }
+    ) async throws {
+        guard names().contains(name) else { throw TaskStateError.notFound(name) }
+        let log = TaskRunLog(project: project, name: name)
+        let writer: EventLogWriter
+        do { writer = try await log.openWriter(now: now) } catch EventLogError.alreadyOpen {
+            throw TaskStateError.running(name)
+        }
+        do {
+            guard try log.history().held.contains(where: { $0.id == unit }) else { throw TaskStateError.notHeld(unit) }
+            try await writer.append(.taskUnitReleased, data: ["unit": .string(unit), "why": "person"])
+        } catch {
+            await writer.close()
+            throw error
+        }
+        await writer.close()
     }
 }

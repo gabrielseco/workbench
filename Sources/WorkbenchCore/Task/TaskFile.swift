@@ -31,7 +31,7 @@ public struct TaskParseError: Error, Equatable, Sendable, CustomStringConvertibl
 public struct TaskDefinition: Sendable, Equatable {
     public static let knownKeys: Set<String> = [
         "at", "days", "every", "batch", "include", "inputs", "pending", "fix", "budget", "max_open", "timeout", "base", "labels",
-        "mcp_tools", "history",
+        "mcp_tools", "history", "gate", "gate_allow", "gate_rounds", "run_budget",
     ]
     /// How many earlier reports `history` may hand to a report turn.
     public static let maxHistory = 6
@@ -69,6 +69,12 @@ public struct TaskDefinition: Sendable, Equatable {
     /// How many earlier reports of this task a `fix: report` turn is shown (their `data` blocks), nil when the file sets none
     /// (nothing about the run differs and the approval does not mention it).
     public var history: Int?
+    /// The stage that decides, before the worker runs, which units can be done now. Nil when the file sets none: the run is as it
+    /// always was and the approval does not mention it.
+    public var gate: TaskGate?
+    /// USD for the whole run, the gate's turns and the worker's together; nil for the default (the worker's `budget` plus what
+    /// `gate_rounds` gate turns may spend). Only with `gate`.
+    public var runBudgetUSD: Decimal?
     public var instructions: String
     /// The file as read, line endings normalised: what the approval hash is made from.
     public let text: String
@@ -112,10 +118,9 @@ public struct TaskDefinition: Sendable, Equatable {
         let entries = front.entries
         func entry(_ key: String) -> FrontMatterLine? { entries.first { $0.key == key } }
 
-        let instructions = lines[(front.closing + 1)...].joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if instructions.isEmpty { add(front.closing + 1, "the task has no instructions below the front matter") }
-
+        let body = lines[(front.closing + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        if body.isEmpty { add(front.closing + 1, "the task has no instructions below the front matter") }
+        let (instructions, gateSection) = splitBody(body, gate: entry("gate"), line: front.closing + 1, add: add)
         var definition = TaskDefinition(
             name: name, schedule: nil, batch: 1, include: nil, inputs: [], pending: nil, fix: .report,
             budgetUSD: nil, maxOpen: nil, timeoutMin: nil, base: nil, instructions: instructions, text: text)
@@ -208,6 +213,10 @@ public struct TaskDefinition: Sendable, Equatable {
                 definition.inputs = items
             }
         }
+        definition.gate = gate(
+            entry("gate"), allow: entry("gate_allow"), rounds: entry("gate_rounds"), section: gateSection, fix: definition.fix,
+            add: add)
+        definition.runBudgetUSD = gateBudget(definition, entry: entry, add: add)
         if definition.fix == .update { updateProblems(definition, entry: entry, add: add) }
         guard problems.isEmpty else { throw TaskParseError(problems: problems.sorted { ($0.line ?? 0) < ($1.line ?? 0) }) }
         return definition
@@ -243,7 +252,7 @@ public struct TaskDefinition: Sendable, Equatable {
     }
 
     /// `[a, b]`, `a, b` or `"a"`: the items, trimmed, with surrounding quotes removed.
-    private static func list(_ value: String) -> [String] {
+    static func list(_ value: String) -> [String] {
         var inner = value.trimmingCharacters(in: .whitespaces)
         if inner.hasPrefix("["), inner.hasSuffix("]") { inner = String(inner.dropFirst().dropLast()) }
         return inner.split(separator: ",", omittingEmptySubsequences: false).map {

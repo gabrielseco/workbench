@@ -165,9 +165,20 @@ public struct TaskRunner: Sendable {
                 all = try await PendingUnits.run(script: script, project: project, environment: environment)
             } catch { return fail("\(error)") }
             let states = await TaskPullRequests.states(units: history.unitsWithThreads, gh: gh, project: project)
-            units = PendingUnits.select(units: all, history: history, pullRequests: states, batch: task.batch)
+            // With a gate every candidate is in play, and the gate fills the batch from them; the held ones are already out.
+            let batch = task.gate == nil ? task.batch : all.count
+            units = PendingUnits.select(units: all, history: history, pullRequests: states, batch: batch)
             if units.isEmpty {
-                return TaskRunResult(outcome: .nothingPending, reason: "\(all.count) unit(s) listed, none left to do")
+                let held = history.held.isEmpty ? "" : " (\(history.held.count) held by the gate: workbench task held \(name))"
+                return TaskRunResult(outcome: .nothingPending, reason: "\(all.count) unit(s) listed, none left to do\(held)")
+            }
+            if task.gate != nil {
+                let gated = await runGate(
+                    name: name, loaded: loaded, queue: units, listed: Set(all.map(\.id)), history: history, writer: writer)
+                switch gated {
+                case .proceed(let chosen): units = chosen
+                case .end(let result): return result
+                }
             }
         }
         let ids = units.map(\.id)

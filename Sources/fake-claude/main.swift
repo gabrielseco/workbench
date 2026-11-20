@@ -30,6 +30,9 @@ import Foundation
 //                         exits 1; error-result answers is_error without a reason; proof=<name> first writes that
 //                         file into $WORKBENCH_PROOF_DIR; detached=<pidfile> first leaves a `sleep` that outlives
 //                         this process, re-parented to launchd, with this process's working directory)
+//   answers=<dir>        with `--output-format json`: the n-th call of the test (counted in <dir>/count) answers with the text
+//                        of <dir>/<n>.txt, so a sequence of read-only turns (a gate, then a PR description) each get their own
+//                        answer; a missing file fails the call. `answer=` still answers when this is not set
 //   resolve=<path>        keep the first side of every conflict block in this file (relative to the working directory), as an
 //                         agent that resolves a merge in favour of the branch would
 //   write=<path>          add a line to this file (relative to the working directory) each run, so a turn leaves a diff
@@ -194,7 +197,16 @@ if argument(after: "--output-format", in: args) == "json" {
             ]) + "\n")
         exit(1)
     }
-    let text = d.string("answer").flatMap { try? String(contentsOfFile: $0, encoding: .utf8) } ?? "fake claude: \(prompt)"
+    var text = d.string("answer").flatMap { try? String(contentsOfFile: $0, encoding: .utf8) } ?? "fake claude: \(prompt)"
+    if let dir = d.string("answers") {
+        let counter = dir + "/count"
+        let n = ((try? String(contentsOfFile: counter, encoding: .utf8)).flatMap { Int($0) } ?? 0) + 1
+        try? String(n).write(toFile: counter, atomically: true, encoding: .utf8)
+        guard let next = try? String(contentsOfFile: dir + "/\(n).txt", encoding: .utf8) else {
+            fail("fake-claude: no answer \(n) in \(dir)", code: 70)
+        }
+        text = next
+    }
     write(
         json([
             "type": "result", "subtype": "success", "is_error": false, "result": text,

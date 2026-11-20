@@ -106,7 +106,7 @@ public enum PendingUnits {
         return units
     }
 
-    /// The units a run should take now: the script's order, minus what is already done, at most `batch`.
+    /// The units a run should take now: the script's order, minus what is already done and what the gate holds, at most `batch`.
     ///
     /// A unit is left out when its pull request is open or merged. A unit a past run opened a pull request for, whose
     /// state could not be found out (`gh` was unreachable), is left out too: doing the work twice is worse than
@@ -115,8 +115,11 @@ public enum PendingUnits {
         units: [TaskUnit], history: TaskHistory, pullRequests: [String: UnitPullRequest], batch: Int
     ) -> [TaskUnit] {
         let recorded = history.unitsWithThreads
+        let held = Set(history.held.map(\.id))
         let pending = units.filter { unit in
-            switch pullRequests[unit.id] {
+            // Held first, so a unit the gate holds is never also pending, whatever else is known about it.
+            if held.contains(unit.id) { return false }
+            return switch pullRequests[unit.id] {
             case .open, .merged: false
             case .closed: true
             case .absent: !history.openedUnits.contains(unit.id)

@@ -27,6 +27,9 @@ public struct ReadOnlyRequest: Sendable, Equatable {
     /// A report task's MCP tools: the turn loads their servers from the access file and may call exactly those, besides reading.
     /// Only with `.read` on Claude; the caller refuses any other agent.
     public var mcp: McpAccess?
+    /// A gate turn's commands, `git -C /path show:*`: it may run exactly these (as `Bash(<pattern>)`) besides reading. Only with
+    /// `.read` on Claude; the caller refuses any other agent. Empty: no `Bash` at all.
+    public var bash: [String] = []
 }
 
 /// What came back. `text` is set when the agent answered; `failure` says why it did not (never both).
@@ -125,8 +128,8 @@ public struct ClaudeReadOnlyAgent: ReadOnlyAgent {
             ? "`\(config.claudePath)` was not found" : nil
     }
 
-    /// The argv. No `--permission-mode` (the tool list is what makes it read-only), no `--resume`, no `Bash`,
-    /// `Edit` or `Write`. The prompt follows `--` because the tool flags are variadic.
+    /// The argv. No `--permission-mode` (the tool list is what makes it read-only), no `--resume`, no `Edit` or `Write`, and no
+    /// `Bash` except the exact patterns a gate turn names. The prompt follows `--` because the tool flags are variadic.
     public func arguments(for request: ReadOnlyRequest, sessionID given: UUID? = nil) -> [String] {
         let sessionID = given ?? request.sessionID
         if request.tools == .none {
@@ -152,8 +155,11 @@ public struct ClaudeReadOnlyAgent: ReadOnlyAgent {
         // A tool the project denies is never allowed here and is denied outright, as in a coding turn: the deny list wins.
         let denied = config.tools.denied
         let mcpTools = (request.mcp?.tools ?? []).filter { !denied.contains($0) }
-        args += ["--tools"] + Self.tools + ["--allowedTools"] + Self.tools + mcpTools
-        if request.mcp != nil, !denied.isEmpty { args += ["--disallowedTools"] + denied }
+        // `Bash` is in the tool set only for the patterns it is allowed: anything else it is asked to run is denied, not prompted.
+        let commands = request.bash.map { "Bash(\($0))" }
+        args += ["--tools"] + Self.tools + (commands.isEmpty ? [] : ["Bash"])
+        args += ["--allowedTools"] + Self.tools + commands + mcpTools
+        if request.mcp != nil || !commands.isEmpty, !denied.isEmpty { args += ["--disallowedTools"] + denied }
         args += ["--", request.prompt]
         return args
     }

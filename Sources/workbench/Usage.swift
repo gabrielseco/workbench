@@ -157,6 +157,11 @@ let workbenchUsage = """
                                  the next due time and how the last run ended; --pending also runs each approved
                                  task's pending script and says how many units are left (an edited one is not run);
                                  archived tasks are left out, --archived lists only them
+      task held <name> [--release <unit>]
+                                 the units the task's gate holds back (a task with a gate: in task.md), each with the
+                                 reason it found; --release forgets one so the next run offers it and asks the gate
+                                 again; a unit the pending script stops listing is released by itself. exit 6 while a
+                                 run is going or for a unit that is not held, 7 for no such task
       task disable|enable <name> turn the task's schedule off or on: a tick does not run a disabled task (a run by hand
                                  still can); enabling counts the schedule from then, so missed slots are not made up
       task archive|restore <name>
@@ -165,7 +170,8 @@ let workbenchUsage = """
                                  exit 6 while a run of it is going, 7 for no such task
       task run <name> [--dry]    run the task now: take its next units; fix: pr does the work in a thread, accepts it when
                                  the check passed and opens the pull request; fix: report asks a read-only agent and keeps
-                                 its answer under the task's reports/ (--dry only lists the units, no agent);
+                                 its answer under the task's reports/ (--dry only lists the units, no agent; a task with a
+                                 gate: --dry runs only the gate and prints each verdict, no thread);
                                  exit 6 when skipped (a thread is active, the approval is stale, the task is archived,
                                  or max_open of its pull requests are still open), 1 failed, 5 over budget
       task tick [--all]          run the tasks whose time has come, one after the other; what a timer calls; --all does it

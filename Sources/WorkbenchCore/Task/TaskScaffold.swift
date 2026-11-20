@@ -133,6 +133,10 @@ public enum TaskScaffold {
             # labels: [bot, bump]   # 1 to 5 labels for the pull request a pr task opens; one that fails is only noted
             # history: 3            # a report task sees the data block of its last 3 earlier reports, 1 to 6
             # mcp_tools: mcp__linear__get_issue   # MCP tools this task may call, unattended (see docs/spec/tasks.md)
+            # gate: inline          # a pr task: an agent decides which units can be done now (criteria: "## Gate", or a file)
+            # gate_allow: git -C ../x show:*   # commands the gate agent may run besides reading, each exact (1 to 10)
+            # gate_rounds: 3        # how often the gate may ask about more units to fill the batch, 1 to 5
+            # run_budget: 15.00     # USD for the whole run, the gate's turns and the worker's (with a gate only)
             ---
             \(placeholder): say what each run should do, as you would to a colleague. If a skill is included, say to follow it.
             Delete this line when you have.

@@ -10,6 +10,16 @@ extension EventKind {
     public static let taskRunThread: EventKind = "task.run.thread"
     /// The run ended, whatever came of it; exactly one per `task.run.started`: `outcome`, `reason`, `units`, `thread`.
     public static let taskRunEnded: EventKind = "task.run.ended"
+    /// One round of the task's gate, before any thread exists: `round`, `candidates`, `clear`, `gated` (each `unit` and `reason`),
+    /// `concerns`, `cost_usd`. Written after the round's `task.unit.*` events.
+    public static let taskRunGate: EventKind = "task.run.gate"
+    /// The gate held a unit back: `unit`, `title`, `reason`, `round`. Until `task.unit.released` (or a `task.unit.cleared` for the same
+    /// id) it is left out of what the run takes.
+    public static let taskUnitHeld: EventKind = "task.unit.held"
+    /// The gate found a unit can be done now: `unit`, `title`, `reason`. Kept so a later run does not ask again about the same id.
+    public static let taskUnitCleared: EventKind = "task.unit.cleared"
+    /// A held or cleared unit was forgotten: `unit`, `why` (`person`, or `no longer listed` when the pending script stopped naming it).
+    public static let taskUnitReleased: EventKind = "task.unit.released"
     /// A person turned the task's schedule off: a tick no longer runs it, until `task.enabled`. A run by hand still can.
     public static let taskDisabled: EventKind = "task.disabled"
     /// The schedule is on again, counted from this moment.
@@ -75,6 +85,10 @@ public struct TaskHistory: Sendable, Equatable {
     public var archived = false
     /// The last time the schedule was turned back on (enabled or restored): the slots missed while it was off are not made up.
     public var resumedAt: Date?
+    /// The units the gate holds back, oldest first: `task.unit.held` until a later `task.unit.released` or `task.unit.cleared` for the id.
+    public var held: [HeldUnit] = []
+    /// The units the gate found clear and no one has forgotten.
+    public var cleared: Set<String> = []
 
     public var isScheduled: Bool { enabled && !archived }
 
@@ -162,6 +176,22 @@ public struct TaskHistory: Sendable, Equatable {
                 let units = event.data["units"]?.arrayItems?.compactMap(\.stringValue) ?? []
                 if !units.isEmpty { runs[runs.count - 1].units = units }
                 if let thread = event.data["thread"]?.stringValue { runs[runs.count - 1].thread = thread }
+            case .taskUnitHeld:
+                guard let id = event.data["unit"]?.stringValue else { continue }
+                held.removeAll { $0.id == id }
+                cleared.remove(id)
+                held.append(
+                    HeldUnit(
+                        id: id, title: event.data["title"]?.stringValue ?? id,
+                        reason: event.data["reason"]?.stringValue ?? "", since: event.date))
+            case .taskUnitCleared:
+                guard let id = event.data["unit"]?.stringValue else { continue }
+                held.removeAll { $0.id == id }
+                cleared.insert(id)
+            case .taskUnitReleased:
+                guard let id = event.data["unit"]?.stringValue else { continue }
+                held.removeAll { $0.id == id }
+                cleared.remove(id)
             case .taskDisabled:
                 enabled = false
             case .taskEnabled:
