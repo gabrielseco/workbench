@@ -100,6 +100,6 @@ import Testing
     @Test func aJudgeThatDisagreesIsARowNotAHiddenOne() {
         let judged = ev(4, 1, .judgeRan, ["ok": true, "criteria": [["met": true], ["met": false]], "concerns": ["x"]])
         let items = feed([created, ev(2, 1, .turnStarted), ev(3, 1, .turnEnded, ["result": "succeeded"]), judged])
-        #expect(items.contains { $0.kind == .judge(ok: true, criteria: 2, unmet: 1, concerns: 1) })
+        #expect(items.contains { $0.kind == .judge(ok: true, criteria: 2, unmet: 1, concerns: 1, unmetIds: ["?"]) })
     }
 }

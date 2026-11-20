@@ -162,10 +162,11 @@ extension Feed {
             guard event.data["ok"] == true, case .array(let entries)? = event.data["criteria"] else {
                 return .judge(ok: false, criteria: 0, unmet: 0, concerns: 0)
             }
-            let unmet = entries.filter { $0["met"] != true }.count
+            let unmetIds = entries.filter { $0["met"] != true }.map { short($0["id"]?.stringValue ?? "?") }
+            let unmet = unmetIds.count
             var concerns = 0
             if case .array(let list)? = event.data["concerns"] { concerns = list.count }
-            return .judge(ok: true, criteria: entries.count, unmet: unmet, concerns: concerns)
+            return .judge(ok: true, criteria: entries.count, unmet: unmet, concerns: concerns, unmetIds: unmetIds)
         }
 
         private func verify(_ event: Event) -> FeedItem.Kind {

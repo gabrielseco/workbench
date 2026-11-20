@@ -44,8 +44,8 @@ struct FeedRow: View {
             FeedLine(
                 symbol: "hand.raised.fill", tint: Theme.amber, title: "Refused \(tool)", detail: input, mono: true, inline: true)
         case .check(let result, let command, let durationMs): CheckRow(result: result, command: command, durationMs: durationMs)
-        case .judge(let ok, let criteria, let unmet, let concerns):
-            JudgeRow(ok: ok, criteria: criteria, unmet: unmet, concerns: concerns)
+        case .judge(let ok, let criteria, let unmet, let concerns, let unmetIds):
+            JudgeRow(ok: ok, criteria: criteria, unmet: unmet, concerns: concerns, unmetIds: unmetIds)
         case .verify(let ok, let reason, let proofs): VerifyRow(ok: ok, reason: reason, proofs: proofs, shots: shots)
         case .plan(let tasks): PlanRow(tasks: tasks)
         case .decision(let text):
@@ -367,6 +367,7 @@ struct JudgeRow: View {
     var criteria: Int
     var unmet: Int
     var concerns: Int
+    var unmetIds: [String] = []
 
     var body: some View {
         if !ok {
@@ -378,8 +379,14 @@ struct JudgeRow: View {
         } else {
             FeedLine(
                 .warning,
-                title: "Judge: \(criteria - unmet) of \(criteria) criteria met", detail: concernText)
+                title: "Judge: \(criteria - unmet) of \(criteria) criteria met", detail: unmetText)
         }
+    }
+
+    /// Which criteria were not met, then the concern count: the row is all that is left to read once the work is accepted.
+    private var unmetText: String? {
+        let missing = unmetIds.isEmpty ? nil : "not met: " + unmetIds.joined(separator: ", ")
+        return [missing, concernText].compactMap { $0 }.joined(separator: " · ")
     }
 
     private var concernText: String? { concerns > 0 ? "\(concerns) \(concerns == 1 ? "concern" : "concerns")" : nil }
