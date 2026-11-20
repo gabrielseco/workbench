@@ -3,7 +3,8 @@ import WorkbenchCore
 
 extension Commands {
     private static let taskUsage =
-        "usage: workbench task list | task log <name> | task new <name> | task edit <name> | task approve <name>"
+        "usage: workbench task list | task log <name> | task held <name> | task new <name> | task edit <name>"
+        + " | task approve <name>"
         + " | task disable|enable|archive|restore <name> | task run <name> | task tick | task timer install|status|remove"
 
     /// `task list` shows the project's scheduled tasks; `task approve <name>` lets one run unattended; `task run <name>` runs
@@ -23,6 +24,13 @@ extension Commands {
             }
             try a.requireEmpty()
             try await taskChange(name, change)
+        case "held":
+            let release = try a.value("--release")
+            guard let name = a.positional() else {
+                throw CLIError.usage("usage: workbench task held <name> [--release <unit>]")
+            }
+            try a.requireEmpty()
+            try await taskHeld(name, release: release)
         case "new":
             let include = try a.value("--include")
             var inputs: [String] = []
@@ -236,6 +244,9 @@ extension Commands {
             if !summary.mcpTools.isEmpty {
                 out("    mcp: may call \(summary.mcpTools.joined(separator: ", ")) (each one a capability for an unattended run)")
             }
+            if summary.held > 0 {
+                out("    held: \(summary.held) by the gate, left out of every run (workbench task held \(name))")
+            }
             printWhy(summary)
         }
         if !archived {
@@ -250,6 +261,42 @@ extension Commands {
         if let outcome = summary.lastOutcome, !fine.contains(outcome), let reason = summary.lastReason {
             out("    why: " + TaskExplanation.clean(reason, limit: 240))
         }
+    }
+
+    /// `task held <name> [--release <unit>]`: the units the task's gate holds back, each with what it found, or one released so the next
+    /// run offers it (and asks the gate about it) again.
+    private static func taskHeld(_ name: String, release: String?) async throws {
+        let ctx = try await Context.load()
+        let library = TaskLibrary(project: ctx.project)
+        guard library.names().contains(name) else {
+            throw CLIError.notFound("no task '\(name)' (.workbench/tasks/\(name)/task.md)")
+        }
+        if let release {
+            do { try await library.release(release, of: name) } catch let error as TaskStateError {
+                if case .notFound = error { throw CLIError.notFound("\(error)") }
+                throw CLIError.refused("\(error)")
+            } catch let error as EventLogError {
+                throw CLIError.refused("the task's run log is damaged: \(error)")
+            }
+            out("\(name): released \(release): the next run offers it again, and the gate asks about it again")
+            return
+        }
+        let history: TaskHistory
+        do { history = try TaskRunLog(project: ctx.project, name: name).history() } catch {
+            throw CLIError.refused("the task's run log is damaged: \(error)")
+        }
+        guard !history.held.isEmpty else {
+            out("\(name): the gate holds nothing")
+            return
+        }
+        let format = DateFormatter()
+        format.dateFormat = "yyyy-MM-dd HH:mm"
+        out("\(name): \(history.held.count) held by the gate (left out of every run)")
+        for unit in history.held {
+            out("  \(unit.id)  \(TaskExplanation.clean(unit.title, limit: 120))  held \(format.string(from: unit.since))")
+            out("      \(TaskExplanation.clean(unit.reason, limit: TaskGate.maxReason))")
+        }
+        out("release: workbench task held \(name) --release <unit>   (a unit the script stops listing is released by itself)")
     }
 
     private static func taskLog(_ name: String, all: Bool) async throws {
@@ -331,6 +378,13 @@ extension Commands {
                 "each listed tool is a capability for an unattended run: a read tool and a write tool are two entries."
                     + (loaded.definition.fix == .report
                         ? " fix: report can change no file, but a listed tool that writes still writes." : ""))
+        }
+        if let gate = loaded.definition.gate {
+            out(
+                "gate: before each run's thread an agent reads the project (read-only) and may run only: "
+                    + (gate.allow.isEmpty ? "nothing besides reading" : gate.allow.joined(separator: ", "))
+                    + ". Units it finds gated are held and never reach the worker; "
+                    + "a command listed here runs with nobody watching.")
         }
         if loaded.definition.fix == .update {
             out(

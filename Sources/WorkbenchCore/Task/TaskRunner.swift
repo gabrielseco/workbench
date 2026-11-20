@@ -158,17 +158,10 @@ public struct TaskRunner: Sendable {
         // A task that opens pull requests waits for review once it has `max_open` of them open: they would pile up and conflict.
         if task.fix == .pr, let skip = await tooManyOpen(task, history: history) { return skip }
 
-        var units: [TaskUnit] = []
-        if let script = task.pending {
-            let all: [TaskUnit]
-            do {
-                all = try await PendingUnits.run(script: script, project: project, environment: environment)
-            } catch { return fail("\(error)") }
-            let states = await TaskPullRequests.states(units: history.unitsWithThreads, gh: gh, project: project)
-            units = PendingUnits.select(units: all, history: history, pullRequests: states, batch: task.batch)
-            if units.isEmpty {
-                return TaskRunResult(outcome: .nothingPending, reason: "\(all.count) unit(s) listed, none left to do")
-            }
+        let units: [TaskUnit]
+        switch await chooseUnits(name: name, loaded: loaded, history: history, writer: writer) {
+        case .proceed(let chosen): units = chosen
+        case .end(let result): return result
         }
         let ids = units.map(\.id)
 

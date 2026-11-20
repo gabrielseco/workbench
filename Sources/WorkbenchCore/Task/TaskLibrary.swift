@@ -6,6 +6,8 @@ public struct LoadedTask: Sendable {
     public var pendingScript: Data?
     /// The skill text that goes into the prompt.
     public var includeText: Data?
+    /// The gate's criteria, from the task's `## Gate` section or the file `gate:` names.
+    public var gateText: Data?
     /// What approval binds to: the settings, the instructions, the script and the included skill.
     public var hash: String
 }
@@ -18,6 +20,8 @@ public struct TaskSummary: Sendable, Equatable {
     public var schedule: String?
     public var fix: TaskFix?
     public var mcpTools: [String] = []
+    /// How many units the gate holds back now (`task held`).
+    public var held = 0
     public var approval: TaskApproval.State
     public var nextDue: Date?
     public var lastOutcome: TaskOutcome?
@@ -67,9 +71,15 @@ public struct TaskLibrary: Sendable {
         try Self.requireMcpServers(definition, project: project)
         let script = try definition.pending.map { try files.read($0, limit: TaskFiles.maxScriptBytes) }
         let include = try definition.include.map { try files.read($0, limit: TaskFiles.maxIncludeBytes) }
+        var gate: Data?
+        switch definition.gate?.source {
+        case .inline(let text)?: gate = Data(text.utf8)
+        case .file(let path)?: gate = try files.read(path, limit: TaskFiles.maxIncludeBytes)
+        case nil: break
+        }
         return LoadedTask(
-            definition: definition, pendingScript: script, includeText: include,
-            hash: TaskApproval.hash(task: definition, pendingScript: script, include: include))
+            definition: definition, pendingScript: script, includeText: include, gateText: gate,
+            hash: TaskApproval.hash(task: definition, pendingScript: script, include: include, gate: gate))
     }
 
     /// A task naming MCP tools is refused when its servers are not defined in the project's config: the task file never defines one.
@@ -126,19 +136,20 @@ public struct TaskLibrary: Sendable {
                 name: name, problem: "the run log is damaged: \(error)", schedule: nil, fix: nil, approval: .never,
                 nextDue: nil, lastOutcome: nil, lastRun: nil, lastReason: nil)
         }
+        let held = history.held.count
         do {
             let loaded = try load(name)
             let base = history.isScheduled ? history.scheduleBase : nil
             return TaskSummary(
                 name: name, problem: nil, schedule: loaded.definition.schedule?.summary, fix: loaded.definition.fix,
-                mcpTools: loaded.definition.mcpTools,
+                mcpTools: loaded.definition.mcpTools, held: held,
                 approval: TaskApproval.state(approvedHash: history.approvedHash, currentHash: loaded.hash),
                 nextDue: base.flatMap { loaded.definition.schedule?.nextDue(since: $0, calendar: calendar) },
                 lastOutcome: history.lastRun?.outcome, lastRun: history.lastRun?.started,
                 lastReason: history.lastRun?.reason, enabled: history.enabled, archived: history.archived)
         } catch {
             return TaskSummary(
-                name: name, problem: "\(error)", schedule: nil, fix: nil, approval: .never, nextDue: nil,
+                name: name, problem: "\(error)", schedule: nil, fix: nil, held: held, approval: .never, nextDue: nil,
                 lastOutcome: history.lastRun?.outcome, lastRun: history.lastRun?.started,
                 lastReason: history.lastRun?.reason, enabled: history.enabled, archived: history.archived)
         }
