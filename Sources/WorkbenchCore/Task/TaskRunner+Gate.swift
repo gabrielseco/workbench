@@ -106,19 +106,16 @@ extension TaskRunner {
             return .end(fail("run_budget leaves nothing for the gate after the worker's budget: raise it"))
         }
         var spent: Decimal = 0
-        var clear: [TaskUnit] = []
-        var held: [(unit: TaskUnit, reason: String)] = []
-        var decided = Set<String>()
+        var state = GateState()
         var round = 0
         var stop = GateStop.full
         while true {
             // Units cleared in an earlier run are not asked about again: their id carries the version they were cleared at.
-            for unit in queue where clear.count < task.batch && !decided.contains(unit.id) && history.cleared.contains(unit.id) {
-                clear.append(unit)
-                decided.insert(unit.id)
+            for unit in queue where state.clear.count < task.batch && !state.decided.contains(unit.id) {
+                if history.cleared.contains(unit.id) { state.add(clear: unit) }
             }
-            if clear.count >= task.batch { break }
-            let candidates = Array(queue.filter { !decided.contains($0.id) }.prefix(task.batch - clear.count))
+            if state.clear.count >= task.batch { break }
+            let candidates = Array(queue.filter { !state.decided.contains($0.id) }.prefix(task.batch - state.clear.count))
             if candidates.isEmpty { stop = .exhausted; break }
             if round >= gate.effectiveRounds { stop = .rounds; break }
             if allowance - spent <= 0 { stop = .budget; break }
@@ -133,59 +130,112 @@ extension TaskRunner {
             // A cost the agent did not report is taken as the most the turn could have cost.
             spent += asked.cost.map { Decimal($0) } ?? min(TaskGate.turnBudgetUSD, allowance - spent)
             let verdict = result.verdict
-            var clearIDs: [String] = []
-            var gatedList: [JSONValue] = []
-            for answer in verdict.units {
-                guard let unit = candidates.first(where: { $0.id == answer.id }) else { continue }
-                decided.insert(unit.id)
-                if answer.clear {
-                    clear.append(unit)
-                    clearIDs.append(unit.id)
-                    notice("gate: \(unit.id) clear: \(answer.reason)")
-                } else {
-                    held.append((unit, answer.reason))
-                    gatedList.append(.object(["unit": .string(unit.id), "reason": .string(answer.reason)]))
-                    notice("gate: \(unit.id) held: \(answer.reason)")
-                }
-            }
-            if dryRun { continue }
-            // The verdicts are on record before any thread exists: a unit is never both held and taken.
-            do {
-                for answer in verdict.units {
-                    guard let unit = candidates.first(where: { $0.id == answer.id }) else { continue }
-                    let fields: [String: JSONValue] = [
-                        "unit": .string(unit.id), "title": .string(unit.title), "reason": .string(answer.reason),
-                        "round": .int(round),
-                    ]
-                    try await writer.append(answer.clear ? .taskUnitCleared : .taskUnitHeld, data: .object(fields))
-                }
-                var record: [String: JSONValue] = [
-                    "round": .int(round), "candidates": .array(candidates.map { .string($0.id) }),
-                    "clear": .array(clearIDs.map { .string($0) }), "gated": .array(gatedList),
-                    "concerns": .array(verdict.concerns.map { .string($0) }),
-                ]
-                if let cost = asked.cost { record["cost_usd"] = .double(cost) }
-                try await writer.append(.taskRunGate, data: .object(record))
-            } catch {
-                return .end(fail("the gate's verdicts could not be recorded, so nothing was started: \(error)"))
+            if let why = await settle(
+                result.verdict, of: candidates, round: round, cost: asked.cost, into: &state, writer: writer) {
+                return .end(fail(why))
             }
         }
         if stop != .full { notice("gate stopped: \(stop.rawValue)") }
-        let ids = clear.map(\.id)
-        let heldText = held.map { "\($0.unit.id) (\($0.reason))" }.joined(separator: "; ")
+        return gateEnd(state, stop: stop)
+    }
+
+    private struct UnitEvent {
+        var kind: EventKind
+        var unit: TaskUnit
+        var reason: String
+    }
+
+    /// What one gate turn found, across the rounds of a run.
+    struct GateState {
+        var clear: [TaskUnit] = []
+        var held: [(unit: TaskUnit, reason: String)] = []
+        var unknown: [(unit: TaskUnit, reason: String)] = []
+        /// Units with a verdict this run, whatever it was: none is asked about twice.
+        var decided = Set<String>()
+
+        mutating func add(clear unit: TaskUnit) {
+            clear.append(unit)
+            decided.insert(unit.id)
+        }
+    }
+
+    /// Takes in one round's verdicts: says them, and (unless dry) records them before any thread exists, so a unit is never both held
+    /// and taken. An `unknown` verdict is said and put on the round's record but makes no unit event: nothing is known of the unit.
+    /// Returns why they could not be recorded, nil when they were.
+    private func settle(
+        _ verdict: TaskGateVerdict, of candidates: [TaskUnit], round: Int, cost: Double?, into state: inout GateState,
+        writer: EventLogWriter
+    ) async -> String? {
+        var clearIDs: [String] = []
+        var gated: [JSONValue] = []
+        var unknown: [JSONValue] = []
+        var events: [UnitEvent] = []
+        for answer in verdict.units {
+            guard let unit = candidates.first(where: { $0.id == answer.id }) else { continue }
+            state.decided.insert(unit.id)
+            let said = ["unit": JSONValue.string(unit.id), "reason": .string(answer.reason)]
+            switch answer.kind {
+            case .clear:
+                state.clear.append(unit)
+                clearIDs.append(unit.id)
+                events.append(UnitEvent(kind: .taskUnitCleared, unit: unit, reason: answer.reason))
+                notice("gate: \(unit.id) clear: \(answer.reason)")
+            case .gated:
+                state.held.append((unit, answer.reason))
+                gated.append(.object(said))
+                events.append(UnitEvent(kind: .taskUnitHeld, unit: unit, reason: answer.reason))
+                notice("gate: \(unit.id) held: \(answer.reason)")
+            case .unknown:
+                state.unknown.append((unit, answer.reason))
+                unknown.append(.object(said))
+                notice("gate: \(unit.id) could not be checked: \(answer.reason)")
+            }
+        }
+        if dryRun { return nil }
+        do {
+            for event in events {
+                let fields: [String: JSONValue] = [
+                    "unit": .string(event.unit.id), "title": .string(event.unit.title), "reason": .string(event.reason),
+                    "round": .int(round),
+                ]
+                try await writer.append(event.kind, data: .object(fields))
+            }
+            var record: [String: JSONValue] = [
+                "round": .int(round), "candidates": .array(candidates.map { .string($0.id) }),
+                "clear": .array(clearIDs.map { .string($0) }), "gated": .array(gated), "unknown": .array(unknown),
+                "concerns": .array(verdict.concerns.map { .string($0) }),
+            ]
+            if let cost { record["cost_usd"] = .double(cost) }
+            try await writer.append(.taskRunGate, data: .object(record))
+        } catch {
+            return "the gate's verdicts could not be recorded, so nothing was started: \(error)"
+        }
+        return nil
+    }
+
+    /// How the gate ends: the units the worker takes, or the run's end. A unit it could not check is never taken and never held; when
+    /// it is all that is left the run fails, so a command that did not work shows up as the problem it is.
+    private func gateEnd(_ state: GateState, stop: GateStop) -> GateEnd {
+        let ids = state.clear.map(\.id)
+        func text(_ list: [(unit: TaskUnit, reason: String)]) -> String {
+            list.map { "\($0.unit.id) (\($0.reason))" }.joined(separator: "; ")
+        }
         if dryRun {
-            let taking = ids.isEmpty ? "would take nothing" : "would take " + ids.joined(separator: ", ")
-            return .end(
-                TaskRunResult(
-                    outcome: .reported, reason: "dry run (gate): \(taking)" + (held.isEmpty ? "" : "; held: \(heldText)"),
-                    units: ids))
+            var said = "dry run (gate): " + (ids.isEmpty ? "would take nothing" : "would take " + ids.joined(separator: ", "))
+            if !state.held.isEmpty { said += "; held: \(text(state.held))" }
+            if !state.unknown.isEmpty { said += "; could not check: \(text(state.unknown))" }
+            return .end(TaskRunResult(outcome: .reported, reason: said, units: ids))
         }
-        guard !clear.isEmpty else {
-            let said = held.isEmpty ? "the gate cleared nothing" : "the gate held every candidate it asked about: \(heldText)"
-            let why = stop == .full ? "" : "; it stopped because \(stop.rawValue)"
-            return .end(TaskRunResult(outcome: .nothingToDo, reason: said + why))
+        if !state.clear.isEmpty { return .proceed(state.clear) }
+        let why = stop == .full ? "" : "; it stopped because \(stop.rawValue)"
+        if !state.unknown.isEmpty {
+            var said = "the gate could not check: \(text(state.unknown))"
+            if !state.held.isEmpty { said += "; and held: \(text(state.held))" }
+            return .end(fail(said + why, units: state.unknown.map(\.unit.id)))
         }
-        return .proceed(clear)
+        let held = "the gate held every candidate it asked about: \(text(state.held))"
+        let said = state.held.isEmpty ? "the gate cleared nothing" : held
+        return .end(TaskRunResult(outcome: .nothingToDo, reason: said + why))
     }
 
     struct GateRefusal: Error { var reason: String }

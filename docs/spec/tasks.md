@@ -169,17 +169,23 @@ version between the pinned one and the target and check each setting it names. Q
    the run (`failed`), and so does a judge agent that is not Claude: only Claude can be held to a tool list.
 2. The gate asks one **read-only agent** (`[agents.judge]`, one turn of up to $1.00 and 10 minutes) about the next `batch` less what is
    already clear. It runs in a checkout of the base as committed, with `Read`, `Grep`, `Glob` and exactly the `gate_allow` commands. It
-   answers one JSON object, `{"units": [{"id", "verdict": "clear" | "gated", "reason"}], "concerns": []}`, with every candidate exactly
-   once; a `gated` verdict needs a reason, which quotes what it found. An answer that is not that, or a turn that fails, ends the run
+   answers one JSON object, `{"units": [{"id", "verdict": "clear" | "gated" | "unknown", "reason"}], "concerns": []}`, with every candidate
+   exactly once; a `gated` verdict needs a reason, which quotes what it found. `unknown` is for a unit it could not look at (a file it
+   needed could not be read, a command was denied or failed) and needs a reason saying what failed; the agent is told never to say
+   `gated` or `clear` for what it could not check. An answer that is not that, or a turn that fails, ends the run
    `failed` ("the gate could not decide") before any thread: nothing from that answer is recorded.
-3. Each verdict is recorded at once: a gated unit is **held** (`task.unit.held`), a clear one **cleared** (`task.unit.cleared`), then
+3. Each verdict is recorded at once. An `unknown` unit is **not** recorded as a unit event, held or cleared: nothing is known of it, so
+   a command that did not work can never become a lasting hold; it is skipped for this run (it does not fill the batch, so the gate asks
+   about further candidates) and asked about again on the next one, and the round's record names it. Otherwise a gated unit is **held** (`task.unit.held`), a clear one **cleared** (`task.unit.cleared`), then
    the round (`task.run.gate`). A held unit is never offered again: `PendingUnits.select` leaves it out before anything else, so a unit
    is never both held and pending.
 4. The gate asks again about the next candidates until the batch is full of clear units, the list has none left, `gate_rounds` rounds
    have been asked, or the budget (`run_budget`) leaves no room for another turn. The worker then runs on the clear units alone, in the
    script's order, and the run goes on as in "A run" from step 7. Fewer than `batch` clear units is a smaller batch, not a failure.
 5. When no unit is clear the run ends `nothing-to-do` (exit 0) with a reason that names each held unit and what the gate found, and no
-   thread or pull request is made.
+   thread or pull request is made. When some candidate could not be checked and none is clear, it ends `failed` instead ("the gate could
+   not check: ..."): a command that does not work is a problem to look at, not a hold. The units it could not check go after the untried
+   ones next time, like any unit that failed.
 
 **Held units.** Workbench holds a unit by its id; the pending script's id carries the version (`ARE-v7`), so a newer version is a new id.
 `workbench task held <name>` lists them with the pending script's title (which names the versions), the reason and the time. A held unit
@@ -193,7 +199,7 @@ widen it: the project's classifier is not consulted. The unit titles come from t
 are the approved task file's text and are not.
 
 **`task run <name> --dry`** on a task with a gate runs the gate and prints each verdict (`gate: TUR held: <reason>`), then ends `reported`
-with `dry run (gate): would take ROU, PAN; held: TUR (<reason>)`. It starts no thread and records no verdict: the log gets only the
+with `dry run (gate): would take ROU, PAN; held: TUR (<reason>)`, and `; could not check: ...` for any unit it could not look at. It starts no thread and records no verdict: the log gets only the
 run's start and end, as for any dry run, and the gate's turns cost what they cost.
 
 **Not built:** a judge after the worker's turn that undoes dropped units and refills the batch; the gate decides before the work is done.
@@ -293,7 +299,7 @@ its own kinds. A run that cannot start a thread still has a place to say how it 
 | `task.run.ended` | always, exactly once per start | `outcome`, `reason`, `units`, `thread` when one was started, `report` (the report file, relative to the project root) for a `fix: report` run |
 | `task.unit.held` | the gate held a unit back (see "The gate"); written before the run's thread exists | `unit`, `title`, `reason`, `round` |
 | `task.unit.cleared` | the gate found a unit can be done now | `unit`, `title`, `reason`, `round` |
-| `task.run.gate` | one round of the gate, after its `task.unit.*` events | `round`, `candidates`, `clear`, `gated` (each `unit` and `reason`), `concerns`, `cost_usd` when known |
+| `task.run.gate` | one round of the gate, after its `task.unit.*` events | `round`, `candidates`, `clear`, `gated` and `unknown` (each `unit` and `reason`), `concerns`, `cost_usd` when known |
 | `task.unit.released` | a person released a held unit (`task held --release`), or the pending script stopped listing a held or cleared one | `unit`, `why` (`person` or `no longer listed`) |
 | `task.disabled`, `task.enabled` | `task disable`, `task enable` (only when the state changes) | none |
 | `task.archived`, `task.restored` | `task archive`, `task restore` (only when the state changes) | none |

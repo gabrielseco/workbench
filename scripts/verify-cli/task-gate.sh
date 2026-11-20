@@ -14,7 +14,9 @@
 # and no pull request). Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 makes the stand-in gate clear every candidate: "the dry run holds TUR and takes ROU and PAN", "the real run
 # takes ROU and PAN and leaves TUR", "task held lists TUR with the gate's reason" and "a held unit is not offered or asked about
-# again" must FAIL (the rest of the run then differs, so later steps fail too).
+# again" must FAIL (the rest of the run then differs, so later steps fail too). A unit the gate says it could not check must be said so in
+# the dry run and, in a real run, fail it (exit 1) with nothing held ("a unit the gate could not check ..." and "a real run that could
+# check nothing fails ..."): the sabotage answers `gated` there, so both must FAIL.
 # The frame is in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -185,6 +187,20 @@ wbp "$SCRATCH/rel2.out" task held bump --release TUR
 check "releasing a unit that is not held is refused (exit 6)" "exit $RC: $(head -c 200 "$SCRATCH/rel2.out")" test "$RC" = 6
 wbp "$SCRATCH/rel3.out" task held nothing
 check "an unknown task is exit 7" "exit $RC: $(head -c 200 "$SCRATCH/rel3.out")" test "$RC" = 7
+
+# --- 4b. a unit the gate could not check is neither held nor cleared -------------------------------------
+
+UNKNOWN='{"units": [{"id": "TUR", "verdict": "unknown", "reason": "git show failed: origin/master does not exist here"}], "concerns": []}'
+[ "$SABOTAGE" = 1 ] && UNKNOWN='{"units": [{"id": "TUR", "verdict": "gated", "reason": "sabotaged: held for a command that failed"}], "concerns": []}'
+answers "$UNKNOWN"
+wbp "$SCRATCH/unk.out" task run bump --dry; shown "$SCRATCH/unk.out"
+check "a unit the gate could not check is said so and nothing is held for it" "exit $RC: $(head -c 400 "$SCRATCH/unk.out")" \
+    bash -c '[ "$1" = 0 ] && grep -q "could not be checked: git show failed" "$2" && grep -q "could not check: TUR" "$2"' _ "$RC" "$SCRATCH/unk.out"
+answers "$UNKNOWN"
+wbp "$SCRATCH/unkrun.out" task run bump; shown "$SCRATCH/unkrun.out"
+wbp "$SCRATCH/heldu.out" task held bump
+check "a real run that could check nothing fails, and holds nothing" "exit $RC: $(head -c 300 "$SCRATCH/unkrun.out")" \
+    bash -c 'grep -q "^bump: failed" "$1" && grep -q "the gate could not check: TUR" "$1" && grep -q "the gate holds nothing" "$2"' _ "$SCRATCH/unkrun.out" "$SCRATCH/heldu.out"
 
 # --- 5. an answer that is not usable, and a gate that holds everything -----------------------------------
 
