@@ -36,8 +36,10 @@ goal() { # <id> <title> [push_to] [request]
     [ -n "${3:-}" ] && { base="origin/$3"; push=$'\npush_to: '"$3"; }
     printf -- '---\nid: %s\ntitle: %s\nstatus: draft\nbase: %s%s\nbudget_usd: 1.00\nturn_timeout_min: 10\n---\n\n## Request\n\n%s\n\n## Criteria\n\n- [c1] It works.\n  - proof: a test\n- [c2] It is tested.\n  - proof: a test\n\n## Out of scope\n\n- Nothing.\n' "$1" "$2" "$base" "$push" "${4:-Do it.}"
 }
-ev() { # <seq> <turn> <kind> <data-json>
-    printf '{"v":1,"seq":%s,"ts":"2026-01-01T00:00:%02d.000Z","turn":%s,"kind":"%s","data":%s}\n' "$1" "$1" "$2" "$3" "${4:-\{\}}"
+ev() { # <seq> <turn> <kind> [data-json]
+    local data=${4:-}
+    [ -n "$data" ] || data='{}'
+    printf '{"v":1,"seq":%s,"ts":"2026-01-01T00:00:%02d.000Z","turn":%s,"kind":"%s","data":%s}\n' "$1" "$1" "$2" "$3" "$data"
 }
 ROOT_T=g-2026-01-01-rp-1
 FOLLOW=g-2026-01-01-rp-1-review-1
