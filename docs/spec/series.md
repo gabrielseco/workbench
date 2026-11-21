@@ -1,8 +1,8 @@
 # Series
 
 A series is an ordered list of goals to run one after another, in one project or several (P27, [plan](../plan/P27-series.md)).
-This page is what is built: the file, its checks, `series list|show|approve` and the read-only state of each step (`series status`).
-Running a series (starting steps, the budget, stacked pull requests after a merge) is later tasks of the plan.
+This page is what is built: the file, its checks, `series list|show|approve`, the state of each step (`series status`) and running a
+series (`series run`). Rebasing a stack after a parent merges and the app view are later tasks of the plan.
 
 ```
 .workbench/series/invoice-shortcut/
@@ -68,9 +68,10 @@ rest of `.workbench/`.
 | `series list` | each series with its step count and `approved`, `STALE` or `not approved`; one that does not load shows `PROBLEM` and why |
 | `series show <name>` | the steps as they will run: project, goal, where each starts, what it waits for, `env` |
 | `series status <name>` | where each step is and which steps could start now (below). Read only; asks `gh` for the checks |
+| `series run <name>` | runs the approved series (below) |
 | `series approve <name>` | records the approval and prints the steps. Starts nothing, creates no thread |
 
-Exit codes: 0, 2 usage, 6 the series is not valid, 7 no such series.
+Exit codes: 0, 2 usage, 6 the series is not valid or not approved, 7 no such series; for `series run` also 1 stopped and 14 a step waits.
 
 ## Where a step is
 
@@ -87,3 +88,29 @@ is stored but the thread name.
 
 A step is ready when it is `pending` and every step in its `after` is `clean`; **nothing is ready while any step is `STOPPED`**.
 `status` prints the states, then `stopped at step N` or `ready to start: step …`.
+
+## Running a series
+
+`series run <name>` is a foreground loop that refuses a series that is not approved (or STALE). Each round it reads the states, then:
+
+1. **stopped anywhere:** it ends (exit 1) naming the step and why; nothing new starts.
+2. **every step clean:** it ends (exit 0).
+3. **a step is ready** (pending, every `after` clean): it runs that step, one at a time, then goes back to 1. Steps in different
+   projects still run one after the other.
+4. **nothing is ready and nothing is stopped:** a step waits for something that is not the driver's to do (checks still running, a
+   review that asked for fixes, a thread that has not opened its pull request): it ends (exit 14) naming it.
+
+A step runs the same commands a person would, each as a child `workbench` process in the step's project, with the step's `env`
+(`step:N` resolved to `origin/<the branch of step N's pull request>`): `goal new <series>-<N> --from <goal file>` (with
+`--after <step's parent thread>` for `base: after N`, or `--base <branch>`), `goal approve`, `run`, `accept -m "chore: <title>" --yes`,
+and `ship --yes --watch --review-loop`. The thread is recorded in `steps.jsonl` as soon as `goal new` prints it. So the review loop,
+the timeouts and every budget are the ones those commands have, and each thread's goal keeps its own `budget_usd`.
+
+- **Stop rule:** the first command that exits non-zero ends the series. While the thread has no pull request the reason is written
+  to `steps.jsonl` and `status` shows STOPPED; once one is open its own state is read. Nothing is retried. Fix the step with the usual
+  commands (`next`, `send-back`, `accept`, `ship`); when it reads clean, `series run` continues from the next step.
+- **Series budget:** before a step starts, what the steps' threads have cost (their logs' `cost_usd`; the follow-up threads of a
+  review round are not counted, each has its own goal's cap) is compared with `budget_usd`; at or over it, the series stops.
+- **Ctrl-C** ends the running command cleanly (it ends its own turn) and the series stops.
+- It never merges, and a step that was started is not started again: a step with a thread but no pull request is `running` and waits
+  for a person.
