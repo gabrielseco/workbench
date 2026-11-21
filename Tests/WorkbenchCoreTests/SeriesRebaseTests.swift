@@ -270,4 +270,53 @@ private struct Stack {
             + "\n" + #"{"v":1,"seq":2,"ts":"2026-11-21T10:00:00.000Z","turn":0,"kind":"pr.opened","#
             + #""data":{"number":2,"url":"u"}}"# + "\n"
     }
+
+    @Test func aChainIsDoneOneMergeAtATimeAndAMergedMiddleStepIsSkipped() async throws {
+        let s = try await Stack()
+        // Step 3 is stacked on step 2. First only step 1 is merged: step 2 is moved, step 3 waits for its parent.
+        let directory = s.fx.project.seriesDirectory("s")
+        let series = try String(contentsOf: directory.appendingPathComponent("series.md"), encoding: .utf8)
+        try (series + "## 3\nproject: \(s.fx.repo.path)\ngoal: g.md\nbase: after 2\n")
+            .write(to: directory.appendingPathComponent("series.md"), atomically: true, encoding: .utf8)
+        let grand = "g-2026-11-21-s-3"
+        try FileManager.default.createDirectory(at: s.fx.project.threadDirectory(grand), withIntermediateDirectories: true)
+        let cut = #"{"v":1,"seq":1,"ts":"2026-11-21T10:00:00.000Z","turn":0,"kind":"worktree.created","data":"#
+            + #"{"base_commit":"\#(s.tipB)"}}"#
+        let opened = #"{"v":1,"seq":2,"ts":"2026-11-21T10:00:00.000Z","turn":0,"kind":"pr.opened","data":{"number":3,"url":"u"}}"#
+        try (cut + "\n" + opened + "\n").write(to: s.fx.project.eventsURL(grand), atomically: true, encoding: .utf8)
+        try SeriesStepLog(project: s.fx.project, series: "s").append(SeriesRecord(step: 3, thread: grand, at: "t"))
+        // Step 3's branch: one commit on step 2's tip.
+        let branch3 = "workbench/\(grand)"
+        _ = try await s.git(["checkout", "-q", "-b", branch3, "refs/remotes/origin/workbench/\(s.child)"])
+        try "three\n".write(to: s.fx.repo.appendingPathComponent("c.txt"), atomically: true, encoding: .utf8)
+        _ = try await s.git(["add", "c.txt"])
+        _ = try await s.git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "step three"])
+        _ = try await s.git(["push", "-q", "origin", branch3])
+        let tipC = try await s.git(["rev-parse", "HEAD"])
+        _ = try await s.git(["checkout", "-q", "main"])
+        try s.view(3, state: "OPEN", base: "workbench/\(s.child)", head: tipC)
+
+        let first = try await s.rebaser().run("s")
+        #expect(first.map(\.outcome).first == .rebased(pullRequest: 2, base: "main"))
+        guard case .waiting? = first.last?.outcome else {
+            Issue.record("step 3 should wait for step 2 to merge, got \(first)")
+            return
+        }
+        #expect(s.edited(3) == nil)
+
+        // Step 2 is merged (squashed onto main, as GitHub would): the next run skips it and moves step 3.
+        let newTip = try await s.originTip("workbench/\(s.child)")
+        _ = try await s.git(["fetch", "-q", "origin"])
+        _ = try await s.git(["checkout", "-q", "main"])
+        try "from step two\n".write(to: s.fx.repo.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+        _ = try await s.git(["add", "b.txt"])
+        _ = try await s.git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "squash of step two"])
+        _ = try await s.git(["push", "-q", "origin", "main"])
+        try s.view(2, state: "MERGED", base: "main", head: newTip)
+        let second = try await s.rebaser().run("s")
+        #expect(second.map(\.outcome) == [.merged, .rebased(pullRequest: 3, base: "main")])
+        let log = try await s.git(["log", "--format=%s", "refs/heads/main..refs/heads/\(branch3)"], in: s.bare)
+        #expect(log == "step three")
+        #expect(s.edited(3) == "main")
+    }
 }

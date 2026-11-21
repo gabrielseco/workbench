@@ -195,6 +195,7 @@ extension Commands {
             case .rebased(let pr, let base):
                 out("step \(result.step): rebased onto \(base); pull request #\(pr) now targets it")
             case .alreadyDone: out("step \(result.step): already on its base")
+            case .merged: out("step \(result.step): its pull request is merged already")
             case .waiting(let why): out("step \(result.step): waiting: \(why)")
             case .conflict(let files):
                 failed = true

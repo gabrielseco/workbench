@@ -145,5 +145,5 @@ step whose parent's pull request is **merged** (read from GitHub):
 
 A parent that is not merged yet makes the step *wait* (nothing changes); a step already on its base is reported as such, so the
 command can be run again after each merge, which is how a chain of three is done. A **conflict** aborts the rebase, lists the files and
-pushes and changes nothing (exit 1); resolve it by hand. A step whose pull request is closed or merged is reported, not touched. The
+pushes and changes nothing (exit 1); resolve it by hand. A step whose own pull request is merged is skipped (the steps stacked on it come next) and a closed one is reported, not touched; a conflict or a failure ends the command so no later step is moved past it. The
 branch's old head is reviewed and checked, the rebased one is not: run the review again if you want it. It never merges.

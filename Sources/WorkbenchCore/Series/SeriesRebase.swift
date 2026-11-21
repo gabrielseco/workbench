@@ -6,6 +6,8 @@ public enum SeriesRebaseOutcome: Sendable, Equatable {
     case rebased(pullRequest: Int, base: String)
     /// Nothing to do: the pull request already targets the base and its branch no longer carries the parent's commits.
     case alreadyDone
+    /// The step's own pull request is merged already: nothing to move, and the steps stacked on it come next.
+    case merged
     /// The parent's pull request is not merged yet (or the step has no thread or pull request yet).
     case waiting(String)
     /// The replay hit a conflict; nothing was pushed or changed. The files are the ones in conflict.
@@ -84,9 +86,9 @@ public struct SeriesRebaser: Sendable {
             childLive = try await view(childPR, reader: reader, root: root)
         } catch { return .failed("\(error)") }
         guard parentLive.state == .merged else { return .waiting("the parent's pull request #\(parentPR) is not merged yet") }
-        guard childLive.state == .open else {
-            return .failed("the pull request #\(childPR) is \(childLive.state.rawValue), not open")
-        }
+        // Merged since: nothing to move, and the step stacked on it is looked at next (a chain is done one merge at a time).
+        if childLive.state == .merged { return .merged }
+        guard childLive.state == .open else { return .failed("the pull request #\(childPR) is closed, not open") }
 
         // Where the parent was merged: the base its own pull request targeted.
         let base = parentLive.base
