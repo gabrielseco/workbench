@@ -31,8 +31,9 @@ wbp "$SCRATCH/init.out" init
 check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
 cfg="$P/.workbench/config.toml"
 agent=/usr/bin/false
-grep -v -e '^claude_path = ' "$cfg" >"$SCRATCH/config.rest"
-{ echo "claude_path = \"$agent\""; cat "$SCRATCH/config.rest"; } >"$cfg"
+# A series runs nothing unattended in a project with no check_command: this one has a check that passes.
+grep -v -e '^claude_path = ' -e '^check_command = ' "$cfg" >"$SCRATCH/config.rest"
+{ echo "claude_path = \"$agent\""; echo 'check_command = "true"'; cat "$SCRATCH/config.rest"; } >"$cfg"
 
 SD="$P/.workbench/series/two"
 mkdir -p "$SD"
