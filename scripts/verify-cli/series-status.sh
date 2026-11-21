@@ -56,14 +56,14 @@ check "nothing started: step 1 pending, step 2 waits, step 1 ready" "exit $RC: $
 # The driver's record of step 1, and a thread whose log has only its creation: the thread is working.
 printf '{"at":"2026-01-01T00:00:00Z","step":1,"thread":"%s"}\n' "$THREAD" >"$DIR/steps.jsonl"
 mkdir -p "$TDIR"
-printf '{"seq":1,"ts":"2026-01-01T00:00:00.000Z","turn":0,"kind":"thread.created","data":{"base":"main"}}\n' >"$TDIR/events.jsonl"
+printf '{"v":1,"seq":1,"ts":"2026-01-01T00:00:00.000Z","turn":0,"kind":"thread.created","data":{"base":"main"}}\n' >"$TDIR/events.jsonl"
 sx series status "$NAME"
 check "step 1 running: nothing ready" "exit $RC: $(head -c 400 "$SCRATCH/o")" \
     bash -c '[ "$1" = 0 ] && grep -q "^1. running  '"$THREAD"'" "$2" && grep -q "nothing to start now" "$2"' _ "$RC" "$SCRATCH/o"
 
 # The thread ends without a pull request: the series stops and says where.
 if [ "${VERIFY_CLI_SABOTAGE:-}" != 1 ]; then
-    printf '{"seq":2,"ts":"2026-01-01T00:00:01.000Z","turn":0,"kind":"review.decision","data":{"decision":"discarded","by":"user"}}\n' >>"$TDIR/events.jsonl"
+    printf '{"v":1,"seq":2,"ts":"2026-01-01T00:00:01.000Z","turn":0,"kind":"review.decision","data":{"decision":"discarded","by":"user"}}\n' >>"$TDIR/events.jsonl"
 fi
 sx series status "$NAME"
 check "step 1 discarded: STOPPED, nothing starts" "exit $RC: $(head -c 400 "$SCRATCH/o")" \
