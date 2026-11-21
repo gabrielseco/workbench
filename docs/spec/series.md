@@ -164,7 +164,10 @@ to `.workbench/series/<name>/report.md` (or `--out`). It also works on a series 
 - **Review:** each round's verdict, its findings (severity and title, read from the round's findings file, which is named for the whole
   text), and the follow-up thread that answered it: its cost, its commits and what the agent said last (what it fixed and what it left).
   A round with a FIX and no follow-up is said so.
-- **Also pushed by hand:** threads made on the same pull request branch outside the review loop (`goal new --update <branch>`), with their
-  commits and what they said, and their cost counts toward the step.
-- Text that came from an agent is scrubbed of machine paths and credentials and cut (1200 characters for what it built, 700 for a
-  follow-up's account); the files it was cut from are named.
+- **Also pushed outside the review rounds:** a follow-up that answers no review round (a CI fix), and threads made by hand on the same
+  branch (`goal new --update <branch>`), with their commits and what they said; their cost counts toward the step. Which round a
+  follow-up answers is what its own goal says (`(review round N)`): the loop's round counter also counts CI fixes, so it is not used.
+- A turn that reported no cost (a provider with no dollar figure) makes the figure a lower bound, written `$1.50+`.
+- Text that came from an agent is scrubbed of machine paths and of credentials of the known forms (URL credentials, authorization
+  headers, GitHub tokens, query-string tokens, `NAME_TOKEN=value` pairs: not a promise about every secret an agent could print) and cut
+  (1200 characters for what it built, 700 for a follow-up's account); a cut account says `workbench log <thread>` holds the whole one.

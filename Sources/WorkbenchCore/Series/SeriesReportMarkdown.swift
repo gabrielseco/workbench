@@ -15,7 +15,7 @@ extension SeriesReport {
         out.append("# Series \(name): report")
         out.append("")
         var summary = "Generated \(generated). \(clean) of \(steps.count) steps clean. "
-        summary += "Coding turns cost \(Self.money(totalCostUSD))"
+        summary += "Coding turns cost \(Self.money(totalCostUSD, unknown: totalCostUnknown))"
         if let budgetUSD { summary += " of the \(Self.money(budgetUSD)) series budget" }
         summary += " (the Codex reviews and judge runs have no price and are not counted)."
         out.append(summary)
@@ -26,7 +26,8 @@ extension SeriesReport {
             let rounds = step.rounds.map { ($0.verdict ?? "none").uppercased() }.joined(separator: " → ")
             out.append(
                 "| \(step.number) | \(Self.cell(step.goalTitle)) | \(Self.stateWord(step.state)) | "
-                    + "\(step.pullRequest ?? "none") | \(rounds.isEmpty ? "none" : rounds) | \(Self.money(step.costUSD)) |")
+                    + "\(step.pullRequest ?? "none") | \(rounds.isEmpty ? "none" : rounds) | "
+                    + "\(Self.money(step.costUSD, unknown: step.costUnknown)) |")
         }
         let open = steps.compactMap { step in step.pullRequest.map { "\(step.number). \($0)" } }
         if !open.isEmpty {
@@ -52,7 +53,7 @@ extension SeriesReport {
             facts.append("+\(additions) −\(deletions) in \(step.files.count) file\(step.files.count == 1 ? "" : "s")")
         }
         facts.append("\(step.turns) turn\(step.turns == 1 ? "" : "s")")
-        facts.append(money(step.costUSD))
+        facts.append(money(step.costUSD, unknown: step.costUnknown))
         if let check = step.check { facts.append("check \(check)") }
         if let verifier = step.verifier { facts.append("verifier \(verifier)") }
         let judged = step.criteria.filter { $0.met != nil }
@@ -70,7 +71,7 @@ extension SeriesReport {
             out += ["", "Files: \(shown)\(more)"]
         }
         if let built = step.built, !built.isEmpty {
-            out += ["", "**What it built**, in the agent's words:", ""] + quote(built, limit: builtLimit)
+            out += ["", "**What it built**, in the agent's words:", ""] + quote(built, limit: builtLimit, thread: step.thread)
         }
         if !step.criteria.isEmpty {
             out += ["", "**Criteria**", ""]
@@ -88,11 +89,13 @@ extension SeriesReport {
             for round in step.rounds { out += lines(for: round) }
         }
         if !step.manual.isEmpty {
-            out += ["", "**Also pushed to this branch by hand** (outside the review loop)", ""]
+            out += ["", "**Also pushed to this branch outside the review rounds** (a CI fix, or work done by hand)", ""]
             for fix in step.manual {
-                out.append("- `\(fix.thread)` (\(money(fix.costUSD)))")
+                out.append("- `\(fix.thread)` (\(money(fix.costUSD, unknown: fix.costUnknown)))")
                 for commit in fix.commits { out.append("  - commit: \(cell(commit))") }
-                if let said = fix.said, !said.isEmpty { out += quote(said, limit: saidLimit).map { "  " + $0 } }
+                if let said = fix.said, !said.isEmpty {
+                    out += quote(said, limit: saidLimit, thread: fix.thread).map { "  " + $0 }
+                }
             }
         }
         return out
@@ -103,10 +106,10 @@ extension SeriesReport {
         for finding in round.findings { out.append("  - \(finding.severity) \(cell(finding.title))") }
         if round.verdict == "fix", round.findings.isEmpty { out.append("  - (the findings are in the file below)") }
         if let fix = round.fix {
-            out.append("  - Answered by `\(fix.thread)` (\(money(fix.costUSD))):")
+            out.append("  - Answered by `\(fix.thread)` (\(money(fix.costUSD, unknown: fix.costUnknown))):")
             for commit in fix.commits { out.append("    - commit: \(cell(commit))") }
             if let said = fix.said, !said.isEmpty {
-                out += quote(said, limit: saidLimit).map { "    " + $0 }
+                out += quote(said, limit: saidLimit, thread: fix.thread).map { "    " + $0 }
             }
         } else if round.verdict == "fix" {
             out.append("  - No review-loop follow-up answered this round (see the work done by hand below, if any).")
@@ -115,19 +118,33 @@ extension SeriesReport {
         return out
     }
 
-    /// An agent's text as a quote: scrubbed, one block, cut at `limit` with the cut said.
-    private static func quote(_ text: String, limit: Int) -> [String] {
-        let clean = PRBodyBuilder.scrub(text).trimmingCharacters(in: .whitespacesAndNewlines)
+    /// An agent's text as a quote: scrubbed, cut at `limit` with the cut said and where the whole account is (`workbench log <thread>`).
+    private static func quote(_ text: String, limit: Int, thread: String?) -> [String] {
+        let clean = scrubbed(text).trimmingCharacters(in: .whitespacesAndNewlines)
         let cut = clean.count > limit
         let body = cut ? String(clean.prefix(limit)) + "…" : clean
-        return body.split(separator: "\n", omittingEmptySubsequences: false).map { $0.isEmpty ? ">" : "> \($0)" }
+        var lines = body.split(separator: "\n", omittingEmptySubsequences: false).map { $0.isEmpty ? ">" : "> \($0)" }
+        if cut, let thread { lines.append("> (cut; the whole account: `workbench log \(thread)`)") }
+        return lines
+    }
+
+    /// Paths of the machine, credentials of the known forms (URL credentials, authorization headers, GitHub tokens, query-string tokens)
+    /// and `NAME_TOKEN=value` pairs. Not a promise about every secret an agent might print: the files named in the report hold the
+    /// whole text.
+    static func scrubbed(_ text: String) -> String {
+        let pairs = #"(?i)\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_?KEY)[A-Z0-9_]*\s*[=:]\s*)[^\s,;'")]+"#
+        let hidden = ThreadService.withoutCredentials(PRBodyBuilder.scrub(text))
+        return hidden.replacingOccurrences(of: pairs, with: "$1<redacted>", options: .regularExpression)
     }
 
     private static func cell(_ text: String) -> String {
-        PRBodyBuilder.scrub(text).replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "|", with: "/")
+        scrubbed(text).replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "|", with: "/")
     }
 
-    static func money(_ value: Double) -> String { String(format: "$%.2f", value) }
+    /// A cost with a turn that reported none is a lower bound and says so.
+    static func money(_ value: Double, unknown: Bool = false) -> String {
+        String(format: "$%.2f", value) + (unknown ? "+ (a turn reported no cost)" : "")
+    }
 
     static func stateWord(_ state: SeriesStepState) -> String {
         switch state {

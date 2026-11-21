@@ -10,6 +10,7 @@ public struct SeriesReportFinding: Sendable, Equatable {
 public struct SeriesReportFix: Sendable, Equatable {
     public var thread: String
     public var costUSD: Double
+    public var costUnknown: Bool
     /// Subjects of the commits it made on the branch; empty when its branch is gone.
     public var commits: [String]
     /// What the agent said last: what it fixed and what it left, in its own words.
@@ -45,6 +46,8 @@ public struct SeriesReportStep: Sendable, Equatable {
     public var files: [String]
     public var turns: Int
     public var costUSD: Double
+    /// A turn of the step did not report a cost (a provider with no dollar figure), so `costUSD` is a lower bound.
+    public var costUnknown: Bool
     public var check: String?
     public var verifier: String?
     public var criteria: [SeriesReportCriterion]
@@ -64,6 +67,7 @@ public struct SeriesReport: Sendable, Equatable {
     public var steps: [SeriesReportStep]
 
     public var totalCostUSD: Double { steps.reduce(0) { $0 + $1.costUSD } }
+    public var totalCostUnknown: Bool { steps.contains { $0.costUnknown } }
 }
 
 /// Builds the report of a series from what is already recorded: the steps' thread logs, their review rounds and follow-up threads, and
@@ -103,7 +107,8 @@ public struct SeriesReporter: Sendable {
     private static func notStarted(_ step: SeriesStep, title: String, project: URL?) -> SeriesReportStep {
         SeriesReportStep(
             number: step.number, project: project?.path ?? step.project, goalTitle: title, state: .pending, thread: nil,
-            pullRequest: nil, additions: nil, deletions: nil, files: [], turns: 0, costUSD: 0, check: nil, verifier: nil,
+            pullRequest: nil, additions: nil, deletions: nil, files: [], turns: 0, costUSD: 0, costUnknown: false, check: nil,
+            verifier: nil,
             criteria: [], judgeConcerns: [], judgeTurn: nil, built: nil, rounds: [], manual: [])
     }
 
@@ -125,7 +130,26 @@ public struct SeriesReporter: Sendable {
             manual.append(await fix(store.state(of: other), project: project))
         }
         var cost = manual.reduce(0) { $0 + $1.costUSD }
-        for member in family { cost += store.state(of: member).totalCostUSD }
+        var unknown = manual.contains { $0.costUnknown }
+        for member in family {
+            let memberState = store.state(of: member)
+            cost += memberState.totalCostUSD
+            unknown = unknown || memberState.costUnknown
+        }
+        // Which review round each follow-up answers is what its own goal says (`ReviewLoop.body` writes "(review round N)" into the
+        // request): the loop's round counter also counts the follow-ups that fix CI, so it cannot be used. A goal that cannot be
+        // read falls back to that counter.
+        var answers: [String: Int] = [:]
+        for follow in followUps {
+            let text = try? String(contentsOf: project.goalURL(follow.id), encoding: .utf8)
+            if let text {
+                if let round = Self.reviewRound(in: text) { answers[follow.id] = round }
+            } else if let round = follow.lineage?.round {
+                answers[follow.id] = round
+            }
+        }
+        // A follow-up that answers no review round (a CI fix) belongs with the work done outside the review rounds.
+        for follow in followUps where answers[follow.id] == nil { manual.append(await fix(follow, project: project)) }
 
         let goal = (try? String(contentsOf: project.goalURL(thread), encoding: .utf8)).flatMap { try? GoalFile.parse($0).goal }
         let verdict = rootState.review.judge?.verdict
@@ -138,7 +162,7 @@ public struct SeriesReporter: Sendable {
             for record in service.reviewRecords(.prReview, family: family, pr: pr) {
                 let text = service.prReviewFindings(record)
                 var answer: SeriesReportFix?
-                if let followUp = followUps.first(where: { $0.lineage?.round == record.round }) {
+                if let followUp = followUps.first(where: { answers[$0.id] == record.round }) {
                     answer = await fix(followUp, project: project)
                 }
                 rounds.append(
@@ -153,6 +177,7 @@ public struct SeriesReporter: Sendable {
             number: step.number, project: root.path, goalTitle: title, state: state, thread: thread,
             pullRequest: rootState.pullRequest?.url, additions: live?.additions, deletions: live?.deletions,
             files: live?.files ?? [], turns: rootState.lastTurn + followUps.reduce(0) { $0 + $1.lastTurn }, costUSD: cost,
+            costUnknown: unknown,
             check: rootState.review.check.map { "\($0.result) after turn \($0.turn)" },
             verifier: rootState.review.verifier.flatMap { $0.skipped ? nil : ($0.ok ? "passed" : "did not pass") },
             criteria: criteria, judgeConcerns: verdict?.concerns ?? [], judgeTurn: rootState.review.judge?.turn,
@@ -172,8 +197,13 @@ public struct SeriesReporter: Sendable {
             }
         }
         return SeriesReportFix(
-            thread: state.id, costUSD: state.totalCostUSD, commits: commits,
+            thread: state.id, costUSD: state.totalCostUSD, costUnknown: state.costUnknown, commits: commits,
             said: TaskLogReport.lastAgentText(project: project, thread: state.id, events: events))
+    }
+
+    /// The review round a follow-up's goal says it answers: `(review round 2)`, which `ReviewLoop.body` writes into the request.
+    static func reviewRound(in goalText: String) -> Int? {
+        goalText.firstMatch(of: #/\(review round ([0-9]+)\)/#).flatMap { Int($0.1) }
     }
 
     /// `- **[P1] A title.** the rest`: the severity and the title of each finding. A line that does not look like that is left out

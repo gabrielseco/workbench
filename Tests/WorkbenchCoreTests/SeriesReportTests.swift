@@ -34,7 +34,7 @@ struct SeriesReportMarkdownTests {
         SeriesReportStep(
             number: number, project: "/p", goalTitle: "Goal | \(number)", state: state, thread: "g-1-s-\(number)",
             pullRequest: "https://example.test/pull/\(number)", additions: 10, deletions: 2, files: ["a.ex", "b.ex"], turns: 2,
-            costUSD: 1.5, check: "passed after turn 1", verifier: nil,
+            costUSD: 1.5, costUnknown: false, check: "passed after turn 1", verifier: nil,
             criteria: [
                 SeriesReportCriterion(id: "c1", text: "It works.", met: true),
                 SeriesReportCriterion(id: "c2", text: "It is tested.", met: false),
@@ -44,7 +44,8 @@ struct SeriesReportMarkdownTests {
 
     @Test func theSummaryTableTheMergeOrderAndEachStepAreWritten() {
         let fix = SeriesReportFix(
-            thread: "g-1-s-1-review-1", costUSD: 0.5, commits: ["fix: the thing"], said: "Fixed P1.\nLeft P2.")
+            thread: "g-1-s-1-review-1", costUSD: 0.5, costUnknown: false, commits: ["fix: the thing"],
+            said: "Fixed P1.\nLeft P2.")
         let round = SeriesReportRound(
             round: 1, verdict: "fix", findings: [SeriesReportFinding(severity: "P1", title: "A bug")],
             findingsFile: ".workbench/threads/g-1-s-1/pr-review/round-1.findings.md", fix: fix)
@@ -80,10 +81,58 @@ struct SeriesReportMarkdownTests {
         #expect(!text.contains("series budget"))
     }
 
+    @Test func credentialsOfTheKnownFormsAreHiddenWhereverAgentTextAppears() {
+        let leaks = [
+            "ghp_abcdefghijklmnop1234", "https://user:hunter2@example.test/repo", "Authorization: Bearer abc.def.ghi",
+            "API_TOKEN=sup3rs3cret", "client_secret: topsecretvalue", "?access_token=zzz999",
+        ]
+        let words = ["hunter2", "sup3rs3cret", "topsecretvalue", "zzz999", "abcdefghijklmnop1234", "abc.def.ghi"]
+        var one = step(1, state: .clean(thread: "t", pullRequest: nil))
+        one.built = leaks.joined(separator: "\n")
+        one.rounds = [
+            SeriesReportRound(
+                round: 1, verdict: "fix", findings: [SeriesReportFinding(severity: "P1", title: leaks[3])], findingsFile: nil,
+                fix: SeriesReportFix(thread: "f", costUSD: 0, costUnknown: false, commits: [leaks[0]], said: leaks[4]))
+        ]
+        let text = SeriesReport(name: "s", generated: "t", budgetUSD: nil, steps: [one]).markdown
+        for word in words { #expect(!text.contains(word), "\(word) leaked") }
+        #expect(text.contains("<redacted>"))
+    }
+
+    @Test func aPathInsideTheCutIsScrubbedToo() {
+        var one = step(1, state: .pending)
+        one.built = "Edited \(secret) and ran the tests."
+        let text = SeriesReport(name: "s", generated: "t", budgetUSD: nil, steps: [one]).markdown
+        #expect(!text.contains(secret) && text.contains("<path>"))
+    }
+
+    @Test func aCutAccountSaysWhereTheWholeOneIs() {
+        var one = step(1, state: .pending)
+        one.built = String(repeating: "word ", count: 600)
+        one.rounds = [
+            SeriesReportRound(
+                round: 1, verdict: "fix", findings: [], findingsFile: nil,
+                fix: SeriesReportFix(
+                    thread: "g-1-fix", costUSD: 0, costUnknown: false, commits: [], said: String(repeating: "x ", count: 800)))
+        ]
+        let text = SeriesReport(name: "s", generated: "t", budgetUSD: nil, steps: [one]).markdown
+        #expect(text.contains("the whole account: `workbench log g-1-s-1`"))
+        #expect(text.contains("the whole account: `workbench log g-1-fix`"))
+    }
+
+    @Test func aCostThatIsAtLeastTheFigureSaysSo() {
+        var one = step(1, state: .pending)
+        one.costUnknown = true
+        let report = SeriesReport(name: "s", generated: "t", budgetUSD: nil, steps: [one])
+        #expect(report.totalCostUnknown)
+        #expect(report.markdown.contains("$1.50+ (a turn reported no cost)"))
+    }
+
     @Test func aStepNotStartedIsSaidSoAndHasNoPullRequestInTheMergeOrder() {
         let notStarted = SeriesReportStep(
             number: 1, project: "/p", goalTitle: "Later", state: .pending, thread: nil, pullRequest: nil, additions: nil,
-            deletions: nil, files: [], turns: 0, costUSD: 0, check: nil, verifier: nil, criteria: [], judgeConcerns: [],
+            deletions: nil, files: [], turns: 0, costUSD: 0, costUnknown: false, check: nil, verifier: nil, criteria: [],
+            judgeConcerns: [],
             judgeTurn: nil, built: nil, rounds: [], manual: [])
         let text = SeriesReport(name: "s", generated: "t", budgetUSD: nil, steps: [notStarted]).markdown
         #expect(text.contains("Not started."))
@@ -93,10 +142,13 @@ struct SeriesReportMarkdownTests {
     @Test func aRoundNoLoopFollowUpAnsweredAndWorkDoneByHandAreBothShown() {
         var one = step(1, state: .clean(thread: "t", pullRequest: nil))
         one.rounds = [SeriesReportRound(round: 3, verdict: "fix", findings: [], findingsFile: nil, fix: nil)]
-        one.manual = [SeriesReportFix(thread: "g-1-rework", costUSD: 0.54, commits: ["fix: rework"], said: "Removed the job.")]
+        one.manual = [
+            SeriesReportFix(
+                thread: "g-1-rework", costUSD: 0.54, costUnknown: false, commits: ["fix: rework"], said: "Removed the job.")
+        ]
         let text = SeriesReport(name: "s", generated: "t", budgetUSD: nil, steps: [one]).markdown
         #expect(text.contains("No review-loop follow-up answered this round"))
-        #expect(text.contains("Also pushed to this branch by hand") && text.contains("`g-1-rework` ($0.54)"))
+        #expect(text.contains("Also pushed to this branch outside the review rounds") && text.contains("`g-1-rework` ($0.54)"))
         #expect(text.contains("(the findings are in the file below)"))
     }
 }
@@ -106,7 +158,7 @@ private func line(_ seq: Int, _ turn: Int, _ kind: String, _ data: String = "{}"
     return #"{"v":1,"seq":\#(seq),"ts":"\#(ts)","turn":\#(turn),"kind":"\#(kind)","data":\#(data)}"#
 }
 
-private func goalFile(_ id: String, title: String, pushTo: String? = nil) -> String {
+private func goalFile(_ id: String, title: String, pushTo: String? = nil, request: String = "Do it.") -> String {
     """
     ---
     id: \(id)
@@ -119,7 +171,7 @@ private func goalFile(_ id: String, title: String, pushTo: String? = nil) -> Str
 
     ## Request
 
-    Do it.
+    \(request)
 
     ## Criteria
 
@@ -170,7 +222,10 @@ private func goalFile(_ id: String, title: String, pushTo: String? = nil) -> Str
                     "- **[P1] A real bug.** It breaks.\n- **[P2] A missing test.** Add one.\n\nVERDICT: FIX\n"
             ])
         try write(
-            follow, goal: goalFile(follow, title: "Follow-up", pushTo: "workbench/\(root)"),
+            follow,
+            goal: goalFile(
+                follow, title: "Follow-up", pushTo: "workbench/\(root)",
+                request: "A second reviewer read the pull request (review round 1) and found problems."),
             lines: [
                 line(
                     1, 0, "thread.created", #"{"parent":"\#(root)","root":"\#(root)","round":1}"#),
@@ -235,5 +290,44 @@ private func goalFile(_ id: String, title: String, pushTo: String? = nil) -> Str
         let markdown = report.markdown
         #expect(markdown.contains("$1.75 of the $10.00 series budget"))
         #expect(markdown.contains("Not started."))
+    }
+
+    @Test func aCIFixThatTookTheFirstFollowUpNumberDoesNotAnswerTheReviewRound() async throws {
+        let (reporter, fx) = try await fixture()
+        let project = fx.project
+        let root = "g-2026-11-21-s-1"
+        // A CI repair was made first (follow-up 1); the review's follow-up is then number 2 although it answers review round 1.
+        let ci = "g-2026-11-21-s-1-ci-1"
+        let review = "g-2026-11-21-s-1-review-1"
+        let dir = project.threadDirectory(ci)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try goalFile(ci, title: "CI", pushTo: "workbench/\(root)", request: "The pull request's checks failed; fix them.")
+            .write(to: project.goalURL(ci), atomically: true, encoding: .utf8)
+        try (line(1, 0, "thread.created", #"{"parent":"\#(root)","root":"\#(root)","round":1}"#) + "\n"
+            + line(2, 1, "turn.started") + "\n"
+            + line(3, 1, "turn.ended", #"{"result":"succeeded","cost_usd":0.3,"summary":"Fixed the CI."}"#) + "\n")
+            .write(to: project.eventsURL(ci), atomically: true, encoding: .utf8)
+        // The review's follow-up now reads as round 2 of the loop.
+        let events = try String(contentsOf: project.eventsURL(review), encoding: .utf8)
+            .replacingOccurrences(of: #""round":1}"#, with: #""round":2}"#)
+        try events.write(to: project.eventsURL(review), atomically: true, encoding: .utf8)
+
+        let step = try #require(try await reporter.report("s").steps.first)
+        #expect(step.rounds[0].fix?.thread == review)
+        #expect(step.manual.map(\.thread).contains(ci))
+        #expect(step.manual.first { $0.thread == ci }?.said == "Fixed the CI.")
+        // Counted once: 1.00 + 0.50 + 0.30 + the hand-made 0.25.
+        #expect(abs(step.costUSD - 2.05) < 0.0001)
+    }
+
+    @Test func aTurnThatReportedNoCostMakesTheStepsCostAtLeastTheFigure() async throws {
+        let (reporter, fx) = try await fixture()
+        let root = "g-2026-11-21-s-1"
+        // A Codex turn reports usage but no dollar figure.
+        let extra = line(9, 2, "turn.started") + "\n" + line(10, 2, "turn.ended", #"{"result":"succeeded"}"#) + "\n"
+        let url = fx.project.eventsURL(root)
+        try (String(contentsOf: url, encoding: .utf8) + extra).write(to: url, atomically: true, encoding: .utf8)
+        let step = try #require(try await reporter.report("s").steps.first)
+        #expect(step.costUnknown)
     }
 }
