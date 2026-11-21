@@ -8,8 +8,8 @@
 # claude is /usr/bin/false, and the series stops at step 1 (exit 1) with the command named, steps.jsonl recording the thread and
 # why, `series status` showing STOPPED, and no thread for step 2. The accept and ship commands are not reached here: their
 # argument shapes are covered by SeriesDriverTests, and a real ship would open a pull request. Exit 0 only when every step passed,
-# 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 makes claude /usr/bin/true, so `run` succeeds and the
-# series stops later, at `accept`: the step that names `run` as the failure must FAIL. Run by hand, not by CI.
+# 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 skips `series approve`, so the second `series run` is
+# refused and no step starts: the steps that expect step 1 to run and stop must FAIL. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -31,7 +31,6 @@ wbp "$SCRATCH/init.out" init
 check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
 cfg="$P/.workbench/config.toml"
 agent=/usr/bin/false
-[ "$SABOTAGE" = 1 ] && agent=/usr/bin/true
 grep -v -e '^claude_path = ' "$cfg" >"$SCRATCH/config.rest"
 { echo "claude_path = \"$agent\""; cat "$SCRATCH/config.rest"; } >"$cfg"
 
@@ -66,8 +65,12 @@ wbp "$SCRATCH/run0.out" series run two
 check "run before approve: exit 6, nothing started" "exit $RC: $(head -c 300 "$SCRATCH/run0.out")" \
     bash -c '[ "$1" = 6 ] && grep -q "not approved" "$2" && [ -z "$(ls "$3/.workbench/threads" 2>/dev/null)" ]' _ "$RC" "$SCRATCH/run0.out" "$P"
 
-wbp "$SCRATCH/approve.out" series approve two
-check "approve" "exit $RC" test "$RC" = 0
+if [ "$SABOTAGE" = 1 ]; then
+    echo "    VERIFY_CLI_SABOTAGE=1: the series is not approved"
+else
+    wbp "$SCRATCH/approve.out" series approve two
+    check "approve" "exit $RC" test "$RC" = 0
+fi
 
 wbp "$SCRATCH/run1.out" series run two
 shown "$SCRATCH/run1.out" 14
