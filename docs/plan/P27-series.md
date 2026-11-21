@@ -24,38 +24,13 @@ New: an ordered **series** of steps, a rule for where each step starts, a driver
 
 ## The series file
 
-```markdown
----
-name: invoice-shortcut
-budget_usd: 40.00            # whole series, all steps together; each goal keeps its own cap
----
-1. project: ~/rogal/expenses-backend
-   goal: invoice-p1
-   base: main
+Built in task 2; the format, checks and approval are written in [`../spec/series.md`](../spec/series.md). In short: a folder
+`.workbench/series/<name>/` with `series.md` (an optional `budget_usd` front matter and one `## N` section per step with
+`project`, `goal`, `base`, `after`, `env`), one **goal file** per step, and `approval.json`.
 
-2. project: ~/rogal/expenses-backend
-   goal: invoice-p2
-   base: after 1              # the branch of step 1's thread
-
-3. project: ~/rogal/expense-tracker
-   goal: invoice-p3
-   base: main
-   after: 1                   # starts when step 1 is clean; read_also gets step 1's checkout
-   env: { API_CONTRACT_REF: step:1 }   # the step's branch, as `origin/<branch>`
-```
-
-- **Where it lives:** `.workbench/series/<name>.md` in the project of step 1, local like the rest of `.workbench/`. A series that
-  starts elsewhere is a later question; one home keeps v1 simple.
-- **`base: main`** cuts from the project's base as today. **`base: after N`** cuts from the branch of step N's thread (only the same
-  project; a step in another project names `after: N` and starts from its own base).
-- **`after: N`** is the only ordering key besides document order. A step starts when every step it names is *clean* (below).
-- **`env`** values are `step:N` (the branch name of step N's thread, as `origin/<branch>`) or a literal. They reach the step's agent and
-  its `setup_command`, check and verifier the same way `WORKBENCH_THREAD` does. This is how the frontend's `api:sync` reads the
-  unmerged backend contract (`--ref`), with no change to Workbench's idea of a project.
-- **Validation at load, all at once, with the line and key** (the same stance as `task.md`): a project that is not a Workbench
-  project, a goal that does not exist or is not a draft/approved goal of that project, a cycle, a `base: after N` across projects,
-  an unknown key, an `env` name or value that is not a safe name or `step:N`. Nothing from the file reaches git or a path unchecked
-  (`SafeNames`).
+A step's goal is a **file**, not a thread: a stacked step cannot have a thread before its parent has a pull request, because
+`goal new --after` needs one. The driver (task 3) makes each step's thread when the step starts, from its goal file, and approves
+it on the series' approval.
 
 ## A step is clean
 
@@ -65,10 +40,10 @@ exited 0": a cancelled check exits 0), and the last review round's verdict is `C
 
 ## Approval
 
-`workbench series approve <name>` shows every step's goal and base and records one approval over the series file and each goal's
-approved hash. A goal changed after approval, or the file, makes the series STALE and nothing starts (the rule tasks have). Goals
-are written before the series starts: criteria that depend on an earlier step's result stay general, or the plan splits the step.
-Re-drafting a later goal from the earlier PR is out of v1.
+`workbench series approve <name>` records one approval over the series file and the words of every goal file it names (built, task
+2). A change to either makes the series STALE and nothing starts (the rule tasks have). Goals are written before the series starts:
+criteria that depend on an earlier step's result stay general, or the plan splits the step. Re-drafting a later goal from the
+earlier PR is out of v1.
 
 ## The driver
 
@@ -106,11 +81,11 @@ each other, editing a series while it runs, a queue.
 
 ## Tasks (one PR each)
 
-1. **Stacked base for a goal.** `goal new --after <thread>` writes `base: origin/<that thread's branch>`; `ship` opens the PR
+1. **Stacked base for a goal** (built, #544). `goal new --after <thread>` writes `base: origin/<that thread's branch>`; `ship` opens the PR
    against that branch; the PR description says it is a stack. Tests: the base is the parent branch's tip, the worktree sees the
    parent's files, the PR target is the parent's branch, a parent that was never shipped is refused with a message. Verify-cli
    scenario (`goal-after.sh`) on the fake claude.
-2. **Series file.** Parse and validate (`SeriesFile`), `series list`, `series show`, `series approve`. Tests: every refusal in
+2. **Series file** (built). Parse and validate (`SeriesDefinition`, `SeriesLibrary`), `series list`, `series show`, `series approve`. Tests: every refusal in
    "The series file", a changed goal or file makes it STALE, a cycle, an `env` that is not a safe name. Verify-cli `series-file.sh`.
 3. **Driver, one project.** `series run|status|stop`, the clean rule, the stop rule, the series budget, the timer tick. Tests with
    the fake claude: two steps in order, step 2 starts only when step 1 is clean (a cancelled check is not clean), a failed step

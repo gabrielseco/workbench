@@ -149,6 +149,11 @@ enum Help {
                 + "fix: pr, create a thread, run Claude and the check in its worktree, accept it and push its branch to "
                 + "open a pull request",
             example: "workbench task new bump-countries --input countries.txt   or   workbench task run bump-countries"),
+        "series": Extra(
+            changes:
+                "series list and series show: nothing; read-only; series approve: writes approval.json in "
+                + ".workbench/series/<name>/; it starts no step and creates no thread",
+            example: "workbench series approve invoice-shortcut"),
         "version": Extra(changes: "nothing; read-only", example: "workbench version"),
     ]
 
