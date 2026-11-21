@@ -443,12 +443,9 @@ extension ThreadService {
         entry.outcome = .removed
         if let thread {
             do {
-                try await withLog(thread) { log in
-                    _ = try await log.append(.worktreeRemoved, data: ["reason": "prune", "path": .string(entry.path)])
-                }
-            } catch {
-                entry.recordFailed = "worktree.removed was not written to thread \(thread)'s log (\(error))"
-            }
+                let data: JSONValue = ["reason": "prune", "path": .string(entry.path)]
+                try await withLog(thread) { _ = try await $0.append(.worktreeRemoved, data: data) }
+            } catch { entry.recordFailed = "worktree.removed was not written to thread \(thread)'s log (\(error))" }
         }
         guard let branch = entry.branch, let head = entry.head else { return }
         if keepBranches.contains(branch) {
@@ -462,9 +459,8 @@ extension ThreadService {
         entry.branchOutcome = .removed
         if let thread, branch == WorktreeManager.branch(for: thread) {
             do {
-                try await withLog(thread) { log in
-                    _ = try await log.append(.branchRemoved, data: ["reason": "prune", "head_sha": .string(head)])
-                }
+                let data: JSONValue = ["reason": "prune", "head_sha": .string(head)]
+                try await withLog(thread) { _ = try await $0.append(.branchRemoved, data: data) }
             } catch {
                 let missing = "branch.removed was not written to thread \(thread)'s log (\(error))"
                 entry.recordFailed = entry.recordFailed.map { $0 + "; " + missing } ?? missing
@@ -476,11 +472,8 @@ extension ThreadService {
     private func changed(_ entry: PruneEntry) async -> String? {
         guard let records = try? await listWorktrees() else { return "git could not list the worktrees" }
         guard let now = records.first(where: { $0.path == entry.path }) else { return "git no longer lists it" }
-        if now.head != entry.head { return "its commit moved" }
-        if now.branch != entry.branch { return "its branch changed" }
-        if now.locked { return "it is locked" }
-        if let why = threadHold(at: URL(fileURLWithPath: entry.path)) { return why }
-        return nil
+        if now.head != entry.head || now.branch != entry.branch { return "its commit or branch moved" }
+        return now.locked ? "it is locked" : threadHold(at: URL(fileURLWithPath: entry.path))
     }
 
     /// Deletes `refs/heads/<branch>` only if it still points at `sha` and no worktree has it checked out.

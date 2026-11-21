@@ -34,9 +34,9 @@ private struct PruneGH {
             encoding: .utf8)
     }
 
-    /// Answers with several pull requests: (number, state, head).
-    func answer(_ branch: String, prs: [(Int, String, String)]) throws {
-        let items = prs.map { "{\"number\":\($0.0),\"state\":\"\($0.1)\",\"headRefOid\":\"\($0.2)\"}" }
+    /// Answers with several pull requests at `head`: (number, state).
+    func answer(_ branch: String, prs: [(Int, String)], head: String) throws {
+        let items = prs.map { "{\"number\":\($0.0),\"state\":\"\($0.1)\",\"headRefOid\":\"\(head)\"}" }
         try "[\(items.joined(separator: ","))]".write(
             to: dir.appendingPathComponent(branch.replacingOccurrences(of: "/", with: "_") + ".json"), atomically: true,
             encoding: .utf8)
@@ -222,7 +222,7 @@ private func snapshot(_ fx: RunnerFixture) async throws -> [String] {
         let fx = try await RunnerFixture()
         let gh = try PruneGH(fx)
         let both = try await worktree("both", branch: "feat/both", commits: 1, fx)
-        try gh.answer("feat/both", prs: [(3, "MERGED", both.tip), (4, "OPEN", both.tip)])
+        try gh.answer("feat/both", prs: [(3, "MERGED"), (4, "OPEN")], head: both.tip)
 
         let report = try await fx.service.prune(gh: gh.runner, includeClosed: true, unregistered: false, dryRun: false)
         #expect(keptReason(report, both.path) == "pull request #4 is open", "\(report.render())")
