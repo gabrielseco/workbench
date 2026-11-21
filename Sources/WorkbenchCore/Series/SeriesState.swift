@@ -19,7 +19,10 @@ public struct SeriesStepLog: Sendable {
     /// The latest record of each step. A line that does not read is skipped, and so is a thread name that is not a thread id:
     /// nothing from the file reaches a path unchecked.
     public func read() -> [Int: SeriesRecord] {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [:] }
+        // A regular file of at most 1 MiB: a FIFO or a huge file reads as no records, it does not hang or fill memory.
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]), values.isRegularFile == true,
+            (values.fileSize ?? 0) <= 1 << 20, let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return [:] }
         var found: [Int: SeriesRecord] = [:]
         for line in text.split(separator: "\n") {
             guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],

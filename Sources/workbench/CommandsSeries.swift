@@ -123,6 +123,12 @@ extension Commands {
         }
         if let stopped = SeriesScheduler.stoppedStep(loaded.definition, states: states) {
             out("stopped at step \(stopped.step): nothing new starts until a person fixes it")
+        } else if loaded.definition.steps.allSatisfy({ states[$0.number]?.isClean == true }) {
+            let urls = loaded.definition.steps.compactMap { step -> String? in
+                if case .clean(_, let pr)? = states[step.number] { return pr.map { "\(step.number): \($0)" } }
+                return nil
+            }
+            out("every step is clean: review and merge in this order" + (urls.isEmpty ? "" : "\n  " + urls.joined(separator: "\n  ")))
         } else {
             let ready = SeriesScheduler.ready(loaded.definition, states: states)
             let names = ready.map(String.init).joined(separator: ", ")

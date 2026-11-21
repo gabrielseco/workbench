@@ -209,4 +209,16 @@ struct SeriesStepLogTests {
         #expect(read[2]?.thread == "g-1-b")
         #expect(read[3] == nil)
     }
+
+    @Test func aStepsFileThatIsAFifoOrHugeReadsAsNoRecordsAndDoesNotHang() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("fifo-\(UUID().uuidString)")
+        let project = Project(root: root)
+        try FileManager.default.createDirectory(at: project.seriesDirectory("s"), withIntermediateDirectories: true)
+        let log = SeriesStepLog(project: project, series: "s")
+        #expect(mkfifo(log.url.path, 0o600) == 0)
+        #expect(log.read().isEmpty)
+        try FileManager.default.removeItem(at: log.url)
+        try String(repeating: "x", count: (1 << 20) + 1).write(to: log.url, atomically: true, encoding: .utf8)
+        #expect(log.read().isEmpty)
+    }
 }
