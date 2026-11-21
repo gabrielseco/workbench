@@ -109,6 +109,8 @@ do {
         exit(try await Commands.ship(Array(arguments.dropFirst())))
     case "clean":
         exit(try await Commands.clean(Array(arguments.dropFirst())))
+    case "prune":
+        exit(try await Commands.prune(Array(arguments.dropFirst())))
     case "discard":
         try await Commands.discard(Array(arguments.dropFirst()))
     case "abandon":
