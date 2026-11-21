@@ -109,13 +109,18 @@ public struct SeriesStepFacts: Sendable {
     public var liveError: String?
     /// The driver's own record that it stopped here (`SeriesRecord.stopped`).
     public var stoppedReason: String?
+    /// Seconds since the pull request was opened. A repository with no CI never reports a check, so "no checks" is a wait only for
+    /// the first moments (CI registers late) and counts as passed after that.
+    public var pullRequestAge: TimeInterval?
 
     public init(
         thread: String, state: ThreadState, checks: PRChecksSummary? = nil, checksError: String? = nil,
-        live: (state: PRState, head: String)? = nil, liveError: String? = nil, stoppedReason: String? = nil
+        live: (state: PRState, head: String)? = nil, liveError: String? = nil, stoppedReason: String? = nil,
+        pullRequestAge: TimeInterval? = nil
     ) {
         (self.thread, self.state, self.checks, self.checksError) = (thread, state, checks, checksError)
         (self.live, self.liveError, self.stoppedReason) = (live, liveError, stoppedReason)
+        self.pullRequestAge = pullRequestAge
     }
 }
 
@@ -159,7 +164,9 @@ public enum SeriesScheduler {
         if let error = facts.checksError { return waiting("the checks could not be read: \(error)") }
         guard let checks = facts.checks else { return waiting("the checks have not been read") }
         switch checks.state {
-        case .none: return waiting(noChecks)
+        case .none:
+            // No CI at all (or none for this branch): after the grace `ship --watch` allows, there is nothing to wait for.
+            guard let age = facts.pullRequestAge, age >= ThreadService.watchNoChecksGrace else { return waiting(noChecks) }
         case .pending: return waiting(checksRunning)
         case .failed:
             let names = checks.checks.filter { $0.outcome == .failed }.map(\.name).sorted().joined(separator: ", ")
@@ -200,6 +207,16 @@ public enum SeriesScheduler {
 }
 
 extension SeriesLibrary {
+    /// Seconds since the thread's latest `pr.opened` event; nil when there is none or its time does not read.
+    static func pullRequestAge(project: Project, thread: String, now: Date) -> TimeInterval? {
+        let events = (try? EventLogReader.read(at: project.eventsURL(thread)))?.events ?? []
+        guard let opened = events.last(where: { $0.kind == .prOpened }) else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let at = fractional.date(from: opened.ts) ?? ISO8601DateFormatter().date(from: opened.ts) else { return nil }
+        return now.timeIntervalSince(at)
+    }
+
     /// A review round the family recorded, as the scheduler reads it.
     static func review(_ record: PRReviewRecord) -> Review.PRReview {
         Review.PRReview(
@@ -222,6 +239,7 @@ extension SeriesLibrary {
             let other = Project(root: root)
             let state = ThreadStore(project: other).state(of: record.thread)
             var facts = SeriesStepFacts(thread: record.thread, state: state, stoppedReason: record.stopped)
+            facts.pullRequestAge = Self.pullRequestAge(project: other, thread: record.thread, now: Date())
             if let number = state.pullRequest?.number, !state.isMerged, !state.isClosed {
                 let service = ThreadService(project: other, git: git)
                 // A follow-up thread of the review loop records the later rounds, so the latest one is read across the family.

@@ -83,7 +83,7 @@ is stored but the thread name.
 | `pending` | no thread yet; `status` says which steps it waits for |
 | `running` | a thread with no pull request, not ended |
 | `waiting` | the pull request is open and something is missing: no checks yet, checks running or unreadable, no review yet, a round running, the review asked for fixes, or the last review was of an older commit |
-| `clean` | **the pull request is open, every check is `pass` or `skipping`, and the last review round was of the head commit GitHub has now with the verdict `clean`**; or it is merged (a person's merge is the decision that matters, so a merged pull request needs neither) |
+| `clean` | **the pull request is open, every check is `pass` or `skipping`, and the last review round was of the head commit GitHub has now with the verdict `clean`**; a repository that reports no checks at all counts as passed once the pull request is 2 minutes old (the grace `ship --watch` allows: CI registers late); or it is merged (a person's merge is the decision that matters, so a merged pull request needs neither) |
 | `STOPPED` | needs a person: a check `fail`ed or `cancel`led (once nothing is still running; a cancelled check is never clean, whatever `gh` exits with), a review round with no verdict, the pull request closed unmerged (read from GitHub), the thread discarded or abandoned, or accepted and never shipped |
 
 A step is ready when it is `pending` and every step in its `after` is `clean`; **nothing is ready while any step is `STOPPED`**.
