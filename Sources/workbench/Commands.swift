@@ -257,16 +257,17 @@ enum Commands {
         var a = Arguments(args)
         let base = try a.value("--base")
         let updating = try a.value("--update")
+        let after = try a.value("--after")
         let from = try a.value("--from")
         let quick = try a.value("--quick")
         guard let name = a.positional() else {
             throw CLIError.usage(
-                "usage: workbench goal new <name> [--base <branch> | --update <branch>]"
+                "usage: workbench goal new <name> [--base <branch> | --update <branch> | --after <thread>]"
                     + " [--from <goal-file> | --quick \"<text>\"]")
         }
         try a.requireEmpty()
-        if quick != nil, from != nil || updating != nil {
-            throw CLIError.usage("--quick writes the goal from its text alone: it takes neither --from nor --update")
+        if quick != nil, from != nil || updating != nil || after != nil {
+            throw CLIError.usage("--quick writes the goal from its text alone: it takes none of --from, --update and --after")
         }
         let copy = try from.map { try ThreadService.goalCopy(copying: URL(fileURLWithPath: $0)) }
 
@@ -278,7 +279,7 @@ enum Commands {
                 let refusal as QuickGoalRefusal { throw CLIError.refused("\(refusal)") }
         } else {
             id = try await ctx.service.newThread(
-                name: name, base: base, updating: updating, config: config, body: copy?.body,
+                name: name, base: base, updating: updating, after: after, config: config, body: copy?.body,
                 settings: copy?.settings ?? GoalSettings(), title: copy?.title)
         }
         out("created \(id)")

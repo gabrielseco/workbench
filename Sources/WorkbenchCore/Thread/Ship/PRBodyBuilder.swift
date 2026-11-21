@@ -58,7 +58,12 @@ public enum PRBodyBuilder {
             body = sections.joined(separator: "\n\n")
         }
         // The template is the repository's text, which can carry paths too.
-        return PRBody(title: title(description?.title ?? goal.title), body: scrub(body) + "\n")
+        // A stacked pull request says so first: its diff is against the parent's branch, and the parent merges first.
+        let stack = goal.stackedOn.map {
+            "> **Stacked:** this pull request is based on `\($0)`, not on the default branch, so its diff is only this change. "
+                + "Merge that pull request first; this one is then retargeted.\n\n"
+        } ?? ""
+        return PRBody(title: title(description?.title ?? goal.title), body: scrub(stack + body) + "\n")
     }
 
     static let concernsShown = 5

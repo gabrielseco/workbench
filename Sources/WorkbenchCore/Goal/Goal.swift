@@ -33,6 +33,18 @@ public struct Goal: Sendable, Equatable {
     public var model: String?
     /// An existing branch the thread's work is pushed to by `ship`, instead of a new `workbench/<id>` branch.
     public var pushTo: String?
+    /// The branch of `origin` this goal's worktree is cut from after fetching it: `push_to`, or the branch an `origin/<branch>`
+    /// base names (a goal stacked on another thread's pull request). Nil for a local base such as `main`.
+    public var originBranch: String? {
+        if let pushTo { return pushTo }
+        return base.hasPrefix("origin/") ? String(base.dropFirst("origin/".count)) : nil
+    }
+    /// The branch this goal's pull request is stacked on: an `origin/<branch>` base that is not `push_to` and not a mainline
+    /// branch (`origin/main` is a base, not a parent). Nil otherwise.
+    public var stackedOn: String? {
+        guard pushTo == nil, let branch = originBranch, SafeNames.isPushTarget(branch) else { return nil }
+        return branch
+    }
     /// Steps that do not run for this goal: `verifier`, `judge`, or a stage named in `[review] stages`.
     public var skip: [String] = []
     /// Other checkouts this goal's runs may read, read-only, on top of the config's `read_also` (`ReadAlso`).

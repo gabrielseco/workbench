@@ -254,6 +254,11 @@ Implemented in `Sources/WorkbenchCore/Goal/`.
   `workbench/<id>`. `main`, `master`, `trunk` and `develop` are refused. `ship` pushes the work to that
   branch and records the branch's open pull request, instead of creating a branch and a PR
   ([P2.5](../archive/P2.5-ship.md)).
+  **Stacking.** `workbench goal new <name> --after <thread>` writes `base: origin/workbench/<thread>` (no `push_to`) for a thread that
+  has opened a pull request, and records `after` on `thread.created`. A `base` of the form `origin/<branch>` is fetched before every
+  worktree is cut, so the worktree starts from the branch's tip on origin, and `ship` opens the PR against that branch, so its diff is
+  only this thread's own work ([P27](../plan/P27-series.md)). It is refused when the thread is not in this project, has opened no
+  pull request, or the branch is not on origin; it takes none of `--base`, `--update` and `--quick`.
   **Optional:** `skip`, step names separated by commas, each once: `verifier`, `judge`, or a stage named in
   `[review] stages`. A step the goal skips does not run for this goal: the verifier records `verifier.skipped` ("the
   goal skips the verifier") after a turn, `[review] auto` prints `auto judge: skipped, the goal skips it`, and `next`

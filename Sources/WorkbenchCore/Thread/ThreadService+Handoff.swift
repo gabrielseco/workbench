@@ -51,8 +51,8 @@ extension ThreadService {
             if let decision = ThreadStore(project: project).state(of: id).decision {
                 throw ThreadServiceError.threadEnded(decision)
             }
-            if goal.pushTo == nil { try await manager.updateBaseFromOrigin(goal.base) }
-            let created = try await manager.create(threadID: id, base: goal.base, fetching: goal.pushTo, copying: copy)
+            if goal.originBranch == nil { try await manager.updateBaseFromOrigin(goal.base) }
+            let created = try await manager.create(threadID: id, base: goal.base, fetching: goal.originBranch, copying: copy)
             try await log.append(.worktreeCreated, data: created.eventData)
         }
     }

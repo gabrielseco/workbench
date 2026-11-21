@@ -329,3 +329,26 @@ private let repoTemplate = """
         #expect(!text.contains("/Users/me"))
     }
 }
+
+@Suite struct StackedPRBodyTests {
+    private func stacked(base: String, pushTo: String? = nil) -> Goal {
+        var g = goal()
+        g.base = base
+        g.pushTo = pushTo
+        return g
+    }
+
+    @Test func aStackedGoalsBodyNamesTheParentBranchFirst() {
+        for template in [nil, repoTemplate] as [String?] {
+            let body = PRBodyBuilder.build(goal: stacked(base: "origin/workbench/g-1-api"), check: nil, template: template).body
+            #expect(body.hasPrefix("> **Stacked:**"))
+            #expect(body.contains("`workbench/g-1-api`"))
+        }
+    }
+
+    @Test func aMainlineOriginBaseOrAContinuedBranchIsNotAStack() {
+        for g in [stacked(base: "main"), stacked(base: "origin/main"), stacked(base: "origin/feature/pr", pushTo: "feature/pr")] {
+            #expect(!PRBodyBuilder.build(goal: g, check: nil, template: nil).body.contains("Stacked"))
+        }
+    }
+}
