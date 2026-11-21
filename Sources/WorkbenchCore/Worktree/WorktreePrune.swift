@@ -81,15 +81,13 @@ extension ThreadService {
     /// Lists every worktree of the repository and says which can be removed; unless `dryRun`, removes those (with
     /// `git worktree remove`, never forced) and the local branches that were removable with them. Directories under
     /// `.workbench/worktrees/` that git does not list are removed only with `unregistered`, and never when a thread
-    /// names them. GitHub is asked only about branches whose commits are not already on the default branch.
+    /// names them. GitHub is asked about every branch, also one already on the default branch (an open pull request, or a
+    /// closed one without `includeClosed`, keeps it); when GitHub cannot answer, a branch on the default branch is still
+    /// decided by git and the others are kept.
     public func prune(
         gh: GitRunner?, includeClosed: Bool, unregistered: Bool, dryRun: Bool
     ) async throws -> PruneReport {
-        let listed = try? await git.run(["worktree", "list", "--porcelain"], in: project.root)
-        guard let listed, listed.succeeded, !listed.outputTruncated else {
-            throw PruneError.cannotList(listed?.stderr.trimmingCharacters(in: .whitespacesAndNewlines) ?? "git did not run")
-        }
-        let records = Self.parseWorktreeList(listed.stdout)
+        let records = try await listWorktrees()
         let defaultBranch = await defaultBase()
         let defaultRefs = await existingRefs(["refs/remotes/origin/\(defaultBranch)", "refs/heads/\(defaultBranch)"])
         var lookups = PRLookups(gh: gh, root: project.root)
@@ -141,11 +139,29 @@ extension ThreadService {
         var prunable = false
     }
 
-    /// `git worktree list --porcelain`: records separated by a blank line, the first one the main checkout.
-    static func parseWorktreeList(_ text: String) -> [WorktreeRecord] {
+    /// How many branches holding a detached commit are asked about before the rest are said to be unasked.
+    static let detachedLookupLimit = 100
+
+    /// `git worktree list --porcelain -z`, where a path is printed as it is. A git older than 2.36 has no `-z`: then the
+    /// newline form is read, where git C-quotes a path with special characters; such a path starts with `"`, fails
+    /// `isSafeWorktreePath` and is kept, never unquoted by hand.
+    private func listWorktrees() async throws -> [WorktreeRecord] {
+        let nul = try? await git.run(["worktree", "list", "--porcelain", "-z"], in: project.root)
+        if let nul, nul.succeeded, !nul.outputTruncated { return Self.parseWorktreeList(nul.stdout, separator: "\0") }
+        let listed = try? await git.run(["worktree", "list", "--porcelain"], in: project.root)
+        guard let listed, listed.succeeded, !listed.outputTruncated else {
+            let why = (listed ?? nul)?.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw PruneError.cannotList(why.map { $0.isEmpty ? "git failed" : $0 } ?? "git did not run")
+        }
+        return Self.parseWorktreeList(listed.stdout, separator: "\n")
+    }
+
+    /// `git worktree list --porcelain`: one field per line (per NUL with `-z`), records separated by an empty field, the
+    /// first one the main checkout.
+    static func parseWorktreeList(_ text: String, separator: Character = "\n") -> [WorktreeRecord] {
         var records: [WorktreeRecord] = []
         var current: WorktreeRecord?
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+        for line in text.split(separator: separator, omittingEmptySubsequences: false).map(String.init) {
             if line.hasPrefix("worktree ") {
                 if let current { records.append(current) }
                 current = WorktreeRecord(path: String(line.dropFirst("worktree ".count)))
@@ -205,41 +221,49 @@ extension ThreadService {
         guard let status, status.succeeded else { return kept("git could not read its status") }
         if !status.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return kept("uncommitted changes") }
 
-        switch await isAncestor(head, ofAny: defaultRefs) {
-        case .some(let ref):
-            entry.verdict = .removable(
-                record.branch == nil ? "detached at a commit on \(Self.shortRef(ref))" : "merged into \(Self.shortRef(ref))")
-            return entry
-        case .none: break
-        }
-
+        let onDefault = await isAncestor(head, ofAny: defaultRefs).map(Self.shortRef)
         guard let branch = record.branch else {
+            if let onDefault {
+                entry.verdict = .removable("detached at a commit on \(onDefault)")
+                return entry
+            }
             return await judgeDetached(head: head, entry: entry, lookups: &lookups)
         }
+        // A branch already on the default branch is still asked about: an open pull request, or a closed one without
+        // --closed, keeps it. Only when GitHub cannot answer does git's answer decide alone.
         switch await lookups.prs(of: branch) {
         case .failure(let why):
+            if let onDefault {
+                entry.verdict = .removable("merged into \(onDefault) (GitHub could not be asked, so git decided: \(why.why))")
+                return entry
+            }
             entry.lookupFailed = true
             return kept("GitHub could not be asked (\(why.why))")
         case .success(let prs):
-            return await decide(prs: prs, head: head, entry: entry, includeClosed: includeClosed)
+            return await decide(prs: prs, head: head, onDefault: onDefault, entry: entry, includeClosed: includeClosed)
         }
     }
 
     /// The verdict from a branch's pull requests: merged (with the tip in its head) removes, an open one keeps, a closed one
-    /// removes only with `includeClosed`.
-    private func decide(prs: [BranchPR], head: String, entry: PruneEntry, includeClosed: Bool) async -> PruneEntry {
+    /// removes only with `includeClosed`; with none of those, a tip on the default branch (`onDefault`) removes.
+    private func decide(
+        prs: [BranchPR], head: String, onDefault: String?, entry: PruneEntry, includeClosed: Bool
+    ) async -> PruneEntry {
         var entry = entry
         var covering: [BranchPR] = []
         for pr in prs where await contains(pr.head, head) { covering.append(pr) }
+        let closed = covering.first { $0.state == .closed } ?? (onDefault == nil ? nil : prs.first { $0.state == .closed })
         if let merged = covering.first(where: { $0.state == .merged }) {
             entry.verdict = .removable("pull request #\(merged.number) is merged")
         } else if let open = prs.first(where: { $0.state == .open }) {
             entry.verdict = .kept("pull request #\(open.number) is open")
-        } else if let closed = covering.first(where: { $0.state == .closed }) {
+        } else if let closed {
             entry.verdict =
                 includeClosed
                 ? .removable("pull request #\(closed.number) was closed without merging")
                 : .kept("pull request #\(closed.number) was closed without merging; --closed removes it")
+        } else if let onDefault {
+            entry.verdict = .removable("merged into \(onDefault)")
         } else if !prs.isEmpty {
             entry.verdict = .kept("it has commits after its pull request")
         } else {
@@ -259,8 +283,15 @@ extension ThreadService {
             let name = String(ref.dropFirst(prefix.count))
             if name != "HEAD", SafeNames.isBranchName(name), !names.contains(name) { names.append(name) }
         }
+        guard result?.succeeded == true, result?.outputTruncated == false else {
+            entry.verdict = .kept("detached; git could not say which branches hold its commit")
+            return entry
+        }
+        // Local branches come first in git's order (refs/heads sorts before refs/remotes). Every name is asked about, up to
+        // a bound: one past it is said, never silently skipped.
         var failure: String?
-        for name in names.prefix(10) {
+        let limit = Self.detachedLookupLimit
+        for name in names.prefix(limit) {
             switch await lookups.prs(of: name) {
             case .failure(let why): failure = failure ?? why.why
             case .success(let prs):
@@ -275,6 +306,10 @@ extension ThreadService {
         if let failure {
             entry.lookupFailed = true
             entry.verdict = .kept("detached; GitHub could not be asked (\(failure))")
+        } else if names.count > limit {
+            entry.verdict = .kept(
+                "detached at a commit on \(names.count) branches; the first \(limit) have no merged pull request "
+                    + "holding it, the rest were not asked")
         } else {
             entry.verdict = .kept("detached at a commit not on the default branch or a merged pull request")
         }
@@ -308,6 +343,8 @@ extension ThreadService {
 
     private func unregisteredEntries(registered: [String], allowed: Bool) -> [PruneEntry] {
         let folder = project.root.appendingPathComponent(".workbench/worktrees")
+        let threads = Set(ThreadStore(project: project).threadIDs())
+        let listingComplete = registered.allSatisfy(Self.isSafeWorktreePath)
         let known = Set(registered.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.path })
         let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).sorted()
         var entries: [PruneEntry] = []
@@ -317,10 +354,13 @@ extension ThreadService {
                 !known.contains(url.resolvingSymlinksInPath().standardizedFileURL.path)
             else { continue }
             var entry = PruneEntry(path: url.path, kind: .unregistered, branch: nil, head: nil, verdict: .kept(""))
-            if !SafeNames.isThreadID(name) {
-                entry.verdict = .kept("unregistered; its name is not one Workbench removes")
-            } else if FileManager.default.fileExists(atPath: project.threadDirectory(name).path) {
+            // A thread names its worktree `.workbench/worktrees/<id>`. The name is only compared, never put in a git
+            // argument, and the directory is removed by path without following links (only a real directory is listed).
+            if threads.contains(name)
+                || FileManager.default.fileExists(atPath: project.threadsDirectory.appendingPathComponent(name).path) {
                 entry.verdict = .kept("unregistered, but thread \(name) names it")
+            } else if !listingComplete {
+                entry.verdict = .kept("unregistered, but git listed a worktree path that could not be read; it may be this one")
             } else if !allowed {
                 entry.verdict = .kept("unregistered; --unregistered removes it")
             } else {

@@ -375,15 +375,21 @@ With `--review-loop` (not with `--watch`) the same command goes on after the pul
 `.workbench/worktrees/` it does not, one line each: `removable` or `kept`, the path, the branch (or `detached`) and the reason.
 It is a dry run unless `--yes`. The primary checkout, a worktree with uncommitted changes (untracked files count), a locked one,
 one whose directory is gone, and the worktree of a thread that has an active turn or has not ended are always kept. A clean
-worktree is removable when its commit is an ancestor of the default branch (`origin/<default>` or the local one; GitHub is not
-asked then), when its branch has a merged pull request whose head contains its tip (a squash merge), or, detached, when its
-commit is on a branch with a merged pull request. An open pull request keeps it; a closed, unmerged one keeps it unless
-`--closed`; commits after the pull request's head, or no pull request, keep it. `gh pr list --head <branch> --state all` is
-asked once per branch. A branch or path that does not validate (`SafeNames.isBranchName`, an absolute path without `.`/`..`
-or control characters) is kept and never reaches git or `gh`. `--yes` runs `git worktree remove <path>` (never `--force`), then
+worktree is removable when its branch has a merged pull request whose head contains its tip (a squash merge), when its commit
+is an ancestor of the default branch (`origin/<default>` or the local one) and the branch has no open pull request and no
+closed, unmerged one (that one is removable with `--closed`), or, detached, when its commit is on the default branch or on a
+branch with a merged pull request (every branch holding it is asked about, up to 100; past that the line says the rest were
+not asked). An open pull request keeps it, also on a branch already on the default branch; a closed, unmerged one keeps it
+unless `--closed`; commits after the pull request's head, or no pull request and commits not on the default branch, keep it.
+`gh pr list --head <branch> --state all` is asked once per branch. When it cannot be asked, a branch on the default branch is
+still removed (git decided, and the line says GitHub was not asked) and the others are kept. The worktrees are read with
+`git worktree list --porcelain -z`, so a path is never quoted; a git without `-z` is read line by line, and a path it quoted
+is kept. A branch or path that does not validate (`SafeNames.isBranchName`, an absolute path without `.`/`..` or control
+characters) is kept and never reaches git or `gh`. `--yes` runs `git worktree remove <path>` (never `--force`), then
 deletes the local branch with `git update-ref -d` at the commit it was judged at, unless it is the default branch or is checked
 out elsewhere; for a thread's worktree it appends `worktree.removed` (and `branch.removed`) with `reason: "prune"`.
-Unregistered directories are removed only with `--yes --unregistered`, and never one whose name is a thread in the store.
+Unregistered directories (any name) are removed only with `--yes --unregistered`, never one whose name is a thread in the
+store, and none when git listed a worktree path that did not validate (it could be one of them).
 No `--json`.
 
 | Code | Kind | When |

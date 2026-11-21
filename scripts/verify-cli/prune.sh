@@ -6,10 +6,10 @@
 # The binary is built here, but every prune runs on a throwaway repository in the scratch folder, never on this one (its
 # worktrees are someone's work). `gh` is a stand-in script first on PATH that answers `gh pr list --head <branch>` from files.
 # The throwaway repository has worktrees that are: merged into main, squash-merged (a merged pull request, not an ancestor),
-# detached on main, dirty, locked, with an open pull request, with no pull request, with a closed one; an unregistered directory
-# under .workbench/worktrees/ and one a thread names. Steps: the dry run lists each with its verdict and changes nothing; --yes
-# removes the three removable ones and their branches and keeps the rest; --yes --unregistered removes the unregistered
-# directory but not the thread's; --yes --closed removes the closed one; a failing `gh` keeps a worktree that needs it and exits 1
+# detached on main, dirty, locked, with an open pull request, with no pull request, with a closed one, at main with an open pull
+# request; two unregistered directories under .workbench/worktrees/ (one with a name no thread could have) and one a thread
+# names. Steps: the dry run lists each with its verdict and changes nothing; --yes removes the three removable ones and their
+# branches and keeps the rest; --yes --unregistered removes the unregistered directories but not the thread's; --yes --closed removes the closed one; a failing `gh` keeps a worktree that needs it and exits 1
 # while one decided by git is still removed. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start.
 # VERIFY_CLI_SABOTAGE=1 has the stand-in say the squash-merged branch's pull request is open, so the "squash-merged is removable"
 # and "--yes removes" steps must FAIL. Everything is in the scratch folder, removed on a pass. Run by hand, not by CI.
@@ -78,6 +78,10 @@ fx worktree lock "$WT/locked"
 answer feat/open OPEN 4 "$(add_wt open feat/open 1)"
 add_wt nopr feat/nopr 1 >/dev/null
 answer feat/closed CLOSED 5 "$(add_wt closed feat/closed 1)"
+# At main (an ancestor of it) but with an open pull request: being on main does not remove it.
+answer feat/onmain OPEN 6 "$(add_wt onmain feat/onmain 0)"
+# A name no thread could have: --unregistered removes it all the same.
+mkdir -p "$FX/.workbench/worktrees/odd name@1"
 
 # --- 1. the dry run -----------------------------------------------------------------------------------------------------
 
@@ -95,7 +99,7 @@ check "no PR is kept" "no kept line with the reason" line dry.out "(feat/nopr): 
 check "closed PR is kept without --closed" "no kept line naming --closed" line dry.out "#5 was closed without merging; --closed" kept
 check "the primary checkout is kept" "no kept line for it" line dry.out "(main): the primary checkout" kept
 check "unregistered directory is listed" "no line for it" line dry.out "leftover: unregistered; --unregistered" kept
-check "ancestor needs no GitHub" "gh was asked about feat/merged" bash -c "! grep -q feat/merged '$GH/calls'"
+check "on main with an open PR is kept" "no kept line with the reason" line dry.out "(feat/onmain): pull request #6 is open" kept
 
 # --- 2. --yes ------------------------------------------------------------------------------------------------------------
 
@@ -106,16 +110,16 @@ check "--yes removes the removable worktrees" "one is still there" \
 check "--yes removes their branches" "a branch is still there" bash -c "! git -C '$FX' rev-parse -q --verify refs/heads/feat/merged \
     && ! git -C '$FX' rev-parse -q --verify refs/heads/feat/squash"
 check "--yes keeps the rest" "a kept worktree is gone" bash -c \
-    "[ -d '$WT/dirty' ] && [ -d '$WT/locked' ] && [ -d '$WT/open' ] && [ -d '$WT/nopr' ] && [ -d '$WT/closed' ]"
+    "[ -d '$WT/dirty' ] && [ -d '$WT/locked' ] && [ -d '$WT/open' ] && [ -d '$WT/nopr' ] && [ -d '$WT/closed' ] && [ -d '$WT/onmain' ]"
 check "--yes keeps their branches and main" "a kept branch is gone" bash -c "for b in feat/dirty feat/locked feat/open feat/nopr \
-    feat/closed main; do git -C '$FX' rev-parse -q --verify refs/heads/\$b >/dev/null || exit 1; done"
+    feat/closed feat/onmain main; do git -C '$FX' rev-parse -q --verify refs/heads/\$b >/dev/null || exit 1; done"
 check "--yes alone leaves the unregistered directory" "it is gone" test -d "$FX/.workbench/worktrees/leftover"
 
 # --- 3. --unregistered, --closed -----------------------------------------------------------------------------------------
 
 prune unreg.out --yes --unregistered
 check "--unregistered removes the leftover directory" "exit $RC, or it is still there" \
-    bash -c "[ $RC -eq 0 ] && [ ! -e '$FX/.workbench/worktrees/leftover' ]"
+    bash -c "[ $RC -eq 0 ] && [ ! -e '$FX/.workbench/worktrees/leftover' ] && [ ! -e '$FX/.workbench/worktrees/odd name@1' ]"
 check "a directory a thread names stays" "it is gone" test -d "$FX/.workbench/worktrees/t-named"
 prune closed.out --yes --closed
 check "--closed removes the closed PR's worktree and branch" "exit $RC, or it is still there" \

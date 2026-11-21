@@ -137,8 +137,29 @@ private func snapshot(_ fx: RunnerFixture) async throws -> [String] {
             #expect(try await branchExists(branch, fx), "\(branch)")
         }
         #expect(!report.lookupFailed)
-        // An ancestor of main needs no question to GitHub.
-        #expect(!gh.calls.contains { $0.contains("feat/merged") })
+    }
+
+    @Test func aBranchOnMainWithAnOpenOrClosedPullRequestIsNotRemovedForBeingOnMain() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try PruneGH(fx)
+        // Both branches are at main (ancestors), but GitHub has a pull request for each.
+        let open = try await worktree("open", branch: "feat/open-on-main", fx)
+        try gh.answer("feat/open-on-main", state: "OPEN", head: open.tip, number: 11)
+        let closed = try await worktree("closed", branch: "feat/closed-on-main", fx)
+        try gh.answer("feat/closed-on-main", state: "CLOSED", head: closed.tip, number: 12)
+
+        let kept = try await fx.service.prune(gh: gh.runner, includeClosed: false, unregistered: false, dryRun: false)
+        #expect(keptReason(kept, open.path) == "pull request #11 is open")
+        #expect(keptReason(kept, closed.path) == "pull request #12 was closed without merging; --closed removes it")
+        #expect(FileManager.default.fileExists(atPath: open.path.path))
+        #expect(FileManager.default.fileExists(atPath: closed.path.path))
+        #expect(gh.calls.contains { $0.contains("feat/open-on-main") })
+
+        let withClosed = try await fx.service.prune(gh: gh.runner, includeClosed: true, unregistered: false, dryRun: false)
+        #expect(keptReason(withClosed, open.path) == "pull request #11 is open")
+        #expect(entry(withClosed, closed.path)?.outcome == .removed)
+        #expect(try await branchExists("feat/open-on-main", fx))
+        #expect(try await branchExists("feat/closed-on-main", fx) == false)
     }
 
     @Test func aDryRunListsEverythingAndChangesNothing() async throws {
@@ -238,6 +259,9 @@ private func snapshot(_ fx: RunnerFixture) async throws -> [String] {
         let leftover = folder.appendingPathComponent("leftover")
         try FileManager.default.createDirectory(at: leftover, withIntermediateDirectories: true)
         try "x\n".write(to: leftover.appendingPathComponent("f.txt"), atomically: true, encoding: .utf8)
+        // A name no thread could have is still removable: only a thread naming it protects it.
+        let oddName = folder.appendingPathComponent("odd name@1")
+        try FileManager.default.createDirectory(at: oddName, withIntermediateDirectories: true)
         let id = try await fx.service.newThread(name: "named")
         let named = folder.appendingPathComponent(id)
         try FileManager.default.createDirectory(at: named, withIntermediateDirectories: true)
@@ -250,6 +274,8 @@ private func snapshot(_ fx: RunnerFixture) async throws -> [String] {
         let removed = try await fx.service.prune(gh: nil, includeClosed: false, unregistered: true, dryRun: false)
         #expect(entry(removed, leftover)?.outcome == .removed)
         #expect(!FileManager.default.fileExists(atPath: leftover.path))
+        #expect(entry(removed, oddName)?.outcome == .removed)
+        #expect(!FileManager.default.fileExists(atPath: oddName.path))
         #expect(keptReason(removed, named) == "unregistered, but thread \(id) names it")
         #expect(FileManager.default.fileExists(atPath: named.path))
     }
@@ -278,6 +304,34 @@ private func snapshot(_ fx: RunnerFixture) async throws -> [String] {
         #expect(parsed.count == 2)
         #expect(parsed[0].branch == "main")
         #expect(parsed[1].branch == nil && parsed[1].locked)
+
+        // `-z`: a path with a newline arrives whole, and is then refused as unsafe rather than split.
+        let nul = ThreadService.parseWorktreeList(
+            "worktree /r\0HEAD \(String(repeating: "a", count: 40))\0branch refs/heads/main\0\0"
+                + "worktree /w/odd\nname\0HEAD \(String(repeating: "b", count: 40))\0detached\0\0",
+            separator: "\0")
+        #expect(nul.map(\.path) == ["/r", "/w/odd\nname"])
+        #expect(!ThreadService.isSafeWorktreePath(nul[1].path))
+        // Without `-z`, git C-quotes such a path; the quoted form is never taken for a path.
+        #expect(!ThreadService.isSafeWorktreePath("\"/w/odd\\nname\""))
+    }
+
+    @Test func aWorktreeWhosePathNeedsQuotingIsKeptAndBlocksUnregisteredRemoval() async throws {
+        let fx = try await RunnerFixture()
+        // A worktree at a path with a tab, inside `.workbench/worktrees/`: git lists it, but its path is not passed back.
+        let folder = fx.project.worktreesDirectory
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let odd = folder.resolvingSymlinksInPath().appendingPathComponent("odd\tpath")
+        try await run(["worktree", "add", "-q", "-b", "feat/odd-path", odd.path, "main"], fx.repo, fx)
+        let leftover = folder.appendingPathComponent("leftover")
+        try FileManager.default.createDirectory(at: leftover, withIntermediateDirectories: true)
+
+        let report = try await fx.service.prune(gh: nil, includeClosed: true, unregistered: true, dryRun: false)
+        #expect(keptReason(report, odd) == "its path is not one Workbench passes to git", "\(report.render())")
+        #expect(FileManager.default.fileExists(atPath: odd.path))
+        #expect(try await branchExists("feat/odd-path", fx))
+        // The odd worktree's own directory is never taken for an unregistered one.
+        #expect(!report.entries.contains { $0.kind == .unregistered && $0.path.hasSuffix("odd\tpath") && $0.isRemovable })
     }
 
     @Test func theCommandExitsNonZeroWhenGitHubCannotBeAsked() async throws {
