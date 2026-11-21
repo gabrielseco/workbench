@@ -154,7 +154,9 @@ enum Help {
                 "series list, series show and series status: nothing; read-only; series approve: writes approval.json in "
                 + ".workbench/series/<name>/; it starts no step and creates no thread; series run: creates a thread per step "
                 + "(goal new, approve, run, accept, ship --review-loop in each step's project, so it spends what those do, "
-                + "opens pull requests and pushes branches) and appends to .workbench/series/<name>/steps.jsonl; never merges",
+                + "opens pull requests and pushes branches) and appends to .workbench/series/<name>/steps.jsonl; never merges; "
+                + "series rebase: force-pushes (with a lease) the branch of a step whose parent was merged and changes that pull "
+                + "request's base",
             example: "workbench series approve invoice-shortcut"),
         "version": Extra(changes: "nothing; read-only", example: "workbench version"),
     ]

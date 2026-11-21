@@ -169,6 +169,10 @@ let workbenchUsage = """
                                  step's goal budget no longer fits in the series budget_usd, or on Ctrl-C (which ends the
                                  running command cleanly); nothing is retried or merged; one run at a time. exit 0 all
                                  clean, 1 stopped, 14 a step waits for a person or CI, 6 not approved, not valid or running
+      series rebase <name>       after you merge a step's pull request: for each step stacked on it (base: after N), retarget
+                                 its pull request to the base and replay its own commits there (git rebase --onto, then a
+                                 force-with-lease push of its branch, in a throwaway worktree); a parent not merged yet
+                                 waits; a conflict is listed, nothing is pushed and exit is 1; nothing is merged
       series approve <name>      record one approval over the series file and every goal file it names, and print the
                                  steps; a change to any of them makes it STALE. Nothing starts: `series run` does.
                                  exit 6 when the file or a goal file is not valid (all problems listed), 7 for
