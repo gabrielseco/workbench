@@ -128,7 +128,8 @@ extension Commands {
                 if case .clean(_, let pr)? = states[step.number] { return pr.map { "\(step.number): \($0)" } }
                 return nil
             }
-            out("every step is clean: review and merge in this order" + (urls.isEmpty ? "" : "\n  " + urls.joined(separator: "\n  ")))
+            let list = urls.isEmpty ? "" : "\n  " + urls.joined(separator: "\n  ")
+            out("every step is clean: review and merge in this order" + list)
         } else {
             let ready = SeriesScheduler.ready(loaded.definition, states: states)
             let names = ready.map(String.init).joined(separator: ", ")
