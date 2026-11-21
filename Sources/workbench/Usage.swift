@@ -173,6 +173,12 @@ let workbenchUsage = """
                                  its pull request to the base and replay its own commits there (git rebase --onto, then a
                                  force-with-lease push of its branch, in a throwaway worktree); a parent not merged yet
                                  waits; a conflict is listed, nothing is pushed and exit is 1; nothing is merged
+      series report <name> [--out <file>]
+                                 what the series built, what its reviews found and what answered each finding, from the
+                                 logs (no agent runs): a summary table, the merge order, then per step the size, check,
+                                 judge, the agent's own account, each review round's findings and the follow-up that
+                                 fixed them (its commits and what it said). Printed, and written to report.md in the
+                                 series folder or to --out. Works on a series that is not finished
       series approve <name>      record one approval over the series file and every goal file it names, and print the
                                  steps; a change to any of them makes it STALE. Nothing starts: `series run` does.
                                  exit 6 when the file or a goal file is not valid (all problems listed), 7 for

@@ -104,6 +104,8 @@ each other, editing a series while it runs, a queue.
 
 Tasks 1 to 3 cover phases 1 and 2 of a single-project plan. Task 4 is what the three-phase invoice plan needs.
 
+7. **The report** (built, `series report`): what a series built, what its reviews found, what answered each finding and what it cost, from the logs, as Markdown. Tests: the findings parser, the renderer (scrubbing, cutting), the reporter on a fixture with a follow-up and a hand-made thread. Verify-cli `series-report.sh`.
+
 ## Facts to check before task 1
 
 - How `ship` picks a PR's base: whether it takes one other than the project's default base. If it does not, task 1 starts there.

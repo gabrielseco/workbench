@@ -3,7 +3,7 @@ import WorkbenchCore
 
 extension Commands {
     private static let seriesUsage = "usage: workbench series list | series show <name> | series status <name>"
-        + " | series approve <name> | series run <name> | series rebase <name>"
+        + " | series approve <name> | series run <name> | series rebase <name> | series report <name>"
 
     /// `series list` shows the project's series; `series show <name>` its steps; `series approve <name>` binds the file and its
     /// goal files (P27). Nothing here starts a step.
@@ -14,6 +14,11 @@ extension Commands {
         case "list":
             try a.requireEmpty()
             try await seriesList()
+        case "report":
+            let out = try a.value("--out")
+            guard let name = a.positional() else { throw CLIError.usage("usage: workbench series report <name> [--out <file>]") }
+            try a.requireEmpty()
+            try await seriesReport(name, out: out)
         case "rebase":
             guard let name = a.positional() else { throw CLIError.usage("usage: workbench series rebase <name>") }
             try a.requireEmpty()
@@ -207,5 +212,23 @@ extension Commands {
             }
         }
         return failed ? FailureKind.failed.code : 0
+    }
+
+    /// What a series built, what its reviews found and what answered each finding, from the logs. Read only apart from the file it
+    /// writes: `.workbench/series/<name>/report.md`, or `--out`.
+    private static func seriesReport(_ name: String, out path: String?) async throws {
+        let ctx = try await Context.load()
+        let library = SeriesLibrary(project: ctx.project)
+        _ = try seriesLoad(library, name)
+        let reporter = SeriesReporter(library: library, git: ctx.git, gh: try? GitRunner.discover(tool: "gh"))
+        let report = try await reporter.report(name)
+        let text = report.markdown
+        let fallback = ctx.project.seriesDirectory(name).appendingPathComponent("report.md")
+        let target = path.map { URL(fileURLWithPath: $0) } ?? fallback
+        do { try text.write(to: target, atomically: true, encoding: .utf8) } catch {
+            throw CLIError.refused("the report could not be written to \(target.path): \(error)")
+        }
+        Swift.print(text, terminator: "")
+        err("report written to \(target.path)")
     }
 }

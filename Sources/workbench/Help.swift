@@ -151,7 +151,8 @@ enum Help {
             example: "workbench task new bump-countries --input countries.txt   or   workbench task run bump-countries"),
         "series": Extra(
             changes:
-                "series list, series show and series status: nothing; read-only; series approve: writes approval.json in "
+                "series list, series show and series status: nothing; read-only; series report: writes report.md in the series "
+                + "folder (or --out), runs no agent; series approve: writes approval.json in "
                 + ".workbench/series/<name>/; it starts no step and creates no thread; series run: creates a thread per step "
                 + "(goal new, approve, run, accept, ship --review-loop in each step's project, so it spends what those do, "
                 + "opens pull requests and pushes branches) and appends to .workbench/series/<name>/steps.jsonl; never merges; "
