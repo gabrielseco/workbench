@@ -97,12 +97,17 @@ struct SeriesFileTests {
     }
 
     @Test func projectPathsAndGoalNamesThatCouldReachSomewhereElseAreRefused() {
-        for project in ["../a", "/a/../b", "/a//b", "-rf", "a", "/a\\b"] {
+        for project in ["../a", "/a/../b", "-rf", "a", "/a\\b", "~/../b"] {
             #expect(!problems("## 1\nproject: \(project)\ngoal: a.md\n").isEmpty, "\(project)")
         }
         for goal in ["../a.md", "a/b.md", "a.txt", ".md", "series.md", "-a.md"] {
             #expect(!problems("## 1\nproject: /a\ngoal: \(goal)\n").isEmpty, "\(goal)")
         }
+    }
+
+    @Test func aDoubledSlashInAProjectPathIsAccepted() throws {
+        let series = try SeriesDefinition.parse("## 1\nproject: /var/folders//T//x\ngoal: a.md\n", name: "s")
+        #expect(series.steps[0].project == "/var/folders//T//x")
     }
 
     @Test func envNamesAndValuesAreChecked() {

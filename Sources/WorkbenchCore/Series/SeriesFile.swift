@@ -89,7 +89,8 @@ public struct SeriesDefinition: Sendable, Equatable {
     static func isSafeProjectPath(_ path: String) -> Bool {
         guard path.hasPrefix("/") || path.hasPrefix("~/"), path.count <= 300, !path.contains("\\") else { return false }
         if path.unicodeScalars.contains(where: { $0.value < 32 }) { return false }
-        return !path.split(separator: "/", omittingEmptySubsequences: false).dropFirst().contains { $0 == ".." || $0.isEmpty }
+        // A doubled slash is harmless (macOS temp folders have one) and the path is standardized when it is read; `..` is not.
+        return !path.split(separator: "/").contains("..")
     }
 
     public static func parse(_ rawText: String, name: String) throws -> SeriesDefinition {
