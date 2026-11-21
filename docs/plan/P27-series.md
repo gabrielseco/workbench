@@ -97,7 +97,7 @@ each other, editing a series while it runs, a queue.
    a `step:N` of a step that has no branch yet, an `env` value that reaches the check and the verifier. In expense-tracker (a
    separate PR there): `npm run api:sync` takes the ref from `API_CONTRACT_REF`, and `api:check` accepts a pin that was a branch
    commit now merged by squash by re-hashing the contract files instead of requiring the SHA.
-5. **Rebase after merge.** `series rebase` and the driver's handling of a merged parent: retarget, `--onto`, force-with-lease, stop
+5. **Rebase after merge** (built, `series rebase`; run by hand after each merge, not by the driver). `series rebase` and the driver's handling of a merged parent: retarget, `--onto`, force-with-lease, stop
    on a conflict. Tests: a squash-merged parent, a conflict, a parent that is still open (nothing happens).
 6. **The app.** A series card in the inbox: steps, their states, the step that stopped and why. Core is already derived; this is
    display. verify-app scenario: a series running, a series stopped.

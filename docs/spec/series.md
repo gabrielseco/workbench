@@ -2,7 +2,7 @@
 
 A series is an ordered list of goals to run one after another, in one project or several (P27, [plan](../plan/P27-series.md)).
 This page is what is built: the file, its checks, `series list|show|approve`, the state of each step (`series status`) and running a
-series (`series run`). Rebasing a stack after a parent merges and the app view are later tasks of the plan.
+series (`series run`). Rebasing a stack after a parent merges (`series rebase`) is built; the app view is a later task of the plan.
 
 ```
 .workbench/series/invoice-shortcut/
@@ -69,6 +69,7 @@ rest of `.workbench/`.
 | `series show <name>` | the steps as they will run: project, goal, where each starts, what it waits for, `env` |
 | `series status <name>` | where each step is and which steps could start now (below). Read only; asks `gh` for the checks |
 | `series run <name>` | runs the approved series (below) |
+| `series rebase <name>` | after a parent's pull request is merged, retargets and replays the step stacked on it (below) |
 | `series approve <name>` | records the approval and prints the steps. Starts nothing, creates no thread |
 
 Exit codes: 0, 2 usage, 6 the series is not valid or not approved, 7 no such series; for `series run` also 1 stopped and 14 a step waits.
@@ -128,3 +129,21 @@ the timeouts and every budget are the ones those commands have, and each thread'
 - Ctrl-C gives the child up to 60 s to end its turn before anything is killed.
 - It never merges, and a step that was started is not started again: a step with a thread but no pull request is `running` and waits
   for a person.
+
+## After a parent is merged
+
+You merge the pull requests yourself, in order. A squash merge gives the parent a new commit, so the pull request of the step stacked
+on it (`base: after N`) still carries the parent's old commits and targets the parent's branch. `series rebase <name>` fixes each such
+step whose parent's pull request is **merged** (read from GitHub):
+
+1. fetches the base the parent was merged into and the step's branch;
+2. replays only the step's own commits: `git rebase --onto origin/<base> <the commit the step was cut from> …` in a throwaway
+   worktree (`worktree.created`'s `base_commit` in the step's log is the parent's tip at the time, so the parent's old commits are not
+   replayed again);
+3. pushes with `--force-with-lease` on the tip GitHub reports for the pull request, so a commit pushed in between is not overwritten;
+4. changes the pull request's base to that branch (`gh pr edit --base`).
+
+A parent that is not merged yet makes the step *wait* (nothing changes); a step already on its base is reported as such, so the
+command can be run again after each merge, which is how a chain of three is done. A **conflict** aborts the rebase, lists the files and
+pushes and changes nothing (exit 1); resolve it by hand. A step whose pull request is closed or merged is reported, not touched. The
+branch's old head is reviewed and checked, the rebased one is not: run the review again if you want it. It never merges.
