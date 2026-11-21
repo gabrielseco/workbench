@@ -11,7 +11,8 @@ private func ev(_ seq: Int, _ kind: EventKind, _ data: JSONValue = [:]) -> Event
 
 private func facts(
     pr: Bool = true, head sha: String = head, decision: String? = nil, merged: Bool = false, closed: Bool = false,
-    checks: [(String, String)]? = [("test", "pass")], checksError: String? = nil, review: JSONValue? = nil, started: Bool = false
+    checks: [(String, String)]? = [("test", "pass")], checksError: String? = nil, review: JSONValue? = nil, started: Bool = false,
+    live: (state: PRState, head: String)? = (.open, head), liveError: String? = nil
 ) -> SeriesStepFacts {
     var events: [Event] = []
     if pr { events.append(ev(1, .prOpened, ["number": 7, "url": "https://example.test/pull/7", "head_sha": .string(sha)])) }
@@ -22,7 +23,8 @@ private func facts(
     if let decision { events.append(ev(5, .reviewDecision, ["decision": .string(decision)])) }
     return SeriesStepFacts(
         thread: "g-1-x", state: ThreadState.derive(from: events, id: "g-1-x"),
-        checks: checks.map { PRChecksSummary(checks: $0.map { PRCheck(name: $0.0, bucket: $0.1) }) }, checksError: checksError)
+        checks: checks.map { PRChecksSummary(checks: $0.map { PRCheck(name: $0.0, bucket: $0.1) }) }, checksError: checksError,
+        live: live, liveError: liveError)
 }
 
 private let cleanReview: JSONValue = ["round": 1, "pr": 7, "head_sha": .string(head), "ok": true, "verdict": "clean"]
@@ -53,6 +55,33 @@ struct SeriesStateTests {
 
     @Test func aMergedPullRequestIsCleanWithoutReadingChecks() {
         #expect(SeriesScheduler.state(facts(merged: true, checks: nil)).isClean)
+    }
+
+    @Test func aMergeOrACloseOnGitHubCountsEvenWhenNoCommandRecordedIt() {
+        #expect(SeriesScheduler.state(facts(checks: nil, live: (.merged, head))).isClean)
+        guard case .stopped(_, let reason) = SeriesScheduler.state(facts(review: cleanReview, live: (.closed, head))) else {
+            Issue.record("a pull request closed on GitHub is not clean")
+            return
+        }
+        #expect(reason.contains("closed"))
+    }
+
+    @Test func aPullRequestThatCouldNotBeReadIsNeverClean() {
+        for f in [facts(review: cleanReview, live: nil), facts(review: cleanReview, live: nil, liveError: "gh failed")] {
+            guard case .waiting = SeriesScheduler.state(f) else {
+                Issue.record("expected waiting")
+                continue
+            }
+        }
+    }
+
+    @Test func aCommitPushedAfterTheReviewIsNotCleanEvenWhenItsChecksPass() {
+        let pushed = String(repeating: "c", count: 40)
+        guard case .waiting(_, let why) = SeriesScheduler.state(facts(review: cleanReview, live: (.open, pushed))) else {
+            Issue.record("the review was of an older commit")
+            return
+        }
+        #expect(why.contains("older commit"))
     }
 
     @Test func aClosedPullRequestStops() {
@@ -104,7 +133,7 @@ struct SeriesStateTests {
             return
         }
         let other = String(repeating: "b", count: 40)
-        guard case .waiting(_, let why) = SeriesScheduler.state(facts(head: other, review: cleanReview)) else {
+        guard case .waiting(_, let why) = SeriesScheduler.state(facts(review: cleanReview, live: (.open, other))) else {
             Issue.record("a review of an older commit waits")
             return
         }

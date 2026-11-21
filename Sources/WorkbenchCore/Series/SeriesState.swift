@@ -68,9 +68,17 @@ public struct SeriesStepFacts: Sendable {
     /// The pull request's checks; nil when they could not be read (`checksError` says why) or there is no pull request.
     public var checks: PRChecksSummary?
     public var checksError: String?
+    /// What GitHub says now: the pull request's state and its current head. The log records only what happened through
+    /// Workbench, so a merge or a close on GitHub, or a commit pushed after the review, is seen only here.
+    public var live: (state: PRState, head: String)?
+    public var liveError: String?
 
-    public init(thread: String, state: ThreadState, checks: PRChecksSummary? = nil, checksError: String? = nil) {
+    public init(
+        thread: String, state: ThreadState, checks: PRChecksSummary? = nil, checksError: String? = nil,
+        live: (state: PRState, head: String)? = nil, liveError: String? = nil
+    ) {
         (self.thread, self.state, self.checks, self.checksError) = (thread, state, checks, checksError)
+        (self.live, self.liveError) = (live, liveError)
     }
 }
 
@@ -92,6 +100,15 @@ public enum SeriesScheduler {
         if state.isClosed { return stopped("the pull request was closed without merging") }
         func waiting(_ reason: String) -> SeriesStepState { .waiting(thread: thread, reason: reason) }
 
+        // A person's merge or close on GitHub counts even when no Workbench command recorded it; a merge is the decision that
+        // matters, so it needs no checks or review of its own.
+        if let error = facts.liveError { return waiting("the pull request could not be read: \(error)") }
+        guard let live = facts.live else { return waiting("the pull request has not been read") }
+        switch live.state {
+        case .merged: return .clean(thread: thread, pullRequest: pr.url)
+        case .closed: return stopped("the pull request was closed without merging")
+        case .open: break
+        }
         if let error = facts.checksError { return waiting("the checks could not be read: \(error)") }
         guard let checks = facts.checks else { return waiting("the checks have not been read") }
         switch checks.state {
@@ -107,9 +124,8 @@ public enum SeriesScheduler {
         guard let verdict = review.verdict else {
             return stopped("the review round \(review.round) had no verdict: \(review.failure ?? "no reason recorded")")
         }
-        if let head = pr.headSHA, let reviewed = review.headSHA, head != reviewed {
-            return waiting("the last review was of an older commit")
-        }
+        // The head GitHub has now, not the one the pull request was opened at: a commit pushed after the review is unreviewed.
+        if review.headSHA != live.head { return waiting("the last review was of an older commit") }
         return verdict == "clean" ? .clean(thread: thread, pullRequest: pr.url) : waiting("the review asked for fixes")
     }
 
@@ -152,10 +168,16 @@ extension SeriesLibrary {
             let other = Project(root: root)
             let state = ThreadStore(project: other).state(of: record.thread)
             var facts = SeriesStepFacts(thread: record.thread, state: state)
-            if state.pullRequest != nil, !state.isMerged, !state.isClosed {
+            if let number = state.pullRequest?.number, !state.isMerged, !state.isClosed {
                 let service = ThreadService(project: other, git: git)
-                do { facts.checks = try await service.prChecks(id: record.thread, gh: gh) } catch {
-                    facts.checksError = "\(error)"
+                switch await service.prState(number: number, gh: gh) {
+                case .success(let live): facts.live = live
+                case .failure(let error): facts.liveError = error.why
+                }
+                if facts.live?.state == .open {
+                    do { facts.checks = try await service.prChecks(id: record.thread, gh: gh) } catch {
+                        facts.checksError = "\(error)"
+                    }
                 }
             }
             result[step.number] = SeriesScheduler.state(facts)

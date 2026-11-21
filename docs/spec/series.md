@@ -74,7 +74,7 @@ Exit codes: 0, 2 usage, 6 the series is not valid, 7 no such series.
 
 ## Where a step is
 
-Derived each time from the step's thread (in the step's own project, named by `steps.jsonl`) and its pull request's checks; nothing
+Derived each time from the step's thread and what GitHub says now about its pull request (state and head, `gh pr view`; the log only knows what went through Workbench, so a merge or a push made elsewhere is seen there) (in the step's own project, named by `steps.jsonl`) and its pull request's checks; nothing
 is stored but the thread name.
 
 | state | when |
@@ -82,8 +82,8 @@ is stored but the thread name.
 | `pending` | no thread yet; `status` says which steps it waits for |
 | `running` | a thread with no pull request, not ended |
 | `waiting` | the pull request is open and something is missing: no checks yet, checks running or unreadable, no review yet, a round running, the review asked for fixes, or the last review was of an older commit |
-| `clean` | **the pull request is open (or merged), every check is `pass` or `skipping`, and the last review round of its head commit had the verdict `clean`** |
-| `STOPPED` | needs a person: a check `fail`ed or `cancel`led (once nothing is still running; a cancelled check is never clean, whatever `gh` exits with), a review round with no verdict, the pull request closed unmerged, the thread discarded or abandoned, or accepted and never shipped |
+| `clean` | **the pull request is open, every check is `pass` or `skipping`, and the last review round was of the head commit GitHub has now with the verdict `clean`**; or it is merged (a person's merge is the decision that matters, so a merged pull request needs neither) |
+| `STOPPED` | needs a person: a check `fail`ed or `cancel`led (once nothing is still running; a cancelled check is never clean, whatever `gh` exits with), a review round with no verdict, the pull request closed unmerged (read from GitHub), the thread discarded or abandoned, or accepted and never shipped |
 
 A step is ready when it is `pending` and every step in its `after` is `clean`; **nothing is ready while any step is `STOPPED`**.
 `status` prints the states, then `stopped at step N` or `ready to start: step …`.
