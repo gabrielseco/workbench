@@ -69,6 +69,7 @@ rest of `.workbench/`.
 | `series show <name>` | the steps as they will run: project, goal, where each starts, what it waits for, `env` |
 | `series status <name>` | where each step is and which steps could start now (below). Read only; asks `gh` for the checks |
 | `series run <name>` | runs the approved series (below) |
+| `series report <name> [--out <file>]` | what the series built, what its reviews found and what answered each finding, from the logs (below) |
 | `series rebase <name>` | after a parent's pull request is merged, retargets and replays the step stacked on it (below) |
 | `series approve <name>` | records the approval and prints the steps. Starts nothing, creates no thread |
 
@@ -147,3 +148,23 @@ A parent that is not merged yet makes the step *wait* (nothing changes); a step 
 command can be run again after each merge, which is how a chain of three is done. A **conflict** aborts the rebase, lists the files and
 pushes and changes nothing (exit 1); resolve it by hand. A step whose own pull request is merged is skipped (the steps stacked on it come next) and a closed one is reported, not touched; a conflict or a failure ends the command so no later step is moved past it. The
 branch's old head is reviewed and checked, the rebased one is not: run the review again if you want it. It never merges.
+
+## The report
+
+`series report <name>` is what you read when a series comes back. It is built from what is already recorded (the steps' thread logs, their
+review rounds and follow-up threads) and runs no agent, so it is free and states only what the logs say. It prints Markdown and writes it
+to `.workbench/series/<name>/report.md` (or `--out`). It also works on a series that is not finished: a step not started is said so.
+
+- **Summary:** a table of the steps (goal, state, pull request, the review rounds as `FIX → FIX → CLEAN`, cost), the cost of the coding turns
+  against the series budget (the Codex reviews and judge runs have no price and are not counted), and the pull requests in the order to
+  merge them with the reminder to run `series rebase` between merges.
+- **Per step:** the size of the pull request (`gh pr view`, when `gh` is there), turns and cost, the check, the verifier and the judge's
+  reading **with the turn it is of** (it is read before the review fixes, so a criterion it found unmet may be fixed since); the agent's own
+  account of what it built; the criteria with the judge's tick; the judge's concerns.
+- **Review:** each round's verdict, its findings (severity and title, read from the round's findings file, which is named for the whole
+  text), and the follow-up thread that answered it: its cost, its commits and what the agent said last (what it fixed and what it left).
+  A round with a FIX and no follow-up is said so.
+- **Also pushed by hand:** threads made on the same pull request branch outside the review loop (`goal new --update <branch>`), with their
+  commits and what they said, and their cost counts toward the step.
+- Text that came from an agent is scrubbed of machine paths and credentials and cut (1200 characters for what it built, 700 for a
+  follow-up's account); the files it was cut from are named.
