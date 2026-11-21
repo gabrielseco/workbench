@@ -12,7 +12,8 @@ private func ev(_ seq: Int, _ kind: EventKind, _ data: JSONValue = [:]) -> Event
 private func facts(
     pr: Bool = true, head sha: String = head, decision: String? = nil, merged: Bool = false, closed: Bool = false,
     checks: [(String, String)]? = [("test", "pass")], checksError: String? = nil, review: JSONValue? = nil, started: Bool = false,
-    live: (state: PRState, head: String)? = (.open, head), liveError: String? = nil, stoppedReason: String? = nil
+    live: (state: PRState, head: String)? = (.open, head), liveError: String? = nil, stoppedReason: String? = nil,
+    age: TimeInterval? = nil
 ) -> SeriesStepFacts {
     var events: [Event] = []
     if pr { events.append(ev(1, .prOpened, ["number": 7, "url": "https://example.test/pull/7", "head_sha": .string(sha)])) }
@@ -24,7 +25,7 @@ private func facts(
     return SeriesStepFacts(
         thread: "g-1-x", state: ThreadState.derive(from: events, id: "g-1-x"),
         checks: checks.map { PRChecksSummary(checks: $0.map { PRCheck(name: $0.0, bucket: $0.1) }) }, checksError: checksError,
-        live: live, liveError: liveError, stoppedReason: stoppedReason)
+        live: live, liveError: liveError, stoppedReason: stoppedReason, pullRequestAge: age)
 }
 
 private let cleanReview: JSONValue = ["round": 1, "pr": 7, "head_sha": .string(head), "ok": true, "verdict": "clean"]
@@ -55,6 +56,18 @@ struct SeriesStateTests {
 
     @Test func aMergedPullRequestIsCleanWithoutReadingChecks() {
         #expect(SeriesScheduler.state(facts(merged: true, checks: nil)).isClean)
+    }
+
+    @Test func aRepositoryWithNoCIIsCleanOnceTheGracePassedAndNotBefore() {
+        let early = SeriesStepState.waiting(thread: "g-1-x", reason: SeriesScheduler.noChecks)
+        #expect(SeriesScheduler.state(facts(checks: [], review: cleanReview, age: 10)) == early)
+        #expect(SeriesScheduler.state(facts(checks: [], review: cleanReview, age: nil)) == early)
+        #expect(SeriesScheduler.state(facts(checks: [], review: cleanReview, age: ThreadService.watchNoChecksGrace)).isClean)
+        // The review still has to be clean: no CI is not no review.
+        guard case .waiting = SeriesScheduler.state(facts(checks: [], review: nil, age: 600)) else {
+            Issue.record("no review yet is waiting")
+            return
+        }
     }
 
     @Test func aMergeOrACloseOnGitHubCountsEvenWhenNoCommandRecordedIt() {
@@ -105,7 +118,7 @@ struct SeriesStateTests {
 
     @Test func checksThatAreMissingPendingOrUnreadableWait() {
         let unready = [
-            facts(checks: []), facts(checks: [("t", "pending")]),
+            facts(checks: [], age: 5), facts(checks: [("t", "pending")]),
             facts(checks: nil, checksError: "gh failed"), facts(checks: nil),
         ]
         for f in unready {
