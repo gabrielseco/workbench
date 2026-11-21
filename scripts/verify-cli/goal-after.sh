@@ -53,7 +53,8 @@ check "a parent with no pull request is refused" "exit $RC: $(head -c 300 "$SCRA
     bash -c '[ "$1" != 0 ] && grep -q "has opened a pull request" "$2"' _ "$RC" "$SCRATCH/e"
 check "the refusal created no thread" "threads changed: $(diff <(echo "$before") <(threads) | head -5)" \
     test "$(threads)" = "$before"
-wb "$T_WB" abandon --thread "$(threads | grep -v "^$PARENT$" | head -1)" >/dev/null 2>&1 || true
+# The sabotaged run created one: end it, so the thread cap and the next steps are not affected.
+for extra in $(comm -13 <(echo "$before") <(threads)); do wb "$T_WB" abandon "$extra" >/dev/null 2>&1; done
 
 before=$(threads)
 refused goal new stacked --after g-2020-01-01-nothing
