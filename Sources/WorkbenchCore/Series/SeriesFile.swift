@@ -93,6 +93,15 @@ public struct SeriesDefinition: Sendable, Equatable {
     }
 
     public static func parse(_ rawText: String, name: String) throws -> SeriesDefinition {
+        let (definition, problems) = try parseAll(rawText, name: name)
+        guard problems.isEmpty, let definition else { throw SeriesParseError(problems: problems) }
+        return definition
+    }
+
+    /// Everything `parse` found: the problems, and the definition made of the steps whose `project` and `goal` were usable, so the
+    /// caller can go on to check those steps' files and report every problem at once. Throws only for a name or front matter
+    /// that stops the file being read at all.
+    static func parseAll(_ rawText: String, name: String) throws -> (SeriesDefinition?, [SeriesProblem]) {
         var problems: [SeriesProblem] = []
         func add(_ line: Int?, _ message: String) { problems.append(SeriesProblem(line: line, message: message)) }
         guard SafeNames.isThreadID(name) else {
@@ -164,17 +173,14 @@ public struct SeriesDefinition: Sendable, Equatable {
             }
             if let step = step(section.number, position + 1, section.line, section.entries, add: add) { steps.append(step) }
         }
-        guard problems.isEmpty else { throw SeriesParseError(problems: problems) }
-        return SeriesDefinition(name: name, budgetUSD: budget, steps: steps, text: text)
+        return (SeriesDefinition(name: name, budgetUSD: budget, steps: steps, text: text), problems)
     }
 
     private static func step(
         _ number: Int, _ position: Int, _ line: Int, _ entries: [FrontMatterLine], add: (Int?, String) -> Void
     ) -> SeriesStep? {
-        var failed = false
         func fail(_ at: Int, _ message: String) {
             add(at, "step \(position): \(message)")
-            failed = true
         }
         var seen = Set<String>()
         for entry in entries {
@@ -252,7 +258,7 @@ public struct SeriesDefinition: Sendable, Equatable {
                 }
             }
         }
-        guard !failed else { return nil }
+        guard !project.isEmpty, !goal.isEmpty else { return nil }
         return SeriesStep(number: number, project: project, goal: goal, base: base, after: after.sorted(), env: env)
     }
 }

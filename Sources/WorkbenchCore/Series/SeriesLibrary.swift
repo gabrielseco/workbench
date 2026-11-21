@@ -111,12 +111,13 @@ public struct SeriesLibrary: Sendable {
             throw SeriesError.notFound(".workbench/series/\(name)/series.md")
         }
         let text = try read(directory.appendingPathComponent("series.md"), limit: 64 << 10)
-        let definition: SeriesDefinition
-        do { definition = try SeriesDefinition.parse(text, name: name) } catch let error as SeriesParseError {
+        let parsed: SeriesDefinition?
+        var problems: [SeriesProblem]
+        do { (parsed, problems) = try SeriesDefinition.parseAll(text, name: name) } catch let error as SeriesParseError {
             throw SeriesError.invalid(error.problems)
         }
+        guard let definition = parsed else { throw SeriesError.invalid(problems) }
 
-        var problems: [SeriesProblem] = []
         var goals: [Int: GoalCopy] = [:]
         var texts: [Int: String] = [:]
         var projects: [Int: URL] = [:]
@@ -156,8 +157,9 @@ public struct SeriesLibrary: Sendable {
     private func approvalURL(_ name: String) -> URL { project.seriesDirectory(name).appendingPathComponent("approval.json") }
 
     public func approvedHash(_ name: String) -> String? {
-        guard let data = try? Data(contentsOf: approvalURL(name)),
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        // Bounded and only a regular file: a FIFO or a huge file there reads as "not approved", it does not hang.
+        guard let text = try? read(approvalURL(name), limit: 4 << 10),
+            let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
         else { return nil }
         return object["hash"] as? String
     }

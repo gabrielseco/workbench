@@ -144,4 +144,28 @@ private struct SeriesFixture {
         let s = try await SeriesFixture()
         #expect(throws: SeriesError.self) { try s.library.load("nope") }
     }
+
+    @Test func aParseProblemAndAFileProblemInDifferentStepsAreReportedTogether() async throws {
+        let s = try await SeriesFixture(
+            steps: "project: PROJECT\ngoal: p1.md\ncolour: red\n## 2\nproject: /nonexistent/folder\ngoal: missing.md\n")
+        do {
+            _ = try s.library.load("s")
+            Issue.record("expected a refusal")
+        } catch let error as SeriesError {
+            let text = error.description
+            #expect(text.contains("unknown key 'colour'"))
+            #expect(text.contains("step 2: project /nonexistent/folder is not a folder"))
+            #expect(text.contains("step 2: goal missing.md"))
+        }
+    }
+
+    @Test func anApprovalFileThatIsAFifoOrHugeReadsAsNotApprovedAndDoesNotHang() async throws {
+        let s = try await SeriesFixture()
+        let url = s.directory.appendingPathComponent("approval.json")
+        #expect(mkfifo(url.path, 0o600) == 0)
+        #expect(s.library.approvedHash("s") == nil)
+        try FileManager.default.removeItem(at: url)
+        try String(repeating: "x", count: 10_000).write(to: url, atomically: true, encoding: .utf8)
+        #expect(s.library.approvedHash("s") == nil)
+    }
 }
