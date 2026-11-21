@@ -3,7 +3,7 @@ import WorkbenchCore
 
 extension Commands {
     private static let seriesUsage = "usage: workbench series list | series show <name> | series status <name>"
-        + " | series approve <name>"
+        + " | series approve <name> | series run <name>"
 
     /// `series list` shows the project's series; `series show <name>` its steps; `series approve <name>` binds the file and its
     /// goal files (P27). Nothing here starts a step.
@@ -14,6 +14,10 @@ extension Commands {
         case "list":
             try a.requireEmpty()
             try await seriesList()
+        case "run":
+            guard let name = a.positional() else { throw CLIError.usage("usage: workbench series run <name>") }
+            try a.requireEmpty()
+            return try await seriesRun(name)
         case "status":
             guard let name = a.positional() else { throw CLIError.usage("usage: workbench series status <name>") }
             try a.requireEmpty()
@@ -97,7 +101,7 @@ extension Commands {
                 }
             }
         }
-        if approve { out("nothing starts yet: running a series is built later (docs/plan/P27-series.md)") }
+        if approve { out("nothing started: workbench series run \(name) runs it") }
     }
 
     private static func seriesStatus(_ name: String) async throws {
@@ -134,6 +138,37 @@ extension Commands {
             let ready = SeriesScheduler.ready(loaded.definition, states: states)
             let names = ready.map(String.init).joined(separator: ", ")
             out(ready.isEmpty ? "nothing to start now" : "ready to start: step \(names)")
+        }
+    }
+
+    /// Runs the steps that are ready, one after another, until every step is clean or one stops. Ctrl-C ends the command that is
+    /// running (which ends its own turn) and stops the series; nothing is retried and nothing is merged.
+    private static func seriesRun(_ name: String) async throws -> Int32 {
+        let ctx = try await Context.load()
+        let library = SeriesLibrary(project: ctx.project)
+        _ = try seriesLoad(library, name)
+        let binary = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
+        let runner = WorkbenchProcessRunner(binary: binary)
+        var driver = SeriesDriver(library: library, commands: runner, git: ctx.git, gh: try? GitRunner.discover(tool: "gh"))
+        driver.say = { out("  \($0)") }
+        let signals = installStopHandlers(what: "the running step") { runner.stop() }
+        defer { signals.forEach { $0.cancel() } }
+        let result: SeriesRunResult
+        do { result = try await driver.run(name) } catch let error as SeriesDriverError {
+            throw CLIError.refused("\(error)")
+        }
+        switch result {
+        case .finished:
+            out("every step is clean: workbench series status \(name) lists the pull requests in the order to merge them")
+            return 0
+        case .stopped(let step, let reason):
+            err("series \(name) stopped at step \(step): \(reason)")
+            err("nothing else was started. Fix it with the usual commands (next, send-back, accept, ship);")
+            err("`series status` reads it again, and `series run` continues once the step is clean")
+            return FailureKind.failed.code
+        case .waiting(let step, let reason):
+            err("series \(name) waits at step \(step): \(reason)")
+            return FailureKind.noResult.code
         }
     }
 }

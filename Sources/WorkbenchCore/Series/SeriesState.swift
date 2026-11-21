@@ -5,8 +5,13 @@ public struct SeriesRecord: Sendable, Equatable {
     public var step: Int
     public var thread: String
     public var at: String
+    /// Why the driver stopped at this step, when it did. Only meaningful while the thread has no pull request: once one is open,
+    /// the pull request's own state says where the step is.
+    public var stopped: String?
 
-    public init(step: Int, thread: String, at: String) { (self.step, self.thread, self.at) = (step, thread, at) }
+    public init(step: Int, thread: String, at: String, stopped: String? = nil) {
+        (self.step, self.thread, self.at, self.stopped) = (step, thread, at, stopped)
+    }
 }
 
 public struct SeriesStepLog: Sendable {
@@ -28,13 +33,15 @@ public struct SeriesStepLog: Sendable {
             guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
                 let step = object["step"] as? Int, let thread = object["thread"] as? String, SafeNames.isThreadID(thread)
             else { continue }
-            found[step] = SeriesRecord(step: step, thread: thread, at: object["at"] as? String ?? "")
+            found[step] = SeriesRecord(
+                step: step, thread: thread, at: object["at"] as? String ?? "", stopped: object["stopped"] as? String)
         }
         return found
     }
 
     public func append(_ record: SeriesRecord) throws {
-        let object: [String: Any] = ["step": record.step, "thread": record.thread, "at": record.at]
+        var object: [String: Any] = ["step": record.step, "thread": record.thread, "at": record.at]
+        if let stopped = record.stopped { object["stopped"] = stopped }
         var line = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         line.append(0x0A)
         if !FileManager.default.fileExists(atPath: url.path) { FileManager.default.createFile(atPath: url.path, contents: nil) }
@@ -75,13 +82,15 @@ public struct SeriesStepFacts: Sendable {
     /// Workbench, so a merge or a close on GitHub, or a commit pushed after the review, is seen only here.
     public var live: (state: PRState, head: String)?
     public var liveError: String?
+    /// The driver's own record that it stopped here (`SeriesRecord.stopped`).
+    public var stoppedReason: String?
 
     public init(
         thread: String, state: ThreadState, checks: PRChecksSummary? = nil, checksError: String? = nil,
-        live: (state: PRState, head: String)? = nil, liveError: String? = nil
+        live: (state: PRState, head: String)? = nil, liveError: String? = nil, stoppedReason: String? = nil
     ) {
         (self.thread, self.state, self.checks, self.checksError) = (thread, state, checks, checksError)
-        (self.live, self.liveError) = (live, liveError)
+        (self.live, self.liveError, self.stoppedReason) = (live, liveError, stoppedReason)
     }
 }
 
@@ -93,6 +102,7 @@ public enum SeriesScheduler {
         let (thread, state) = (facts.thread, facts.state)
         func stopped(_ reason: String) -> SeriesStepState { .stopped(thread: thread, reason: reason) }
         guard let pr = state.pullRequest else {
+            if let reason = facts.stoppedReason { return stopped(reason) }
             if let decision = state.decision, decision != "accepted" {
                 return stopped("the thread was \(decision) without a pull request")
             }
@@ -170,7 +180,7 @@ extension SeriesLibrary {
             }
             let other = Project(root: root)
             let state = ThreadStore(project: other).state(of: record.thread)
-            var facts = SeriesStepFacts(thread: record.thread, state: state)
+            var facts = SeriesStepFacts(thread: record.thread, state: state, stoppedReason: record.stopped)
             if let number = state.pullRequest?.number, !state.isMerged, !state.isClosed {
                 let service = ThreadService(project: other, git: git)
                 switch await service.prState(number: number, gh: gh) {

@@ -12,7 +12,7 @@ private func ev(_ seq: Int, _ kind: EventKind, _ data: JSONValue = [:]) -> Event
 private func facts(
     pr: Bool = true, head sha: String = head, decision: String? = nil, merged: Bool = false, closed: Bool = false,
     checks: [(String, String)]? = [("test", "pass")], checksError: String? = nil, review: JSONValue? = nil, started: Bool = false,
-    live: (state: PRState, head: String)? = (.open, head), liveError: String? = nil
+    live: (state: PRState, head: String)? = (.open, head), liveError: String? = nil, stoppedReason: String? = nil
 ) -> SeriesStepFacts {
     var events: [Event] = []
     if pr { events.append(ev(1, .prOpened, ["number": 7, "url": "https://example.test/pull/7", "head_sha": .string(sha)])) }
@@ -24,7 +24,7 @@ private func facts(
     return SeriesStepFacts(
         thread: "g-1-x", state: ThreadState.derive(from: events, id: "g-1-x"),
         checks: checks.map { PRChecksSummary(checks: $0.map { PRCheck(name: $0.0, bucket: $0.1) }) }, checksError: checksError,
-        live: live, liveError: liveError)
+        live: live, liveError: liveError, stoppedReason: stoppedReason)
 }
 
 private let cleanReview: JSONValue = ["round": 1, "pr": 7, "head_sha": .string(head), "ok": true, "verdict": "clean"]
@@ -82,6 +82,17 @@ struct SeriesStateTests {
             return
         }
         #expect(why.contains("older commit"))
+    }
+
+    @Test func theDriversStopIsKeptOnlyWhileTheThreadHasNoPullRequest() {
+        let recorded = facts(pr: false, checks: nil, live: nil, stoppedReason: "`run` exited 13")
+        guard case .stopped(_, let reason) = SeriesScheduler.state(recorded) else {
+            Issue.record("a recorded stop with no pull request is stopped")
+            return
+        }
+        #expect(reason.contains("13"))
+        // Once a person has shipped the work, the pull request's own state says where the step is.
+        #expect(SeriesScheduler.state(facts(review: cleanReview, stoppedReason: "`run` exited 13")).isClean)
     }
 
     @Test func aClosedPullRequestStops() {
