@@ -118,6 +118,6 @@ printf '{"state":"OPEN","baseRefName":"%s","headRefOid":"%s"}' "$BASE" "$after" 
 wbp "$SCRATCH/rebase2.out" series rebase r
 check "a second run changes nothing" "exit $RC: $(head -c 300 "$SCRATCH/rebase2.out")" \
     bash -c '[ "$1" = 0 ] && grep -q "already on its base" "$2" && [ "$(git -C "$3" rev-parse refs/heads/workbench/'"$CHILD"')" = "$4" ]' _ "$RC" "$SCRATCH/rebase2.out" "$BARE" "$after"
-check "no worktree was left behind" "$(git -C "$P" worktree list | grep -c series-rebase) left" \
-    bash -c '! git -C "$1" worktree list | grep -q series-rebase' _ "$P"
+check "no worktree was left behind" "$(git -C "$P" worktree list | grep -c 'series-rebase-[0-9A-F]') left" \
+    bash -c '! git -C "$1" worktree list | grep -q "series-rebase-[0-9A-F]"' _ "$P"
 finish

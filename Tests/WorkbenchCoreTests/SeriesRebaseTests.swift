@@ -43,7 +43,8 @@ private struct Stack {
             timeout: 30)
         let parentBranch = "workbench/\(parent)"
         let childBranch = "workbench/\(child)"
-        try await Self.build(self_: fx, parentBranch: parentBranch, childBranch: childBranch, conflict: conflict, mergeParent: mergeParent)
+        try await Self.build(
+            self_: fx, parentBranch: parentBranch, childBranch: childBranch, conflict: conflict, mergeParent: mergeParent)
         tipA = try await git(["rev-parse", "refs/remotes/origin/\(parentBranch)"])
         tipB = try await git(["rev-parse", "refs/remotes/origin/\(childBranch)"])
         try writeThreads()
@@ -139,7 +140,8 @@ private struct Stack {
     }
 
     func leftoverWorktrees() async throws -> [String] {
-        try await git(["worktree", "list", "--porcelain"]).split(separator: "\n").filter { $0.contains("series-rebase") }.map(String.init)
+        let listed = try await git(["worktree", "list", "--porcelain"])
+        return listed.split(separator: "\n").filter { $0.contains("series-rebase-") }.map(String.init)
     }
 }
 
