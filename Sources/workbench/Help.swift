@@ -151,7 +151,7 @@ enum Help {
             example: "workbench task new bump-countries --input countries.txt   or   workbench task run bump-countries"),
         "series": Extra(
             changes:
-                "series list and series show: nothing; read-only; series approve: writes approval.json in "
+                "series list, series show and series status: nothing; read-only; series approve: writes approval.json in "
                 + ".workbench/series/<name>/; it starts no step and creates no thread",
             example: "workbench series approve invoice-shortcut"),
         "version": Extra(changes: "nothing; read-only", example: "workbench version"),
