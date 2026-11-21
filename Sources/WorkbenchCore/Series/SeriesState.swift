@@ -200,6 +200,13 @@ public enum SeriesScheduler {
 }
 
 extension SeriesLibrary {
+    /// A review round the family recorded, as the scheduler reads it.
+    static func review(_ record: PRReviewRecord) -> Review.PRReview {
+        Review.PRReview(
+            round: record.round, pr: record.pr, headSHA: record.headSHA, verdict: record.ok ? record.verdict?.rawValue : nil,
+            failure: record.ok ? nil : "the round recorded no verdict", findingsPath: record.findingsPath)
+    }
+
     /// Reads every recorded step's thread (in the step's own project) and asks `gh` about the checks of the ones with an open
     /// pull request. Read only. A step with no record is pending.
     public func states(
@@ -217,6 +224,8 @@ extension SeriesLibrary {
             var facts = SeriesStepFacts(thread: record.thread, state: state, stoppedReason: record.stopped)
             if let number = state.pullRequest?.number, !state.isMerged, !state.isClosed {
                 let service = ThreadService(project: other, git: git)
+                // A follow-up thread of the review loop records the later rounds, so the latest one is read across the family.
+                if let latest = service.latestPRReview(id: record.thread) { facts.state.review.prReview = Self.review(latest) }
                 switch await service.prState(number: number, gh: gh) {
                 case .success(let live): facts.live = live
                 case .failure(let error): facts.liveError = error.why

@@ -5,7 +5,7 @@ import Testing
 
 /// Scripts the `workbench` commands the driver runs: records each call, answers by its first words, and lets a test act when one
 /// runs (as the real command would change the thread's log).
-private final class FakeCommands: SeriesCommandRunner, @unchecked Sendable {
+final class SeriesFakeCommands: SeriesCommandRunner, @unchecked Sendable {
     struct Call: Equatable {
         var arguments: [String]
         var project: String
@@ -15,13 +15,40 @@ private final class FakeCommands: SeriesCommandRunner, @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [Call] = []
     var exits: [String: Int32] = [:]
+    /// What the project's check said after `run`; nil writes no check event.
+    var checkResult: String? = "passed"
+    var verifier: (ok: Bool, skipped: Bool)?
     var onRun: (@Sendable (Call) -> Void)?
     private var made = 0
 
     var calls: [Call] { lock.withLock { recorded } }
     var words: [String] { calls.map { $0.arguments.prefix(2).joined(separator: " ") } }
 
-    func stop() {}
+    private var stopped = false
+    func stop() { stopped = true }
+    var isStopped: Bool { stopped }
+
+    /// What the real `run` leaves in the thread's log: a turn, its check, and a verifier run when a test wants one.
+    private func writeRun(thread: String, project: URL) {
+        let store = Project(root: project)
+        try? FileManager.default.createDirectory(at: store.threadDirectory(thread), withIntermediateDirectories: true)
+        var lines = [
+            #"{"v":1,"seq":1,"ts":"2026-11-21T10:00:01.000Z","turn":1,"kind":"turn.started","data":{}}"#,
+            #"{"v":1,"seq":2,"ts":"2026-11-21T10:00:02.000Z","turn":1,"kind":"turn.ended","data":{"result":"succeeded"}}"#,
+        ]
+        if let checkResult {
+            lines.append(
+                #"{"v":1,"seq":3,"ts":"2026-11-21T10:00:03.000Z","turn":1,"kind":"check.ran","#
+                    + #""data":{"result":"\#(checkResult)"}}"#)
+        }
+        if let verifier {
+            let ok = verifier.ok ? "true" : "false"
+            lines.append(
+                #"{"v":1,"seq":4,"ts":"2026-11-21T10:00:04.000Z","turn":1,"kind":"verifier.ended","data":{"ok":\#(ok)}}"#)
+            _ = verifier.skipped
+        }
+        try? (lines.joined(separator: "\n") + "\n").write(to: store.eventsURL(thread), atomically: true, encoding: .utf8)
+    }
 
     func run(
         _ arguments: [String], in project: URL, environment: [String: String], output: @Sendable (String) -> Void
@@ -32,6 +59,9 @@ private final class FakeCommands: SeriesCommandRunner, @unchecked Sendable {
         onRun?(call)
         let exit = exits[key] ?? 0
         if exit != 0 { return SeriesCommandResult(exit: exit, stderr: "boom from \(key)\n") }
+        if key == "run --thread", let thread = arguments.last {
+            writeRun(thread: thread, project: project)
+        }
         if key == "goal new" {
             let id = lock.withLock { () -> String in
                 made += 1
@@ -43,7 +73,7 @@ private final class FakeCommands: SeriesCommandRunner, @unchecked Sendable {
     }
 }
 
-private let goalText = """
+let seriesGoalText = """
     ---
     title: Add the thing
     budget_usd: 2.00
@@ -64,41 +94,41 @@ private let goalText = """
     - Everything else.
     """
 
-private struct Rig {
+struct SeriesRig {
     var fx: RunnerFixture
     var library: SeriesLibrary
     var directory: URL
 
     init(_ seriesText: String) async throws {
-        fx = try await RunnerFixture()
+        fx = try await RunnerFixture(extraConfig: #"check_command = "true""#)
         library = SeriesLibrary(project: fx.project)
         directory = fx.project.seriesDirectory("s")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try seriesText.replacingOccurrences(of: "PROJECT", with: fx.repo.path)
             .write(to: directory.appendingPathComponent("series.md"), atomically: true, encoding: .utf8)
         for file in ["p1.md", "p2.md"] {
-            try goalText.write(to: directory.appendingPathComponent(file), atomically: true, encoding: .utf8)
+            try seriesGoalText.write(to: directory.appendingPathComponent(file), atomically: true, encoding: .utf8)
         }
     }
 
-    func driver(_ commands: FakeCommands, states: @escaping StatesProvider) -> SeriesDriver {
+    func driver(_ commands: SeriesFakeCommands, states: @escaping SeriesStatesProvider) -> SeriesDriver {
         SeriesDriver(library: library, commands: commands, states: states)
     }
 }
 
-private typealias StatesProvider = @Sendable (LoadedSeries) async -> [Int: SeriesStepState]
+typealias SeriesStatesProvider = @Sendable (LoadedSeries) async -> [Int: SeriesStepState]
 
-private let twoSteps =
+let seriesTwoSteps =
     "## 1\nproject: PROJECT\ngoal: p1.md\n## 2\nproject: PROJECT\ngoal: p2.md\nbase: after 1\nenv: REF=step:1\n"
 
-private final class Counter: @unchecked Sendable {
+final class SeriesCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
     func next() -> Int { lock.withLock { value += 1; return value } }
 }
 
 /// States that follow what the fake commands did: a step is clean once its `ship` ran.
-private final class Shipped: @unchecked Sendable {
+final class SeriesShipped: @unchecked Sendable {
     private let lock = NSLock()
     private var steps = Set<Int>()
     private var threads: [Int: String] = [:]
@@ -128,14 +158,14 @@ private final class Shipped: @unchecked Sendable {
 
 @Suite(.processGate) struct SeriesDriverTests {
     @Test func aSeriesThatIsNotApprovedOrIsStaleIsRefusedAndRunsNothing() async throws {
-        let rig = try await Rig(twoSteps)
-        let commands = FakeCommands()
+        let rig = try await SeriesRig(seriesTwoSteps)
+        let commands = SeriesFakeCommands()
         do {
             _ = try await rig.driver(commands) { _ in [:] }.run("s")
             Issue.record("expected a refusal")
         } catch let error as SeriesDriverError { #expect(error == .notApproved(.never)) }
         _ = try rig.library.approve("s")
-        try goalText.replacingOccurrences(of: "Add the thing.\n", with: "Add another thing.\n")
+        try seriesGoalText.replacingOccurrences(of: "Add the thing.\n", with: "Add another thing.\n")
             .write(to: rig.directory.appendingPathComponent("p1.md"), atomically: true, encoding: .utf8)
         do {
             _ = try await rig.driver(commands) { _ in [:] }.run("s")
@@ -145,10 +175,10 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func eachStepRunsTheSameCommandsInOrderAndTheSecondStacksOnTheFirst() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let shipped = Shipped()
-        let commands = FakeCommands()
+        let shipped = SeriesShipped()
+        let commands = SeriesFakeCommands()
         commands.onRun = { call in
             if call.arguments.first == "ship", let id = call.arguments.dropFirst().dropFirst().first {
                 shipped.mark(id.hasSuffix("step1") ? 1 : 2, thread: id)
@@ -174,10 +204,10 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func aFailedCommandStopsTheSeriesRecordsWhyAndStartsNothingElse() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let shipped = Shipped()
-        let commands = FakeCommands()
+        let shipped = SeriesShipped()
+        let commands = SeriesFakeCommands()
         commands.exits["run --thread"] = 13
         let result = try await rig.driver(commands, states: shipped.states).run("s")
         guard case .stopped(let step, let reason) = result else {
@@ -193,32 +223,32 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func aGoalNewThatFailsOrNamesNoThreadStopsBeforeAnythingIsRecorded() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let commands = FakeCommands()
-        commands.exits["goal new"] = 6
+        let commands = SeriesFakeCommands()
+        commands.exits["goal new"] = 1
         let result = try await rig.driver(commands) { _ in [:] }.run("s")
         guard case .stopped(1, let reason) = result else {
             Issue.record("expected stopped, got \(result)")
             return
         }
-        #expect(reason.contains("`goal new` exited 6"))
+        #expect(reason.contains("`goal new` exited 1"))
         #expect(SeriesStepLog(project: rig.fx.project, series: "s").read().isEmpty)
     }
 
     @Test func aSeriesAlreadyStoppedStartsNothing() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         let result = try await rig.driver(commands) { _ in [1: .stopped(thread: "t", reason: "checks failed: test")] }.run("s")
         #expect(result == .stopped(step: 1, reason: "checks failed: test"))
         #expect(commands.calls.isEmpty)
     }
 
     @Test func aStepThatWaitsForCIOrAPersonEndsTheRunAndNamesIt() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         let result = try await rig.driver(commands) { _ in
             [1: .waiting(thread: "t", reason: "the checks are still running")]
         }.run("s")
@@ -227,9 +257,9 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func aStepThatRanButIsNotCleanAfterwardsEndsTheRunWaitingInsteadOfStartingTheNext() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         let result = try await rig.driver(commands) { loaded in
             let records = SeriesStepLog(project: Project(root: loaded.projects[1]!), series: "s").read()
             guard let record = records[1] else { return [:] }
@@ -244,10 +274,10 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func shipIsNeverGivenWatchBecauseTheReviewLoopRefusesTheCombination() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let shipped = Shipped()
-        let commands = FakeCommands()
+        let shipped = SeriesShipped()
+        let commands = SeriesFakeCommands()
         commands.onRun = { call in
             if call.arguments.first == "ship", let id = call.arguments.dropFirst().dropFirst().first {
                 shipped.mark(id.hasSuffix("step1") ? 1 : 2, thread: id)
@@ -260,15 +290,15 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func aGoalFileEditedWhileAStepRunsIsNotStartedWithoutANewApproval() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let shipped = Shipped()
-        let commands = FakeCommands()
+        let shipped = SeriesShipped()
+        let commands = SeriesFakeCommands()
         let second = rig.directory.appendingPathComponent("p2.md")
         commands.onRun = { call in
             if call.arguments.first == "ship", let id = call.arguments.dropFirst().dropFirst().first {
                 shipped.mark(1, thread: id)
-                try? goalText.replacingOccurrences(of: "Add the thing.\n", with: "Add a different thing.\n")
+                try? seriesGoalText.replacingOccurrences(of: "Add the thing.\n", with: "Add a different thing.\n")
                     .write(to: second, atomically: true, encoding: .utf8)
             }
         }
@@ -280,14 +310,14 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func theGoalHandedToGoalNewIsTheApprovedTextEvenIfTheFileChangesAfter() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
         let first = rig.directory.appendingPathComponent("p1.md")
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         commands.onRun = { call in
             // What `goal new --from` would read: the snapshot, which the file edit that follows cannot change.
             if call.arguments.prefix(2) == ["goal", "new"], let path = call.arguments.last(where: { $0.hasSuffix(".md") }) {
-                #expect((try? String(contentsOfFile: path, encoding: .utf8)) == goalText)
+                #expect((try? String(contentsOfFile: path, encoding: .utf8)) == seriesGoalText)
                 try? "tampered".write(to: first, atomically: true, encoding: .utf8)
             }
         }
@@ -297,11 +327,11 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func aStepWhoseChecksAreStillRunningIsWaitedForAndThenNextStarts() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let shipped = Shipped()
-        let polls = Counter()
-        let commands = FakeCommands()
+        let shipped = SeriesShipped()
+        let polls = SeriesCounter()
+        let commands = SeriesFakeCommands()
         commands.onRun = { call in
             if call.arguments.first == "ship", let id = call.arguments.dropFirst().dropFirst().first {
                 shipped.mark(id.hasSuffix("step1") ? 1 : 2, thread: id)
@@ -322,9 +352,9 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func checksThatNeverFinishEndTheRunWaitingAfterTheTimeout() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         var driver = rig.driver(commands) { loaded in
             let records = SeriesStepLog(project: Project(root: loaded.projects[1]!), series: "s").read()
             guard let record = records[1] else { return [:] }
@@ -343,13 +373,13 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func aRunThatDiedAfterGoalNewIsFoundAgainAndNoSecondThreadIsMade() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
         let log = SeriesStepLog(project: rig.fx.project, series: "s")
         try log.markStarting(step: 1, at: "t0")
         let thread = "g-2026-11-21-s-1"
         try FileManager.default.createDirectory(at: rig.fx.project.threadDirectory(thread), withIntermediateDirectories: true)
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         let result = try await rig.driver(commands) { _ in [:] }.run("s")
         guard case .stopped(1, let reason) = result else {
             Issue.record("expected stopped, got \(result)")
@@ -361,12 +391,12 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func aMarkerWithNoThreadIsClearedAndTheStepStartsOnce() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
         let log = SeriesStepLog(project: rig.fx.project, series: "s")
         try log.markStarting(step: 1, at: "t0")
-        let shipped = Shipped()
-        let commands = FakeCommands()
+        let shipped = SeriesShipped()
+        let commands = SeriesFakeCommands()
         commands.exits["goal approve"] = 9
         _ = try await rig.driver(commands, states: shipped.states).run("s")
         #expect(commands.words.filter { $0 == "goal new" }.count == 1)
@@ -374,14 +404,14 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func severalThreadsFromAnEarlierDeadRunAreLeftForAPerson() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
         let log = SeriesStepLog(project: rig.fx.project, series: "s")
         try log.markStarting(step: 1, at: "t0")
         for thread in ["g-2026-11-21-s-1", "g-2026-11-22-s-1"] {
             try FileManager.default.createDirectory(at: rig.fx.project.threadDirectory(thread), withIntermediateDirectories: true)
         }
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         let result = try await rig.driver(commands) { _ in [:] }.run("s")
         guard case .stopped(1, let reason) = result else {
             Issue.record("expected stopped, got \(result)")
@@ -392,13 +422,13 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func aSecondRunOfTheSameSeriesIsRefusedWhileTheFirstHoldsTheLock() async throws {
-        let rig = try await Rig(twoSteps)
+        let rig = try await SeriesRig(seriesTwoSteps)
         _ = try rig.library.approve("s")
         let lock = rig.directory.appendingPathComponent("run.lock")
         let fd = open(lock.path, O_CREAT | O_RDWR, 0o600)
         #expect(flock(fd, LOCK_EX | LOCK_NB) == 0)
         defer { close(fd) }
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         do {
             _ = try await rig.driver(commands) { _ in [:] }.run("s")
             Issue.record("expected a refusal")
@@ -407,9 +437,9 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func aStepWhoseGoalBudgetDoesNotFitInWhatIsLeftOfTheSeriesBudgetDoesNotStart() async throws {
-        let rig = try await Rig("---\nbudget_usd: 1.00\n---\n" + twoSteps)
+        let rig = try await SeriesRig("---\nbudget_usd: 1.00\n---\n" + seriesTwoSteps)
         _ = try rig.library.approve("s")
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         let result = try await rig.driver(commands) { _ in [:] }.run("s")
         guard case .stopped(1, let reason) = result else {
             Issue.record("expected stopped, got \(result)")
@@ -420,7 +450,7 @@ private final class Shipped: @unchecked Sendable {
     }
 
     @Test func theSeriesBudgetStopsBeforeAStepStartsOnceTheThreadsHaveSpentIt() async throws {
-        let rig = try await Rig("---\nbudget_usd: 1.00\n---\n" + twoSteps)
+        let rig = try await SeriesRig("---\nbudget_usd: 1.00\n---\n" + seriesTwoSteps)
         _ = try rig.library.approve("s")
         let thread = "g-2026-11-21-step1"
         let dir = rig.fx.project.threadDirectory(thread)
@@ -429,7 +459,7 @@ private final class Shipped: @unchecked Sendable {
             + #""data":{"result":"succeeded","cost_usd":1.5}}"#
         try (ended + "\n").write(to: rig.fx.project.eventsURL(thread), atomically: true, encoding: .utf8)
         try SeriesStepLog(project: rig.fx.project, series: "s").append(SeriesRecord(step: 1, thread: thread, at: "t"))
-        let commands = FakeCommands()
+        let commands = SeriesFakeCommands()
         let clean = SeriesStepState.clean(thread: thread, pullRequest: nil)
         let result = try await rig.driver(commands) { _ in [1: clean] }.run("s")
         guard case .stopped(2, let reason) = result else {

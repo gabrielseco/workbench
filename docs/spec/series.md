@@ -98,7 +98,7 @@ A step is ready when it is `pending` and every step in its `after` is `clean`; *
 3. **a step is ready** (pending, every `after` clean): it runs that step, one at a time, then goes back to 1. Steps in different
    projects still run one after the other.
 4. **nothing is ready and nothing is stopped:** a step waits for something that is not the driver's to do (checks still running, a
-   review that asked for fixes, a thread that has not opened its pull request): it ends (exit 14) naming it.
+   review that asked for fixes, a thread that has not opened its pull request, a project at its thread cap): it ends (exit 14) naming it.
 
 A step runs the same commands a person would, each as a child `workbench` process in the step's project, with the step's `env`
 (`step:N` resolved to `origin/<the branch of step N's pull request>`): `goal new <series>-<N> --from <goal file>` (with
@@ -109,10 +109,16 @@ the timeouts and every budget are the ones those commands have, and each thread'
 - **Stop rule:** the first command that exits non-zero ends the series. While the thread has no pull request the reason is written
   to `steps.jsonl` and `status` shows STOPPED; once one is open its own state is read. Nothing is retried. Fix the step with the usual
   commands (`next`, `send-back`, `accept`, `ship`); when it reads clean, `series run` continues from the next step.
-- **Series budget:** before a step starts, what the steps' threads have cost (their logs' `cost_usd`; the follow-up threads of a
-  review round are not counted, each has its own goal's cap) plus that step's own goal budget (`budget_usd` of the goal file, else
-  the project's default) must fit in the series `budget_usd`; otherwise the series stops before spending it.
-- **Ctrl-C** ends the running command cleanly (it ends its own turn) and the series stops.
+- **A step is accepted only if its work was checked:** `run` exits 0 for a turn that succeeded even when the project's check then
+  failed, so after `run` the driver reads the thread's log: the check must have run for the latest turn and passed, and a verifier
+  that ran must have passed (the judge is advice and does not decide). Otherwise the series stops before `accept`, nothing is
+  accepted or pushed, and the step is fixed by hand (`send-back`). A project with no `check_command` is not run unattended.
+- **Series budget:** before a step starts, what the steps' threads have cost (their logs' `cost_usd`, with the follow-up threads of
+  their review rounds) plus that step's own goal budget (`budget_usd` of the goal file, else
+  the project's default) must fit in the series `budget_usd`; otherwise the series stops before spending it. A step's review-loop follow-ups have caps of their own and are counted when the
+  next step is about to start, so a series can end a little over its budget.
+- **A project at `max_active_threads`** (`goal new` exits 6, nothing changed) makes the series *wait* (exit 14), not stop.
+- **Ctrl-C** ends the running command cleanly (it ends its own turn), stops the wait for checks, and the series stops.
 - **One run at a time:** `series run` holds `run.lock` in the series folder; a second one is refused (exit 6). A start marker is
   written to `steps.jsonl` before `goal new`; a run that died between making the thread and recording it is found by the next one
   (the one thread named `…-<series>-<N>` is recorded and the run stops once so you see it; several are left for you).

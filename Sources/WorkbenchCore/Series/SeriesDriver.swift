@@ -18,6 +18,8 @@ public protocol SeriesCommandRunner: Sendable {
     ) async -> SeriesCommandResult
     /// Ends the command that is running, cleanly (the child ends its own turn). Idempotent.
     func stop()
+    /// True once `stop()` was called: the driver starts nothing more and stops waiting.
+    var isStopped: Bool { get }
 }
 
 /// Starts `workbench` through `ProcessRunner`: its own process group, stdin `/dev/null`, the environment given and nothing else.
@@ -30,6 +32,8 @@ public final class WorkbenchProcessRunner: SeriesCommandRunner, @unchecked Senda
     private let lock = NSLock()
     private var current: ProcessRun?
     private var stopRequested = false
+
+    public var isStopped: Bool { lock.withLock { stopRequested } }
 
     public init(binary: URL, environment: [String: String] = ProcessInfo.processInfo.environment) {
         self.binary = binary
@@ -91,6 +95,14 @@ public enum SeriesRunResult: Sendable, Equatable {
     case waiting(step: Int, reason: String)
 }
 
+/// How one step's commands ended.
+enum SeriesStepOutcome: Equatable {
+    case done
+    case stopped(String)
+    /// Nothing was started and nothing is wrong: a precondition is not met yet (a project at `max_active_threads`).
+    case waiting(String)
+}
+
 public enum SeriesDriverError: Error, Equatable, Sendable, CustomStringConvertible {
     case notApproved(SeriesApproval.State)
     case alreadyRunning
@@ -145,6 +157,10 @@ public struct SeriesDriver: Sendable {
             let approval = library.state(loaded)
             guard approval == .approved else { throw SeriesDriverError.notApproved(approval) }
             let current = await states(loaded)
+            if commands.isStopped {
+                let step = loaded.definition.steps.first { current[$0.number]?.isClean != true }?.number ?? 0
+                return .stopped(step: step, reason: "stopped by you")
+            }
             if let stopped = SeriesScheduler.stoppedStep(loaded.definition, states: current) {
                 return .stopped(step: stopped.step, reason: stopped.reason)
             }
@@ -152,8 +168,10 @@ public struct SeriesDriver: Sendable {
             guard let next = SeriesScheduler.ready(loaded.definition, states: current).first,
                 let step = loaded.definition.steps.first(where: { $0.number == next })
             else { return Self.waiting(loaded.definition, current) }
-            if let reason = await execute(step, loaded: loaded, log: log) {
-                return .stopped(step: step.number, reason: reason)
+            switch await execute(step, loaded: loaded, log: log) {
+            case .stopped(let reason): return .stopped(step: step.number, reason: reason)
+            case .waiting(let reason): return .waiting(step: step.number, reason: reason)
+            case .done: break
             }
             if let reason = await settle(step, loaded: loaded) { return .waiting(step: step.number, reason: reason) }
         }
@@ -176,7 +194,7 @@ public struct SeriesDriver: Sendable {
         var waited: TimeInterval = 0
         while true {
             let state = (await states(loaded))[step.number] ?? .pending
-            guard SeriesScheduler.isTransient(state) else { return nil }
+            guard SeriesScheduler.isTransient(state), !commands.isStopped else { return nil }
             guard waited < settleTimeout else {
                 guard case .waiting(let thread, let reason) = state else { return nil }
                 return "\(thread): \(reason) after \(Int(settleTimeout / 60)) minutes"
@@ -202,20 +220,25 @@ public struct SeriesDriver: Sendable {
     }
 
     /// Runs one step's commands; returns why it stopped, nil when every command succeeded.
-    private func execute(_ step: SeriesStep, loaded: LoadedSeries, log: SeriesStepLog) async -> String? {
+    private func execute(_ step: SeriesStep, loaded: LoadedSeries, log: SeriesStepLog) async -> SeriesStepOutcome {
         guard let root = loaded.projects[step.number], let goal = loaded.goals[step.number],
             let goalText = loaded.goalTexts[step.number]
-        else { return "the step has no project" }
-        if let reason = await reconcile(step, loaded: loaded, log: log) { return reason }
+        else { return .stopped("the step has no project") }
+        if let reason = await reconcile(step, loaded: loaded, log: log) { return .stopped(reason) }
         let records = log.read()
-        if let reason = budgetReason(step, loaded: loaded, goal: goal, root: root, records: records) { return reason }
+        if let reason = budgetReason(step, loaded: loaded, goal: goal, root: root, records: records) { return .stopped(reason) }
+        // Accepting work nobody watched needs something that checked it (the task runner's rule too).
+        guard (try? Config.load(from: Project(root: root).configURL))?.checkCommand != nil else {
+            return .stopped(
+                "no check_command in \(root.lastPathComponent)'s .workbench/config.toml: the work would be accepted unchecked")
+        }
         var environment: [String: String] = [:]
         for pair in step.env {
             switch pair.value {
             case .literal(let value): environment[pair.name] = value
             case .stepBranch(let n):
                 guard let parent = records[n]?.thread else {
-                    return "env \(pair.name) names step \(n), which has no thread"
+                    return .stopped("env \(pair.name) names step \(n), which has no thread")
                 }
                 environment[pair.name] = "origin/" + shippedBranch(project: loaded.projects[n] ?? root, thread: parent)
             }
@@ -224,12 +247,12 @@ public struct SeriesDriver: Sendable {
         // file holds a moment later.
         let snapshot: URL
         do { snapshot = try writeSnapshot(goalText, series: loaded.definition.name, step: step.number) } catch {
-            return "the approved goal could not be copied for the step: \(error)"
+            return .stopped("the approved goal could not be copied for the step: \(error)")
         }
         var create = ["goal", "new", "\(loaded.definition.name)-\(step.number)", "--from", snapshot.path]
         switch step.base {
         case .after(let n):
-            guard let parent = records[n]?.thread else { return "base: after \(n), which has no thread" }
+            guard let parent = records[n]?.thread else { return .stopped("base: after \(n), which has no thread") }
             create += ["--after", parent]
         case .branch(let branch?): create += ["--base", branch]
         case .branch(nil): break
@@ -237,16 +260,20 @@ public struct SeriesDriver: Sendable {
         let started = ISO8601DateFormatter().string(from: now())
         // Written before the thread exists: a driver that dies between `goal new` and the record below would otherwise make a
         // second thread for this step. The next run finds the first one (`reconcile`).
-        do { try log.markStarting(step: step.number, at: started) } catch { return "the step could not be recorded: \(error)" }
+        do { try log.markStarting(step: step.number, at: started) } catch {
+            return .stopped("the step could not be recorded: \(error)")
+        }
         say("step \(step.number): \(create.joined(separator: " "))")
         let made = await commands.run(create, in: root, environment: environment, output: say)
         let created = made.stdout.compactMap { $0.hasPrefix("created ") ? String($0.dropFirst("created ".count)) : nil }
         guard made.exit == 0, let id = created.first, SafeNames.isThreadID(id) else {
-            if made.exit != 0 { try? log.markStarting(step: step.number, at: started, starting: false) }
-            return made.exit != 0 ? Self.failure("goal new", made) : "goal new did not print the thread it created"
+            // The marker stays: the child may have made the thread before it failed, and the next run looks for it.
+            // Exit 6 is a refusal that changed nothing (most often `max_active_threads`): wait, do not stop.
+            if made.exit == 6 { return .waiting(Self.failure("goal new", made)) }
+            return .stopped(made.exit != 0 ? Self.failure("goal new", made) : "goal new did not print the thread it created")
         }
         do { try log.append(SeriesRecord(step: step.number, thread: id, at: started)) } catch {
-            return "the step's thread \(id) could not be recorded: \(error)"
+            return .stopped("the step's thread \(id) could not be recorded: \(error)")
         }
         let title = goal.title ?? "series \(loaded.definition.name) step \(step.number)"
         // `ship --review-loop` cannot be combined with `--watch`; the checks are waited for afterwards (`settle`).
@@ -263,8 +290,29 @@ public struct SeriesDriver: Sendable {
                 let reason = Self.failure(label, result)
                 // Recorded so `status` says so while the thread has no pull request; with one, its own state is read.
                 try? log.append(SeriesRecord(step: step.number, thread: id, at: started, stopped: reason))
-                return reason
+                return .stopped(reason)
             }
+            // `run` exits 0 for a turn that succeeded even when the project's check then failed: the log says which.
+            if label == "run", let reason = notFit(toAccept: id, root: root) {
+                try? log.append(SeriesRecord(step: step.number, thread: id, at: started, stopped: reason))
+                return .stopped(reason)
+            }
+        }
+        return .done
+    }
+
+    /// Why the work of `thread` must not be accepted, from its log: the check did not pass for the latest turn, or the verifier
+    /// ran and did not pass. The judge is advice and does not decide.
+    func notFit(toAccept thread: String, root: URL) -> String? {
+        let state = ThreadStore(project: Project(root: root)).state(of: thread)
+        guard let check = state.review.check, check.turn == state.lastTurn else {
+            return "the check did not run for turn \(state.lastTurn): the work was not accepted"
+        }
+        guard check.result == CheckResult.passed.rawValue else {
+            return "the check \(check.result) after turn \(check.turn): the work was not accepted; send-back or fix it by hand"
+        }
+        if let verifier = state.review.verifier, !verifier.skipped, !verifier.open, !verifier.ok {
+            return "the verifier did not pass (\(verifier.reason ?? "no reason")): the work was not accepted"
         }
         return nil
     }
@@ -292,8 +340,9 @@ public struct SeriesDriver: Sendable {
         }
     }
 
-    /// A step starts only when what is left of the series budget covers its goal's own budget, so the series cannot spend past
-    /// `budget_usd` in one step (the follow-up threads of a review round have their own caps and are not counted).
+    /// A step starts only when what is left of the series budget covers its goal's own budget, so the coding turn cannot take the
+    /// series past `budget_usd`. The follow-up threads of a review round have caps of their own and are counted only once they have
+    /// spent (before the next step), so a series can end a little over: see the spec.
     private func budgetReason(
         _ step: SeriesStep, loaded: LoadedSeries, goal: GoalCopy, root: URL, records: [Int: SeriesRecord]
     ) -> String? {
@@ -332,13 +381,17 @@ public struct SeriesDriver: Sendable {
         return goal?.pushTo ?? WorktreeManager.branch(for: thread)
     }
 
-    /// What the steps' threads have cost so far (the follow-up threads of a review round are not counted: each is capped by its
-    /// own goal). Nil when nothing has been spent.
+    /// What the steps' threads have cost so far, with the follow-up threads of their review rounds. Nil when nothing has been spent.
     func spentUSD(_ loaded: LoadedSeries, records: [Int: SeriesRecord]) -> Double? {
         var total = 0.0
         for (number, record) in records {
-            guard let root = loaded.projects[number] else { continue }
-            total += ThreadStore(project: Project(root: root)).state(of: record.thread).totalCostUSD
+            guard let projectRoot = loaded.projects[number] else { continue }
+            let store = ThreadStore(project: Project(root: projectRoot))
+            // The thread and the follow-up threads its review rounds made.
+            let rootThread = store.rootID(of: record.thread)
+            for member in [rootThread] + store.followUps(of: rootThread).map(\.id) {
+                total += store.state(of: member).totalCostUSD
+            }
         }
         return total > 0 ? total : nil
     }
