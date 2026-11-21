@@ -3,7 +3,7 @@ import WorkbenchCore
 
 extension Commands {
     private static let seriesUsage = "usage: workbench series list | series show <name> | series status <name>"
-        + " | series approve <name> | series run <name>"
+        + " | series approve <name> | series run <name> | series rebase <name>"
 
     /// `series list` shows the project's series; `series show <name>` its steps; `series approve <name>` binds the file and its
     /// goal files (P27). Nothing here starts a step.
@@ -14,6 +14,10 @@ extension Commands {
         case "list":
             try a.requireEmpty()
             try await seriesList()
+        case "rebase":
+            guard let name = a.positional() else { throw CLIError.usage("usage: workbench series rebase <name>") }
+            try a.requireEmpty()
+            return try await seriesRebase(name)
         case "run":
             guard let name = a.positional() else { throw CLIError.usage("usage: workbench series run <name>") }
             try a.requireEmpty()
@@ -175,5 +179,33 @@ extension Commands {
             err("series \(name) waits at step \(step): \(reason)")
             return FailureKind.noResult.code
         }
+    }
+
+    /// After you merge a step's pull request: retargets the step stacked on it to the base and replays its commits there. A conflict
+    /// is listed and left alone; nothing is merged.
+    private static func seriesRebase(_ name: String) async throws -> Int32 {
+        let ctx = try await Context.load()
+        let library = SeriesLibrary(project: ctx.project)
+        _ = try seriesLoad(library, name)
+        var rebaser = SeriesRebaser(library: library, git: ctx.git, gh: try? GitRunner.discover(tool: "gh"))
+        rebaser.say = { out("  \($0)") }
+        var failed = false
+        for result in try await rebaser.run(name) {
+            switch result.outcome {
+            case .rebased(let pr, let base):
+                out("step \(result.step): rebased onto \(base); pull request #\(pr) now targets it")
+            case .alreadyDone: out("step \(result.step): already on its base")
+            case .merged: out("step \(result.step): its pull request is merged already")
+            case .waiting(let why): out("step \(result.step): waiting: \(why)")
+            case .conflict(let files):
+                failed = true
+                err("step \(result.step): conflict in \(files.joined(separator: ", ")); nothing was pushed. Rebase it by hand:")
+                err("  git rebase --onto origin/<base> <the commit it was cut from> <its branch>")
+            case .failed(let why):
+                failed = true
+                err("step \(result.step): \(why)")
+            }
+        }
+        return failed ? FailureKind.failed.code : 0
     }
 }
