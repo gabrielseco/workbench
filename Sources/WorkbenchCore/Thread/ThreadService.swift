@@ -149,7 +149,9 @@ public struct ThreadService: Sendable {
                 throw ThreadServiceError.afterNotShipped(parent)
             }
             // The parent's branch as origin has it now; fails before anything is created when origin has none.
-            let branch = WorktreeManager.branch(for: parent)
+            // What the parent's pull request is on: `push_to` when it continued a branch, else its own `workbench/<id>`.
+            let parentGoal = try? GoalFile.parse(String(contentsOf: project.goalURL(parent), encoding: .utf8)).goal
+            let branch = parentGoal?.pushTo ?? WorktreeManager.branch(for: parent)
             try await WorktreeManager(repoRoot: project.root, git: git).fetchRemoteBranch(branch)
             stackedBase = "origin/\(branch)"
         }

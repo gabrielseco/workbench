@@ -87,4 +87,25 @@ private func fill(_ fx: RunnerFixture, _ id: String) throws {
         let worktree = fx.project.worktreesDirectory.appendingPathComponent(child)
         #expect(FileManager.default.fileExists(atPath: worktree.appendingPathComponent("later.txt").path))
     }
+
+    @Test func aParentThatContinuedABranchStacksOnThatBranchNotItsOwn() async throws {
+        let fx = try await RunnerFixture()
+        _ = try await originWithBranch(fx)
+        let id = try await approvedUpdateThread(fx)
+        _ = try await fx.runner(id).run(fx.options())
+        try "one\nhello\n".write(
+            to: fx.project.worktreesDirectory.appendingPathComponent(id).appendingPathComponent("a.txt"), atomically: true,
+            encoding: .utf8)
+        try await fx.service.accept(id: id, message: "chore: update the pull request")
+        let gh = try FakeGH(in: fx)
+        let head = try await shipOut(["rev-parse", "HEAD"], fx.project.worktreesDirectory.appendingPathComponent(id), fx)
+        try openPR(gh, head: head)
+        _ = try await fx.service.shipPush(id: id, gh: gh.runner)
+        _ = try await fx.service.shipOpenPR(id: id, gh: gh.runner)
+
+        let child = try await fx.service.newThread(name: "child", after: id)
+        let parsed = try GoalFile.parse(String(contentsOf: fx.project.goalURL(child), encoding: .utf8))
+        #expect(parsed.goal.base == "origin/feature/pr")
+        #expect(parsed.goal.stackedOn == "feature/pr")
+    }
 }
