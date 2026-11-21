@@ -2,7 +2,8 @@ import Foundation
 import WorkbenchCore
 
 extension Commands {
-    private static let seriesUsage = "usage: workbench series list | series show <name> | series approve <name>"
+    private static let seriesUsage = "usage: workbench series list | series show <name> | series status <name>"
+        + " | series approve <name>"
 
     /// `series list` shows the project's series; `series show <name>` its steps; `series approve <name>` binds the file and its
     /// goal files (P27). Nothing here starts a step.
@@ -13,6 +14,10 @@ extension Commands {
         case "list":
             try a.requireEmpty()
             try await seriesList()
+        case "status":
+            guard let name = a.positional() else { throw CLIError.usage("usage: workbench series status <name>") }
+            try a.requireEmpty()
+            try await seriesStatus(name)
         case "show", "approve":
             guard let name = a.positional() else { throw CLIError.usage("usage: workbench series \(verb) <name>") }
             try a.requireEmpty()
@@ -93,5 +98,42 @@ extension Commands {
             }
         }
         if approve { out("nothing starts yet: running a series is built later (docs/plan/P27-series.md)") }
+    }
+
+    private static func seriesStatus(_ name: String) async throws {
+        let ctx = try await Context.load()
+        let library = SeriesLibrary(project: ctx.project)
+        let loaded = try seriesLoad(library, name)
+        let states = await library.states(loaded, git: ctx.git, gh: try? GitRunner.discover(tool: "gh"))
+        out("\(name)  \(approvalWord(library.state(loaded)))")
+        for step in loaded.definition.steps {
+            let state = states[step.number] ?? .pending
+            let label: String
+            switch state {
+            case .pending:
+                let blocked = SeriesScheduler.blockedBy(step, states: states)
+                let names = blocked.map(String.init).joined(separator: ", ")
+                label = blocked.isEmpty ? "pending" : "pending, waits for step \(names)"
+            case .running(let thread): label = "running  \(thread)"
+            case .waiting(let thread, let reason): label = "waiting  \(thread): \(reason)"
+            case .clean(let thread, let pr): label = "clean  \(thread)" + (pr.map { "  \($0)" } ?? "")
+            case .stopped(let thread, let reason): label = "STOPPED  \(thread): \(reason)"
+            }
+            out("\(step.number). \(label)")
+        }
+        if let stopped = SeriesScheduler.stoppedStep(loaded.definition, states: states) {
+            out("stopped at step \(stopped.step): nothing new starts until a person fixes it")
+        } else if loaded.definition.steps.allSatisfy({ states[$0.number]?.isClean == true }) {
+            let urls = loaded.definition.steps.compactMap { step -> String? in
+                if case .clean(_, let pr)? = states[step.number] { return pr.map { "\(step.number): \($0)" } }
+                return nil
+            }
+            let list = urls.isEmpty ? "" : "\n  " + urls.joined(separator: "\n  ")
+            out("every step is clean: review and merge in this order" + list)
+        } else {
+            let ready = SeriesScheduler.ready(loaded.definition, states: states)
+            let names = ready.map(String.init).joined(separator: ", ")
+            out(ready.isEmpty ? "nothing to start now" : "ready to start: step \(names)")
+        }
     }
 }

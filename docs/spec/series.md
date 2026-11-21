@@ -1,14 +1,15 @@
 # Series
 
 A series is an ordered list of goals to run one after another, in one project or several (P27, [plan](../plan/P27-series.md)).
-This page is what is built: the file, its checks and `series list|show|approve`. Running a series (the driver, the stop rule, stacked
-pull requests after a merge) is later tasks of the plan.
+This page is what is built: the file, its checks, `series list|show|approve` and the read-only state of each step (`series status`).
+Running a series (starting steps, the budget, stacked pull requests after a merge) is later tasks of the plan.
 
 ```
 .workbench/series/invoice-shortcut/
   series.md        the steps
   p1.md p2.md p3.md  one goal file per step, as `goal new --from` takes it
   approval.json    written by `series approve`: {hash, approved_at}
+  steps.jsonl      written by the driver: one {step, thread, at} per step it started (the latest line of a step counts)
 ```
 
 ## series.md
@@ -66,6 +67,23 @@ rest of `.workbench/`.
 |---|---|
 | `series list` | each series with its step count and `approved`, `STALE` or `not approved`; one that does not load shows `PROBLEM` and why |
 | `series show <name>` | the steps as they will run: project, goal, where each starts, what it waits for, `env` |
+| `series status <name>` | where each step is and which steps could start now (below). Read only; asks `gh` for the checks |
 | `series approve <name>` | records the approval and prints the steps. Starts nothing, creates no thread |
 
 Exit codes: 0, 2 usage, 6 the series is not valid, 7 no such series.
+
+## Where a step is
+
+Derived each time from the step's thread and what GitHub says now about its pull request (state and head, `gh pr view`; the log only knows what went through Workbench, so a merge or a push made elsewhere is seen there) (in the step's own project, named by `steps.jsonl`) and its pull request's checks; nothing
+is stored but the thread name.
+
+| state | when |
+|---|---|
+| `pending` | no thread yet; `status` says which steps it waits for |
+| `running` | a thread with no pull request, not ended |
+| `waiting` | the pull request is open and something is missing: no checks yet, checks running or unreadable, no review yet, a round running, the review asked for fixes, or the last review was of an older commit |
+| `clean` | **the pull request is open, every check is `pass` or `skipping`, and the last review round was of the head commit GitHub has now with the verdict `clean`**; or it is merged (a person's merge is the decision that matters, so a merged pull request needs neither) |
+| `STOPPED` | needs a person: a check `fail`ed or `cancel`led (once nothing is still running; a cancelled check is never clean, whatever `gh` exits with), a review round with no verdict, the pull request closed unmerged (read from GitHub), the thread discarded or abandoned, or accepted and never shipped |
+
+A step is ready when it is `pending` and every step in its `after` is `clean`; **nothing is ready while any step is `STOPPED`**.
+`status` prints the states, then `stopped at step N` or `ready to start: step …`.

@@ -158,6 +158,9 @@ let workbenchUsage = """
       series list                the series in .workbench/series/<name>/series.md: how many steps and whether the approval
                                  still matches the file and its goal files; one that does not parse says why
       series show <name>         the steps (project, goal file, where each starts, what it waits for, env) as they will run
+      series status <name>       where each step is, read from its thread and its pull request's checks: pending (and what
+                                 it waits for), running, waiting (checks running, review not clean), clean, or STOPPED
+                                 with why; then which steps could start now. Read only; asks `gh` for the checks
       series approve <name>      record one approval over the series file and every goal file it names, and print the
                                  steps; a change to any of them makes it STALE. Nothing starts: running a series is not
                                  built yet. exit 6 when the file or a goal file is not valid (all problems listed), 7 for
