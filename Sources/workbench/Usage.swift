@@ -154,6 +154,15 @@ let workbenchUsage = """
       abandon [--force]          end the thread without accepting its work; uncommitted changes in its worktree
                              are saved as abandon.patch in the thread folder first, the branch is kept
 
+    series of goals (P27)
+      series list                the series in .workbench/series/<name>/series.md: how many steps and whether the approval
+                                 still matches the file and its goal files; one that does not parse says why
+      series show <name>         the steps (project, goal file, where each starts, what it waits for, env) as they will run
+      series approve <name>      record one approval over the series file and every goal file it names, and print the
+                                 steps; a change to any of them makes it STALE. Nothing starts: running a series is not
+                                 built yet. exit 6 when the file or a goal file is not valid (all problems listed), 7 for
+                                 no such series
+
     scheduled tasks
       task list [--pending]      the tasks in .workbench/tasks/<name>/task.md: when each is due, what it may do (fix:
                                  report or pr), whether its approval still matches the file and its pending script,
