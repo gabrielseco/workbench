@@ -76,7 +76,7 @@ check "the series stops at step 1 and names the command that failed" "exit $RC: 
 check "exactly one thread was created, for step 1" "threads: $(threads | tr '\n' ' ')" \
     bash -c '[ "$(ls "$1/.workbench/threads" | wc -l | tr -d " ")" = 1 ] && ls "$1/.workbench/threads" | grep -q -- "-two-1$"' _ "$P"
 check "steps.jsonl records that thread and why it stopped" "$(cat "$SD/steps.jsonl" 2>/dev/null | head -c 400)" \
-    bash -c 'grep -q "\"step\":1" "$1" && grep -q "\"stopped\":\"`run` exited" "$1"' _ "$SD/steps.jsonl"
+    bash -c 'grep -q "\"step\":1" "$1" && grep -q "stopped\":\".run. exited" "$1"' _ "$SD/steps.jsonl"
 
 wbp "$SCRATCH/status.out" series status two
 check "status: STOPPED at step 1, nothing ready" "exit $RC: $(head -c 400 "$SCRATCH/status.out")" \
