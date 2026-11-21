@@ -150,6 +150,15 @@ let workbenchUsage = """
                                  3 stopped while describing (nothing pushed)
       clean [--yes] [--closed]   remove the worktree and local branch of shipped threads whose pull request is
                                  merged (or closed, with --closed); a dry run unless --yes
+      prune [--yes] [--closed] [--unregistered]
+                                 list every git worktree of the repository as removable or kept, with the reason;
+                                 removable when clean and its branch is on the default branch or has a merged pull
+                                 request (closed too, with --closed), or detached on such a commit; never the primary
+                                 checkout, uncommitted changes, a locked worktree or one of a thread with an active
+                                 turn; --yes removes them (git worktree remove, never forced) and their local
+                                 branches; --unregistered with --yes also removes directories in .workbench/worktrees/
+                                 that git does not list and no thread names; a dry run unless --yes;
+                                 exit 1 when GitHub could not be asked (those are kept)
       discard [id] [--yes]       throw the work away: delete the worktree and branch, keep the log
       abandon [--force]          end the thread without accepting its work; uncommitted changes in its worktree
                              are saved as abandon.patch in the thread folder first, the branch is kept

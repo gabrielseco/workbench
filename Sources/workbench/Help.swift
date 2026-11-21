@@ -127,6 +127,11 @@ enum Help {
                 "removes the worktree and local branch of shipped threads whose pull "
                 + "request is merged; a dry run without --yes",
             example: "workbench clean --yes"),
+        "prune": Extra(
+            changes:
+                "nothing without --yes; with it, removes the removable worktrees and their local branches, and with "
+                + "--unregistered the unregistered directories under .workbench/worktrees/",
+            example: "workbench prune --yes"),
         "discard": Extra(
             changes: "deletes the thread's worktree and branch and keeps the log; asks first",
             example: "workbench discard --yes"),
