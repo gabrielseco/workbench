@@ -48,6 +48,11 @@ public struct SeriesRebaser: Sendable {
             }
             let outcome = await rebase(thread: record.thread, parent: parent.thread, root: root)
             results.append(SeriesRebaseStep(step: step.number, outcome: outcome))
+            // A conflict or a failure ends the command: a later step stacked on this one must not be moved past it.
+            switch outcome {
+            case .conflict, .failed: return results
+            default: continue
+            }
         }
         return results
     }
@@ -95,8 +100,12 @@ public struct SeriesRebaser: Sendable {
 
         do { try await fetch(base: base, branch: branch, root: root) } catch { return .failed("\(error)") }
         // Done already: the branch no longer carries the commit it was cut from (the parent's old tip), or that commit is in the base.
-        let carries = await succeeded(["merge-base", "--is-ancestor", cutAt, "refs/remotes/origin/\(branch)"], root)
-        let inBase = await succeeded(["merge-base", "--is-ancestor", cutAt, "refs/remotes/origin/\(base)"], root)
+        // `git merge-base --is-ancestor` exits 1 for "no" and something else for an error: an error must not read as "no".
+        guard let carries = await isAncestor(cutAt, of: "refs/remotes/origin/\(branch)", root),
+            let inBase = await isAncestor(cutAt, of: "refs/remotes/origin/\(base)", root)
+        else {
+            return .failed("git could not tell whether \(branch) still carries the commit it was cut from; nothing was changed")
+        }
         let needsReplay = carries && !inBase
         if !needsReplay, childLive.base == base { return .alreadyDone }
 
@@ -175,8 +184,14 @@ public struct SeriesRebaser: Sendable {
         }
     }
 
-    private func succeeded(_ arguments: [String], _ root: URL) async -> Bool {
-        (try? await git.run(arguments, in: root))?.succeeded == true
+    /// True or false as git answers (exit 0 or 1); nil when it could not answer.
+    private func isAncestor(_ commit: String, of ref: String, _ root: URL) async -> Bool? {
+        guard let result = try? await git.run(["merge-base", "--is-ancestor", commit, ref], in: root) else { return nil }
+        switch result.status {
+        case 0: return true
+        case 1: return false
+        default: return nil
+        }
     }
 
     /// The branch a step's pull request is on: `push_to` when its goal continued one, else `workbench/<thread>`.

@@ -229,4 +229,45 @@ private struct Stack {
             return
         }
     }
+
+    @Test func aConflictEndsTheCommandSoALaterStepIsNotMovedPastIt() async throws {
+        let s = try await Stack(conflict: true)
+        // A third step stacked on step 2, whose own parent (step 2) reads as merged: it must not be touched after step 2 conflicts.
+        let directory = s.fx.project.seriesDirectory("s")
+        let series = try String(contentsOf: directory.appendingPathComponent("series.md"), encoding: .utf8)
+        try (series + "## 3\nproject: \(s.fx.repo.path)\ngoal: g.md\nbase: after 2\n")
+            .write(to: directory.appendingPathComponent("series.md"), atomically: true, encoding: .utf8)
+        let grand = "g-2026-11-21-s-3"
+        try FileManager.default.createDirectory(at: s.fx.project.threadDirectory(grand), withIntermediateDirectories: true)
+        try (#"{"v":1,"seq":1,"ts":"2026-11-21T10:00:00.000Z","turn":0,"kind":"pr.opened","data":{"number":3,"url":"u"}}"# + "\n")
+            .write(to: s.fx.project.eventsURL(grand), atomically: true, encoding: .utf8)
+        try SeriesStepLog(project: s.fx.project, series: "s").append(SeriesRecord(step: 3, thread: grand, at: "t"))
+        try s.view(3, state: "OPEN", base: "workbench/\(s.child)", head: s.tipB)
+        let results = try await s.rebaser().run("s")
+        #expect(results.map(\.step) == [2])
+        #expect(s.edited(3) == nil)
+    }
+
+    @Test func aGitErrorWhenAskingAboutAncestryIsNotTakenForNo() async throws {
+        let s = try await Stack()
+        let before = try await s.originTip("workbench/\(s.child)")
+        // A commit that does not exist makes `merge-base --is-ancestor` fail (exit 128), which is not "not an ancestor".
+        let missing = String(repeating: "1", count: 40)
+        let log = fxLog(s, base: missing)
+        try log.write(to: s.fx.project.eventsURL(s.child), atomically: true, encoding: .utf8)
+        let results = try await s.rebaser().run("s")
+        guard case .failed(let why)? = results.first?.outcome else {
+            Issue.record("expected failed, got \(results)")
+            return
+        }
+        #expect(why.contains("could not tell"))
+        #expect(try await s.originTip("workbench/\(s.child)") == before)
+        #expect(s.edited(2) == nil)
+    }
+
+    private func fxLog(_ s: Stack, base: String) -> String {
+        #"{"v":1,"seq":1,"ts":"2026-11-21T10:00:00.000Z","turn":0,"kind":"worktree.created","data":{"base_commit":"\#(base)"}}"#
+            + "\n" + #"{"v":1,"seq":2,"ts":"2026-11-21T10:00:00.000Z","turn":0,"kind":"pr.opened","#
+            + #""data":{"number":2,"url":"u"}}"# + "\n"
+    }
 }
