@@ -11,6 +11,7 @@ public struct SeriesReportFix: Sendable, Equatable {
     public var thread: String
     public var costUSD: Double
     public var costUnknown: Bool
+    public var turns: Int
     /// Subjects of the commits it made on the branch; empty when its branch is gone.
     public var commits: [String]
     /// What the agent said last: what it fixed and what it left, in its own words.
@@ -129,6 +130,8 @@ public struct SeriesReporter: Sendable {
             guard let text, (try? GoalFile.parse(text).goal.pushTo) == branch else { continue }
             manual.append(await fix(store.state(of: other), project: project))
         }
+        // Hand-made threads are not in the family, so their turns and cost are added here; a CI fix is in the family and counted below.
+        let manualTurns = manual.reduce(0) { $0 + $1.turns }
         var cost = manual.reduce(0) { $0 + $1.costUSD }
         var unknown = manual.contains { $0.costUnknown }
         for member in family {
@@ -176,7 +179,8 @@ public struct SeriesReporter: Sendable {
         return SeriesReportStep(
             number: step.number, project: root.path, goalTitle: title, state: state, thread: thread,
             pullRequest: rootState.pullRequest?.url, additions: live?.additions, deletions: live?.deletions,
-            files: live?.files ?? [], turns: rootState.lastTurn + followUps.reduce(0) { $0 + $1.lastTurn }, costUSD: cost,
+            files: live?.files ?? [], turns: rootState.lastTurn + followUps.reduce(0) { $0 + $1.lastTurn } + manualTurns,
+            costUSD: cost,
             costUnknown: unknown,
             check: rootState.review.check.map { "\($0.result) after turn \($0.turn)" },
             verifier: rootState.review.verifier.flatMap { $0.skipped ? nil : ($0.ok ? "passed" : "did not pass") },
@@ -197,7 +201,8 @@ public struct SeriesReporter: Sendable {
             }
         }
         return SeriesReportFix(
-            thread: state.id, costUSD: state.totalCostUSD, costUnknown: state.costUnknown, commits: commits,
+            thread: state.id, costUSD: state.totalCostUSD, costUnknown: state.costUnknown, turns: state.lastTurn,
+            commits: commits,
             said: TaskLogReport.lastAgentText(project: project, thread: state.id, events: events))
     }
 

@@ -31,10 +31,10 @@ wbp() { # <out> args...: a workbench command in the clone with the failing gh fi
 wbp "$SCRATCH/init.out" init
 check "init writes a config in the clone" "exit $RC" test "$RC" = 0
 
-goal() { # <id> <title> [push_to]
+goal() { # <id> <title> [push_to] [request]
     local base=main push=""
     [ -n "${3:-}" ] && { base="origin/$3"; push=$'\npush_to: '"$3"; }
-    printf -- '---\nid: %s\ntitle: %s\nstatus: draft\nbase: %s%s\nbudget_usd: 1.00\nturn_timeout_min: 10\n---\n\n## Request\n\nDo it.\n\n## Criteria\n\n- [c1] It works.\n  - proof: a test\n- [c2] It is tested.\n  - proof: a test\n\n## Out of scope\n\n- Nothing.\n' "$1" "$2" "$base" "$push"
+    printf -- '---\nid: %s\ntitle: %s\nstatus: draft\nbase: %s%s\nbudget_usd: 1.00\nturn_timeout_min: 10\n---\n\n## Request\n\n%s\n\n## Criteria\n\n- [c1] It works.\n  - proof: a test\n- [c2] It is tested.\n  - proof: a test\n\n## Out of scope\n\n- Nothing.\n' "$1" "$2" "$base" "$push" "${4:-Do it.}"
 }
 ev() { # <seq> <turn> <kind> <data-json>
     printf '{"v":1,"seq":%s,"ts":"2026-01-01T00:00:%02d.000Z","turn":%s,"kind":"%s","data":%s}\n' "$1" "$1" "$2" "$3" "${4:-\{\}}"
@@ -59,7 +59,9 @@ printf -- '- **[P1] A real bug.** It breaks.\n- **[P2] A missing test.** Add one
 
 if [ "$SABOTAGE" != 1 ]; then
     mkdir -p "$T/$FOLLOW/pr-review"
-    goal "$FOLLOW" "Follow-up" "workbench/$ROOT_T" >"$T/$FOLLOW/goal.md"
+    # The request says which review round it answers, as `ReviewLoop.body` writes it: that is how the report attributes it.
+    goal "$FOLLOW" "Follow-up" "workbench/$ROOT_T" "A second reviewer read the pull request (review round 1) and found problems." \
+        >"$T/$FOLLOW/goal.md"
     {
         ev 1 0 thread.created "{\"parent\":\"$ROOT_T\",\"root\":\"$ROOT_T\",\"round\":1}"
         ev 2 1 turn.started
@@ -92,9 +94,10 @@ check "the findings are listed with severity and title" "no P1 line" \
 check "the follow-up that answered round 1 is named with what it said" "no 'Answered by'" \
     bash -c 'grep -q "Answered by .'"$FOLLOW"'." "$1" && grep -q "Fixed the bug. Left the test." "$1"' _ "$SCRATCH/report.out"
 check "the work done by hand on the branch is shown" "no hand-made section" \
-    bash -c 'grep -q "Also pushed to this branch by hand" "$1" && grep -q "Removed the job." "$1"' _ "$SCRATCH/report.out"
+    bash -c 'grep -q "Also pushed to this branch outside the review rounds" "$1" && grep -q "Removed the job." "$1"' _ "$SCRATCH/report.out"
 check "the judge's reading says which turn it is of" "$(grep judge "$SCRATCH/report.out" | head -1)" \
     has "judge after turn 1, before the review fixes: 1 of 2 criteria met"
+check "the turn count includes the hand-made thread too (3 turns)" "$(grep ' turns' "$SCRATCH/report.out" | head -1)" has "3 turns"
 check "the total counts every thread (1.00 + 0.50 + 0.25)" "$(grep 'Coding turns' "$SCRATCH/report.out")" has 'Coding turns cost \$1.75'
 check "report.md was written in the series folder and equals what was printed" "diff: $(diff "$SD/report.md" "$SCRATCH/report.out" | head -3)" \
     cmp -s "$SD/report.md" "$SCRATCH/report.out"

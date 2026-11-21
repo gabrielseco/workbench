@@ -44,7 +44,7 @@ struct SeriesReportMarkdownTests {
 
     @Test func theSummaryTableTheMergeOrderAndEachStepAreWritten() {
         let fix = SeriesReportFix(
-            thread: "g-1-s-1-review-1", costUSD: 0.5, costUnknown: false, commits: ["fix: the thing"],
+            thread: "g-1-s-1-review-1", costUSD: 0.5, costUnknown: false, turns: 1, commits: ["fix: the thing"],
             said: "Fixed P1.\nLeft P2.")
         let round = SeriesReportRound(
             round: 1, verdict: "fix", findings: [SeriesReportFinding(severity: "P1", title: "A bug")],
@@ -92,7 +92,7 @@ struct SeriesReportMarkdownTests {
         one.rounds = [
             SeriesReportRound(
                 round: 1, verdict: "fix", findings: [SeriesReportFinding(severity: "P1", title: leaks[3])], findingsFile: nil,
-                fix: SeriesReportFix(thread: "f", costUSD: 0, costUnknown: false, commits: [leaks[0]], said: leaks[4]))
+                fix: SeriesReportFix(thread: "f", costUSD: 0, costUnknown: false, turns: 1, commits: [leaks[0]], said: leaks[4]))
         ]
         let text = SeriesReport(name: "s", generated: "t", budgetUSD: nil, steps: [one]).markdown
         for word in words { #expect(!text.contains(word), "\(word) leaked") }
@@ -113,7 +113,8 @@ struct SeriesReportMarkdownTests {
             SeriesReportRound(
                 round: 1, verdict: "fix", findings: [], findingsFile: nil,
                 fix: SeriesReportFix(
-                    thread: "g-1-fix", costUSD: 0, costUnknown: false, commits: [], said: String(repeating: "x ", count: 800)))
+                    thread: "g-1-fix", costUSD: 0, costUnknown: false, turns: 1, commits: [],
+                    said: String(repeating: "x ", count: 800)))
         ]
         let text = SeriesReport(name: "s", generated: "t", budgetUSD: nil, steps: [one]).markdown
         #expect(text.contains("the whole account: `workbench log g-1-s-1`"))
@@ -144,7 +145,8 @@ struct SeriesReportMarkdownTests {
         one.rounds = [SeriesReportRound(round: 3, verdict: "fix", findings: [], findingsFile: nil, fix: nil)]
         one.manual = [
             SeriesReportFix(
-                thread: "g-1-rework", costUSD: 0.54, costUnknown: false, commits: ["fix: rework"], said: "Removed the job.")
+                thread: "g-1-rework", costUSD: 0.54, costUnknown: false, turns: 1, commits: ["fix: rework"],
+                said: "Removed the job.")
         ]
         let text = SeriesReport(name: "s", generated: "t", budgetUSD: nil, steps: [one]).markdown
         #expect(text.contains("No review-loop follow-up answered this round"))
@@ -203,6 +205,14 @@ private func goalFile(_ id: String, title: String, pushTo: String? = nil, reques
             try (lines.joined(separator: "\n") + "\n").write(to: project.eventsURL(thread), atomically: true, encoding: .utf8)
             for (name, text) in files { try text.write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8) }
         }
+        // The follow-up's branch, with one commit, cut from main: the report reads its commit subjects with `git log`.
+        let cut = try await shipOut(["rev-parse", "HEAD"], fx.repo, fx)
+        _ = try await shipOut(["checkout", "-q", "-b", "workbench/\(follow)"], fx.repo, fx)
+        try "fix\n".write(to: fx.repo.appendingPathComponent("fix.txt"), atomically: true, encoding: .utf8)
+        _ = try await shipOut(["add", "fix.txt"], fx.repo, fx)
+        let commit = ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "fix: the real bug"]
+        _ = try await shipOut(commit, fx.repo, fx)
+        _ = try await shipOut(["checkout", "-q", "-"], fx.repo, fx)
         let judge = #"{"ok":true,"criteria":[{"id":"c1","met":true,"evidence":[]},{"id":"c2","met":false,"evidence":[]}],"#
             + #""concerns":["It may be slow."],"cost_usd":0.1}"#
         try write(
@@ -229,11 +239,12 @@ private func goalFile(_ id: String, title: String, pushTo: String? = nil, reques
             lines: [
                 line(
                     1, 0, "thread.created", #"{"parent":"\#(root)","root":"\#(root)","round":1}"#),
-                line(2, 1, "turn.started"),
-                line(3, 1, "turn.ended", #"{"result":"succeeded","cost_usd":0.5,"summary":"Fixed the bug. Left the test."}"#),
-                line(4, 0, "pr_review.started", #"{"round":2,"pr":7}"#),
+                line(2, 0, "worktree.created", #"{"base_commit":"\#(cut)"}"#),
+                line(3, 1, "turn.started"),
+                line(4, 1, "turn.ended", #"{"result":"succeeded","cost_usd":0.5,"summary":"Fixed the bug. Left the test."}"#),
+                line(5, 0, "pr_review.started", #"{"round":2,"pr":7}"#),
                 line(
-                    5, 0, "pr_review.finished",
+                    6, 0, "pr_review.finished",
                     #"{"round":2,"pr":7,"ok":true,"verdict":"clean","findings_path":"pr-review/round-2.findings.md"}"#),
             ],
             files: ["pr-review/round-2.findings.md": "No findings.\nVERDICT: CLEAN\n"])
@@ -266,6 +277,7 @@ private func goalFile(_ id: String, title: String, pushTo: String? = nil, reques
         #expect(step.rounds[0].findings.map(\.title) == ["A real bug", "A missing test"])
         #expect(step.rounds[0].fix?.thread == "g-2026-11-21-s-1-review-1")
         #expect(step.rounds[0].fix?.said == "Fixed the bug. Left the test.")
+        #expect(step.rounds[0].fix?.commits == ["fix: the real bug"])
         #expect(step.rounds[1].fix == nil && step.rounds[1].findings.isEmpty)
         #expect(step.rounds[0].findingsFile == ".workbench/threads/g-2026-11-21-s-1/pr-review/round-1.findings.md")
     }
@@ -277,6 +289,8 @@ private func goalFile(_ id: String, title: String, pushTo: String? = nil, reques
         #expect(step.manual.first?.said == "Removed the job.")
         // The thread's own 1.00 plus its follow-up's 0.50 plus the hand-made 0.25.
         #expect(abs(step.costUSD - 1.75) < 0.0001)
+        // Three coding turns made that cost: the thread's, its review follow-up's and the hand-made one.
+        #expect(step.turns == 3)
     }
 
     @Test func theTotalIsWrittenAgainstTheSeriesBudgetAndAStepNotStartedIsSaidSo() async throws {
