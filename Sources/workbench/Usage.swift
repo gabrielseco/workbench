@@ -31,6 +31,9 @@ let workbenchUsage = """
                                  --from <goal-file> copies its request, criteria and out of scope into the draft,
                                  and its budget_usd, turn_timeout_min, model and quick; prints the front matter it ignored
                                  --update <branch> continues that branch of origin (ship pushes to it and records its PR)
+                                 --after <thread> stacks the goal on that thread's pull request: base is origin/workbench/<thread>,
+                                 fetched at each run, and ship opens the PR against that branch; refused when the thread has
+                                 opened none; not with --base, --update or --quick
                                  --quick "<text>" writes a quick goal: the text as its request, `quick: true`, no
                                  criteria (so no judge and no verifier); no agent runs
       goal draft <name> --request "<text>" | --request-file <path>  [--base <branch>] [--replace]

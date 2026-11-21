@@ -161,7 +161,7 @@ public actor ThreadRunner {
         } else {
             let local = (try? await worktreeManager.checkoutChanges()) ?? []
             let created = try await worktreeManager.create(
-                threadID: threadID, base: goal.base, fetching: goal.pushTo,
+                threadID: threadID, base: goal.base, fetching: goal.originBranch,
                 copying: config.copy)
             worktree = created.path
             baseCommit = created.baseCommit
@@ -490,7 +490,7 @@ extension ThreadRunner {
     /// diverged, changes in the way) throws, so the run stops with why and no worktree is cut. A goal continuing `push_to`
     /// starts from that branch's fetched tip instead, so its base is left alone. Returns whether origin was asked.
     fileprivate func updateBaseBeforeStart(goal: Goal) async throws -> Bool {
-        guard goal.pushTo == nil else { return false }
+        guard goal.originBranch == nil else { return false }
         return try await worktreeManager.updateBaseFromOrigin(goal.base) != .skipped
     }
 

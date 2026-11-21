@@ -17,6 +17,8 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
     case changedSinceAcceptShown
     case invalidPushTarget(String)
     case updateWithBase
+    case afterWithBase
+    case afterNotShipped(String)
     case copySourceMissing(String)
     case copySourceTooLarge(String)
     case copyValueInvalid(String)
@@ -49,6 +51,11 @@ public enum ThreadServiceError: Error, Equatable, Sendable, CustomStringConverti
             "'\(name)' cannot be updated: use a safe branch name that is not main, master, trunk or develop."
         case .updateWithBase:
             "--update already sets the base to that branch; drop --base."
+        case .afterWithBase:
+            "--after already sets the base to the branch of that thread; drop --base, --update and --from's base."
+        case .afterNotShipped(let id):
+            "'\(id)' is not a thread of this project that has opened a pull request, so there is no branch on origin "
+                + "to build on. Ship it first (`workbench ship`)."
         case .goalPlaceholdersRemain:
             "the goal still has TODO(workbench) placeholders. Write the request and criteria first."
         case .goalMissing(let path): "no goal at \(path)"
@@ -121,16 +128,30 @@ public struct ThreadService: Sendable {
     /// Creates the thread directory, a draft goal to fill in and the first events. Refuses while another
     /// thread is active.
     public func newThread(
-        name: String, base: String? = nil, updating: String? = nil, config: Config? = nil,
+        name: String, base: String? = nil, updating: String? = nil, after parent: String? = nil, config: Config? = nil,
         lineage: ThreadLineage? = nil, body: GoalBody? = nil, settings: GoalSettings = GoalSettings(),
         title proposedTitle: String? = nil, afterCreate: AfterCreate? = nil
     ) async throws -> String {
         guard SafeNames.isThreadID(name) else { throw ThreadStoreError.invalidName(name) }
+        if parent != nil, base != nil || updating != nil { throw ThreadServiceError.afterWithBase }
         if let updating {
             guard SafeNames.isPushTarget(updating) else { throw ThreadServiceError.invalidPushTarget(updating) }
             if base != nil { throw ThreadServiceError.updateWithBase }
             // Fails before anything is created when origin has no such branch.
             try await WorktreeManager(repoRoot: project.root, git: git).fetchRemoteBranch(updating)
+        }
+        var stackedBase: String?
+        if let parent {
+            guard SafeNames.isThreadID(parent) else { throw ThreadStoreError.invalidName(parent) }
+            guard FileManager.default.fileExists(atPath: project.eventsURL(parent).path),
+                ThreadStore(project: project).state(of: parent).pullRequest != nil
+            else {
+                throw ThreadServiceError.afterNotShipped(parent)
+            }
+            // The parent's branch as origin has it now; fails before anything is created when origin has none.
+            let branch = WorktreeManager.branch(for: parent)
+            try await WorktreeManager(repoRoot: project.root, git: git).fetchRemoteBranch(branch)
+            stackedBase = "origin/\(branch)"
         }
         let day = DateFormatter.dayStamp.string(from: now())
         let cap = config?.maxActiveThreads ?? Config.defaultMaxActiveThreads
@@ -139,6 +160,8 @@ public struct ThreadService: Sendable {
         let baseBranch: String
         if let updating {
             baseBranch = "origin/\(updating)"
+        } else if let stackedBase {
+            baseBranch = stackedBase
         } else if let base {
             baseBranch = base
         } else {
@@ -156,6 +179,7 @@ public struct ThreadService: Sendable {
             "worktree": .string(manager.path(for: id).path),
             "branch": .string(WorktreeManager.branch(for: id)),
         ]
+        if let parent { created["after"] = .string(parent) }
         if let lineage {
             created["parent"] = .string(lineage.parent)
             created["root"] = .string(lineage.root)
