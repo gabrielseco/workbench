@@ -8,7 +8,7 @@
 # `series report` must print and write report.md with: the summary table with the rounds `FIX → CLEAN`, the findings' severities and
 # titles, the follow-up that answered round 1 with what it said, the work done by hand, the judge's reading with the turn it is of,
 # and a total that counts every thread. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start.
-VERIFY_CLI_SABOTAGE=1 leaves the follow-up thread out, so "answered by" and the cost steps must FAIL. Run by
+# VERIFY_CLI_SABOTAGE=1 leaves the follow-up thread out, so "answered by" and the cost steps must FAIL. Run by
 # hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
