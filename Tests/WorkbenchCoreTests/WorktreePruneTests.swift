@@ -16,6 +16,7 @@ private struct PruneGH {
         let body = """
             #!/bin/sh
             echo "$*" >> '\(dir.path)/calls'
+            if [ -x '\(dir.path)/hook' ]; then '\(dir.path)/hook'; fi
             if [ -f '\(dir.path)/fail' ]; then echo 'HTTP 502 token ghp_zzz' >&2; exit 1; fi
             f='\(dir.path)/'"$(echo "$4" | tr / _)".json
             if [ -f "$f" ]; then cat "$f"; else echo '[]'; fi
@@ -31,6 +32,21 @@ private struct PruneGH {
         try json.write(
             to: dir.appendingPathComponent(branch.replacingOccurrences(of: "/", with: "_") + ".json"), atomically: true,
             encoding: .utf8)
+    }
+
+    /// Answers with several pull requests: (number, state, head).
+    func answer(_ branch: String, prs: [(Int, String, String)]) throws {
+        let items = prs.map { "{\"number\":\($0.0),\"state\":\"\($0.1)\",\"headRefOid\":\"\($0.2)\"}" }
+        try "[\(items.joined(separator: ","))]".write(
+            to: dir.appendingPathComponent(branch.replacingOccurrences(of: "/", with: "_") + ".json"), atomically: true,
+            encoding: .utf8)
+    }
+
+    /// Runs `script` (sh) on every call, before answering.
+    func onEveryCall(_ script: String) throws {
+        let hook = dir.appendingPathComponent("hook")
+        try "#!/bin/sh\n\(script)\n".write(to: hook, atomically: true, encoding: .utf8)
+        chmod(hook.path, 0o755)
     }
 
     func failing() throws { try "".write(to: dir.appendingPathComponent("fail"), atomically: true, encoding: .utf8) }
@@ -202,6 +218,54 @@ private func snapshot(_ fx: RunnerFixture) async throws -> [String] {
         #expect(try await branchExists("feat/closed", fx) == false)
     }
 
+    @Test func anOpenPullRequestKeepsABranchThatAlsoHasAMergedOne() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try PruneGH(fx)
+        let both = try await worktree("both", branch: "feat/both", commits: 1, fx)
+        try gh.answer("feat/both", prs: [(3, "MERGED", both.tip), (4, "OPEN", both.tip)])
+
+        let report = try await fx.service.prune(gh: gh.runner, includeClosed: true, unregistered: false, dryRun: false)
+        #expect(keptReason(report, both.path) == "pull request #4 is open", "\(report.render())")
+        #expect(FileManager.default.fileExists(atPath: both.path.path))
+        #expect(try await branchExists("feat/both", fx))
+    }
+
+    @Test func aWorktreeWhoseCommitMovesDuringTheLookupsIsKept() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try PruneGH(fx)
+        // On main, so removable once GitHub says it has no pull request; it gets a commit while GitHub is asked.
+        let moving = try await worktree("moving", branch: "feat/moving", fx)
+        try gh.onEveryCall(
+            "cd '\(moving.path.path)' && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m late")
+
+        let report = try await fx.service.prune(gh: gh.runner, includeClosed: false, unregistered: false, dryRun: false)
+        let why = try #require(keptReason(report, moving.path), "\(report.render())")
+        #expect(why.contains("changed since it was looked at"), "\(why)")
+        #expect(FileManager.default.fileExists(atPath: moving.path.path))
+        #expect(try await branchExists("feat/moving", fx))
+    }
+
+    @Test func aRemovalTheThreadLogCannotRecordIsReported() async throws {
+        let fx = try await RunnerFixture()
+        let gh = try PruneGH(fx)
+        let id = try await fx.approvedThread()
+        _ = try await fx.runner(id).run(fx.options())
+        let path = fx.project.worktreesDirectory.appendingPathComponent(id).resolvingSymlinksInPath()
+        try "done\n".write(to: path.appendingPathComponent("done.txt"), atomically: true, encoding: .utf8)
+        _ = try await fx.service.accept(id: id, message: "feat: done")
+        let tip = try await out(["rev-parse", "HEAD"], path, fx)
+        try gh.answer("workbench/\(id)", state: "MERGED", head: tip)
+        let events = fx.project.eventsURL(id)
+        chmod(events.path, 0o444)
+        defer { chmod(events.path, 0o644) }
+
+        let report = try await fx.service.prune(gh: gh.runner, includeClosed: false, unregistered: false, dryRun: false)
+        #expect(entry(report, path)?.outcome == .removed, "\(report.render())")
+        #expect(report.recordFailed)
+        #expect(entry(report, path)?.recordFailed?.contains("worktree.removed") == true)
+        #expect(report.render().contains { $0.hasPrefix("  record:") })
+    }
+
     @Test func aMergedPullRequestWithLaterCommitsIsKept() async throws {
         let fx = try await RunnerFixture()
         let gh = try PruneGH(fx)
@@ -278,6 +342,18 @@ private func snapshot(_ fx: RunnerFixture) async throws -> [String] {
         #expect(!FileManager.default.fileExists(atPath: oddName.path))
         #expect(keptReason(removed, named) == "unregistered, but thread \(id) names it")
         #expect(FileManager.default.fileExists(atPath: named.path))
+    }
+
+    @Test func anUnregisteredDirectoryHoldingARegisteredWorktreeIsKept() async throws {
+        let fx = try await RunnerFixture()
+        let group = fx.project.worktreesDirectory.appendingPathComponent("group")
+        let live = try await worktree("live", branch: "feat/live", commits: 1, under: group, fx)
+        try "wip\n".write(to: live.path.appendingPathComponent("wip.txt"), atomically: true, encoding: .utf8)
+
+        let report = try await fx.service.prune(gh: nil, includeClosed: true, unregistered: true, dryRun: false)
+        #expect(entry(report, group)?.isRemovable == false, "\(report.render())")
+        #expect(keptReason(report, group)?.hasPrefix("unregistered, but it holds the worktree at") == true)
+        #expect(FileManager.default.fileExists(atPath: live.path.appendingPathComponent("wip.txt").path))
     }
 
     @Test func aBranchNameThatDoesNotValidateIsKeptAndNeverAsked() async throws {

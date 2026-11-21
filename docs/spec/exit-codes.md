@@ -387,15 +387,19 @@ still removed (git decided, and the line says GitHub was not asked) and the othe
 is kept. A branch or path that does not validate (`SafeNames.isBranchName`, an absolute path without `.`/`..` or control
 characters) is kept and never reaches git or `gh`. `--yes` runs `git worktree remove <path>` (never `--force`), then
 deletes the local branch with `git update-ref -d` at the commit it was judged at, unless it is the default branch or is checked
-out elsewhere; for a thread's worktree it appends `worktree.removed` (and `branch.removed`) with `reason: "prune"`.
+out elsewhere; for a thread's worktree it appends `worktree.removed` (and `branch.removed`) with `reason: "prune"`, and a
+log that cannot be written is printed (`record: not written`) and exits 1. Right before each removal the worktree is listed
+again: one whose commit or branch changed, that became locked, or whose thread became active is kept. An open pull request
+keeps a branch even when another, merged one covers its tip.
 Unregistered directories (any name) are removed only with `--yes --unregistered`, never one whose name is a thread in the
-store, and none when git listed a worktree path that did not validate (it could be one of them).
+store, never one that holds a registered worktree, and none when git listed a worktree path that did not validate (it could
+be one of them).
 No `--json`.
 
 | Code | Kind | When |
 |---|---|---|
 | 0 |  | done, or a dry run |
-| 1 | `failed` | GitHub could not be asked about a worktree that needed it (it was kept; the others were still handled), git could not list the worktrees, or a removal failed |
+| 1 | `failed` | GitHub could not be asked about a worktree that needed it (it was kept; the others were still handled), git could not list the worktrees, a removal failed, or a removal could not be recorded in its thread's log |
 | 2 | `usage` | wrong command line |
 
 ### `discard`

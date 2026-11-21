@@ -28,6 +28,12 @@ extension Commands {
             return fail(.failed, "GitHub could not be asked about some worktrees; they were kept.")
         }
         if report.removalFailed { return fail(.failed, "some worktrees could not be removed; they are listed above.") }
+        if report.recordFailed {
+            return fail(
+                .failed,
+                "some removals were done but their thread's log could not record them; they are listed above. "
+                    + "For a shipped thread `workbench clean --yes` writes the missing worktree.removed.")
+        }
         return 0
     }
 }

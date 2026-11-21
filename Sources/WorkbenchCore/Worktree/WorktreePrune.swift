@@ -42,6 +42,8 @@ public struct PruneEntry: Sendable, Equatable {
     public var lookupFailed = false
     public var outcome: Outcome = .untouched
     public var branchOutcome: BranchOutcome = .none
+    /// The thread's log could not record what was removed (`worktree.removed` or `branch.removed`), and why.
+    public var recordFailed: String?
 
     public var isRemovable: Bool { if case .removable = verdict { true } else { false } }
 }
@@ -58,6 +60,7 @@ public struct PruneReport: Sendable, Equatable {
             return false
         }
     }
+    public var recordFailed: Bool { entries.contains { $0.recordFailed != nil } }
 }
 
 public enum PruneError: Error, Equatable, Sendable, CustomStringConvertible {
@@ -244,7 +247,7 @@ extension ThreadService {
         }
     }
 
-    /// The verdict from a branch's pull requests: merged (with the tip in its head) removes, an open one keeps, a closed one
+    /// The verdict from a branch's pull requests: an open one keeps, merged (with the tip in its head) removes, a closed one
     /// removes only with `includeClosed`; with none of those, a tip on the default branch (`onDefault`) removes.
     private func decide(
         prs: [BranchPR], head: String, onDefault: String?, entry: PruneEntry, includeClosed: Bool
@@ -253,10 +256,10 @@ extension ThreadService {
         var covering: [BranchPR] = []
         for pr in prs where await contains(pr.head, head) { covering.append(pr) }
         let closed = covering.first { $0.state == .closed } ?? (onDefault == nil ? nil : prs.first { $0.state == .closed })
-        if let merged = covering.first(where: { $0.state == .merged }) {
-            entry.verdict = .removable("pull request #\(merged.number) is merged")
-        } else if let open = prs.first(where: { $0.state == .open }) {
+        if let open = prs.first(where: { $0.state == .open }) {
             entry.verdict = .kept("pull request #\(open.number) is open")
+        } else if let merged = covering.first(where: { $0.state == .merged }) {
+            entry.verdict = .removable("pull request #\(merged.number) is merged")
         } else if let closed {
             entry.verdict =
                 includeClosed
@@ -350,10 +353,15 @@ extension ThreadService {
         var entries: [PruneEntry] = []
         for name in names {
             let url = folder.appendingPathComponent(name)
-            guard WorktreeManager.type(of: url) == .typeDirectory,
-                !known.contains(url.resolvingSymlinksInPath().standardizedFileURL.path)
-            else { continue }
+            let resolved = url.resolvingSymlinksInPath().standardizedFileURL.path
+            guard WorktreeManager.type(of: url) == .typeDirectory, !known.contains(resolved) else { continue }
             var entry = PruneEntry(path: url.path, kind: .unregistered, branch: nil, head: nil, verdict: .kept(""))
+            // A directory holding a registered worktree (`group/live`) is never removed with it: that one is judged itself.
+            if let inner = known.first(where: { $0.hasPrefix(resolved + "/") }) {
+                entry.verdict = .kept("unregistered, but it holds the worktree at \(inner)")
+                entries.append(entry)
+                continue
+            }
             // A thread names its worktree `.workbench/worktrees/<id>`. The name is only compared, never put in a git
             // argument, and the directory is removed by path without following links (only a real directory is listed).
             if threads.contains(name)
@@ -419,6 +427,11 @@ extension ThreadService {
             return
         }
         guard Self.isSafeWorktreePath(entry.path) else { entry.outcome = .failed("unsafe path"); return }
+        // The GitHub lookups took time: look again right before removing, and keep a worktree that changed meanwhile.
+        if let why = await changed(entry) {
+            entry.verdict = .kept("it changed since it was looked at (\(why)); run prune again")
+            return
+        }
         let thread = threadID(owning: url)
         let result = try? await git.run(["worktree", "remove", entry.path], in: project.root)
         guard let result, result.succeeded else {
@@ -429,8 +442,12 @@ extension ThreadService {
         }
         entry.outcome = .removed
         if let thread {
-            try? await withLog(thread) { log in
-                _ = try await log.append(.worktreeRemoved, data: ["reason": "prune", "path": .string(entry.path)])
+            do {
+                try await withLog(thread) { log in
+                    _ = try await log.append(.worktreeRemoved, data: ["reason": "prune", "path": .string(entry.path)])
+                }
+            } catch {
+                entry.recordFailed = "worktree.removed was not written to thread \(thread)'s log (\(error))"
             }
         }
         guard let branch = entry.branch, let head = entry.head else { return }
@@ -444,10 +461,26 @@ extension ThreadService {
         }
         entry.branchOutcome = .removed
         if let thread, branch == WorktreeManager.branch(for: thread) {
-            try? await withLog(thread) { log in
-                _ = try await log.append(.branchRemoved, data: ["reason": "prune", "head_sha": .string(head)])
+            do {
+                try await withLog(thread) { log in
+                    _ = try await log.append(.branchRemoved, data: ["reason": "prune", "head_sha": .string(head)])
+                }
+            } catch {
+                let missing = "branch.removed was not written to thread \(thread)'s log (\(error))"
+                entry.recordFailed = entry.recordFailed.map { $0 + "; " + missing } ?? missing
             }
         }
+    }
+
+    /// What changed about a registered worktree since it was judged (its commit, branch, lock or thread), or nil.
+    private func changed(_ entry: PruneEntry) async -> String? {
+        guard let records = try? await listWorktrees() else { return "git could not list the worktrees" }
+        guard let now = records.first(where: { $0.path == entry.path }) else { return "git no longer lists it" }
+        if now.head != entry.head { return "its commit moved" }
+        if now.branch != entry.branch { return "its branch changed" }
+        if now.locked { return "it is locked" }
+        if let why = threadHold(at: URL(fileURLWithPath: entry.path)) { return why }
+        return nil
     }
 
     /// Deletes `refs/heads/<branch>` only if it still points at `sha` and no worktree has it checked out.
@@ -542,6 +575,7 @@ extension PruneReport {
             case .removed: lines.append("  branch:   removed \(entry.branch ?? "")")
             case .kept(let why): lines.append("  branch:   kept (\(why))")
             }
+            if let why = entry.recordFailed { lines.append("  record:   not written: \(why)") }
         }
         return lines
     }
