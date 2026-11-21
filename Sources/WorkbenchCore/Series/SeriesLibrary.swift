@@ -42,7 +42,7 @@ public enum SeriesApproval {
         for step in definition.steps {
             let base: String
             switch step.base {
-            case .branch(let branch): base = branch ?? "default"
+            case .branch(let branch): base = branch.map { "branch \($0)" } ?? "project base"
             case .after(let n): base = "after \(n)"
             }
             let env = step.env.map { pair in

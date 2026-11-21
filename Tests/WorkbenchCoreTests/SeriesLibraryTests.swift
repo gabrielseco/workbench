@@ -168,4 +168,11 @@ private struct SeriesFixture {
         try String(repeating: "x", count: 10_000).write(to: url, atomically: true, encoding: .utf8)
         #expect(s.library.approvedHash("s") == nil)
     }
+
+    @Test func namingTheBranchCalledDefaultIsNotTheSameAsNamingNoBase() async throws {
+        let s = try await SeriesFixture()
+        _ = try s.library.approve("s")
+        try s.write("series.md", "## 1\nproject: \(s.fx.repo.path)\ngoal: p1.md\nbase: default\n")
+        #expect(s.library.state(try s.library.load("s")) == .stale)
+    }
 }
