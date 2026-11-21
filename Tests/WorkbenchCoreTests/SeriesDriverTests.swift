@@ -91,6 +91,12 @@ private typealias StatesProvider = @Sendable (LoadedSeries) async -> [Int: Serie
 private let twoSteps =
     "## 1\nproject: PROJECT\ngoal: p1.md\n## 2\nproject: PROJECT\ngoal: p2.md\nbase: after 1\nenv: REF=step:1\n"
 
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func next() -> Int { lock.withLock { value += 1; return value } }
+}
+
 /// States that follow what the fake commands did: a step is clean once its `ship` ran.
 private final class Shipped: @unchecked Sendable {
     private let lock = NSLock()
@@ -156,11 +162,11 @@ private final class Shipped: @unchecked Sendable {
                 "goal new", "goal approve", "run --thread", "accept --thread", "ship --thread",
             ])
         let first = commands.calls[0]
-        #expect(first.arguments.contains { $0.hasSuffix("p1.md") })
+        #expect(first.arguments.contains { $0.hasSuffix("/.snapshots/step-1.md") })
         #expect(!first.arguments.contains("--after"))
         #expect(first.environment.isEmpty)
         let ship = commands.calls[4]
-        #expect(ship.arguments == ["ship", "--thread", "g-2026-11-21-step1", "--yes", "--watch", "--review-loop"])
+        #expect(ship.arguments == ["ship", "--thread", "g-2026-11-21-step1", "--yes", "--review-loop"])
         let second = commands.calls[5]
         #expect(second.arguments.suffix(2) == ["--after", "g-2026-11-21-step1"])
         #expect(second.environment["REF"] == "origin/workbench/g-2026-11-21-step1")
@@ -235,6 +241,182 @@ private final class Shipped: @unchecked Sendable {
         }
         #expect(reason.contains("the review asked for fixes"))
         #expect(commands.words.filter { $0 == "goal new" }.count == 1)
+    }
+
+    @Test func shipIsNeverGivenWatchBecauseTheReviewLoopRefusesTheCombination() async throws {
+        let rig = try await Rig(twoSteps)
+        _ = try rig.library.approve("s")
+        let shipped = Shipped()
+        let commands = FakeCommands()
+        commands.onRun = { call in
+            if call.arguments.first == "ship", let id = call.arguments.dropFirst().dropFirst().first {
+                shipped.mark(id.hasSuffix("step1") ? 1 : 2, thread: id)
+            }
+        }
+        _ = try await rig.driver(commands, states: shipped.states).run("s")
+        for call in commands.calls where call.arguments.first == "ship" {
+            #expect(call.arguments.contains("--review-loop") && !call.arguments.contains("--watch"))
+        }
+    }
+
+    @Test func aGoalFileEditedWhileAStepRunsIsNotStartedWithoutANewApproval() async throws {
+        let rig = try await Rig(twoSteps)
+        _ = try rig.library.approve("s")
+        let shipped = Shipped()
+        let commands = FakeCommands()
+        let second = rig.directory.appendingPathComponent("p2.md")
+        commands.onRun = { call in
+            if call.arguments.first == "ship", let id = call.arguments.dropFirst().dropFirst().first {
+                shipped.mark(1, thread: id)
+                try? goalText.replacingOccurrences(of: "Add the thing.\n", with: "Add a different thing.\n")
+                    .write(to: second, atomically: true, encoding: .utf8)
+            }
+        }
+        do {
+            _ = try await rig.driver(commands, states: shipped.states).run("s")
+            Issue.record("expected the changed goal to need a new approval")
+        } catch let error as SeriesDriverError { #expect(error == .notApproved(.stale)) }
+        #expect(commands.words.filter { $0 == "goal new" }.count == 1)
+    }
+
+    @Test func theGoalHandedToGoalNewIsTheApprovedTextEvenIfTheFileChangesAfter() async throws {
+        let rig = try await Rig(twoSteps)
+        _ = try rig.library.approve("s")
+        let first = rig.directory.appendingPathComponent("p1.md")
+        let commands = FakeCommands()
+        commands.onRun = { call in
+            // What `goal new --from` would read: the snapshot, which the file edit that follows cannot change.
+            if call.arguments.prefix(2) == ["goal", "new"], let path = call.arguments.last(where: { $0.hasSuffix(".md") }) {
+                #expect((try? String(contentsOfFile: path, encoding: .utf8)) == goalText)
+                try? "tampered".write(to: first, atomically: true, encoding: .utf8)
+            }
+        }
+        commands.exits["goal approve"] = 9
+        _ = try await rig.driver(commands) { _ in [:] }.run("s")
+        #expect(commands.words.first == "goal new")
+    }
+
+    @Test func aStepWhoseChecksAreStillRunningIsWaitedForAndThenNextStarts() async throws {
+        let rig = try await Rig(twoSteps)
+        _ = try rig.library.approve("s")
+        let shipped = Shipped()
+        let polls = Counter()
+        let commands = FakeCommands()
+        commands.onRun = { call in
+            if call.arguments.first == "ship", let id = call.arguments.dropFirst().dropFirst().first {
+                shipped.mark(id.hasSuffix("step1") ? 1 : 2, thread: id)
+            }
+        }
+        var driver = rig.driver(commands) { loaded in
+            var states = shipped.states(loaded)
+            // The first step's checks are running for the first two looks after it shipped.
+            if case .clean(let thread, _)? = states[1], polls.next() <= 2 {
+                states[1] = .waiting(thread: thread, reason: SeriesScheduler.checksRunning)
+            }
+            return states
+        }
+        driver.sleep = { _ in }
+        let result = try await driver.run("s")
+        #expect(result == .finished)
+        #expect(commands.words.filter { $0 == "goal new" }.count == 2)
+    }
+
+    @Test func checksThatNeverFinishEndTheRunWaitingAfterTheTimeout() async throws {
+        let rig = try await Rig(twoSteps)
+        _ = try rig.library.approve("s")
+        let commands = FakeCommands()
+        var driver = rig.driver(commands) { loaded in
+            let records = SeriesStepLog(project: Project(root: loaded.projects[1]!), series: "s").read()
+            guard let record = records[1] else { return [:] }
+            return [1: .waiting(thread: record.thread, reason: SeriesScheduler.checksRunning)]
+        }
+        driver.sleep = { _ in }
+        driver.settleTimeout = 90
+        driver.settleInterval = 30
+        let result = try await driver.run("s")
+        guard case .waiting(1, let reason) = result else {
+            Issue.record("expected waiting, got \(result)")
+            return
+        }
+        #expect(reason.contains("still running"))
+        #expect(commands.words.filter { $0 == "goal new" }.count == 1)
+    }
+
+    @Test func aRunThatDiedAfterGoalNewIsFoundAgainAndNoSecondThreadIsMade() async throws {
+        let rig = try await Rig(twoSteps)
+        _ = try rig.library.approve("s")
+        let log = SeriesStepLog(project: rig.fx.project, series: "s")
+        try log.markStarting(step: 1, at: "t0")
+        let thread = "g-2026-11-21-s-1"
+        try FileManager.default.createDirectory(at: rig.fx.project.threadDirectory(thread), withIntermediateDirectories: true)
+        let commands = FakeCommands()
+        let result = try await rig.driver(commands) { _ in [:] }.run("s")
+        guard case .stopped(1, let reason) = result else {
+            Issue.record("expected stopped, got \(result)")
+            return
+        }
+        #expect(reason.contains(thread))
+        #expect(log.read()[1]?.thread == thread)
+        #expect(commands.calls.isEmpty)
+    }
+
+    @Test func aMarkerWithNoThreadIsClearedAndTheStepStartsOnce() async throws {
+        let rig = try await Rig(twoSteps)
+        _ = try rig.library.approve("s")
+        let log = SeriesStepLog(project: rig.fx.project, series: "s")
+        try log.markStarting(step: 1, at: "t0")
+        let shipped = Shipped()
+        let commands = FakeCommands()
+        commands.exits["goal approve"] = 9
+        _ = try await rig.driver(commands, states: shipped.states).run("s")
+        #expect(commands.words.filter { $0 == "goal new" }.count == 1)
+        #expect(log.starting().isEmpty)
+    }
+
+    @Test func severalThreadsFromAnEarlierDeadRunAreLeftForAPerson() async throws {
+        let rig = try await Rig(twoSteps)
+        _ = try rig.library.approve("s")
+        let log = SeriesStepLog(project: rig.fx.project, series: "s")
+        try log.markStarting(step: 1, at: "t0")
+        for thread in ["g-2026-11-21-s-1", "g-2026-11-22-s-1"] {
+            try FileManager.default.createDirectory(at: rig.fx.project.threadDirectory(thread), withIntermediateDirectories: true)
+        }
+        let commands = FakeCommands()
+        let result = try await rig.driver(commands) { _ in [:] }.run("s")
+        guard case .stopped(1, let reason) = result else {
+            Issue.record("expected stopped, got \(result)")
+            return
+        }
+        #expect(reason.contains("several threads"))
+        #expect(commands.calls.isEmpty)
+    }
+
+    @Test func aSecondRunOfTheSameSeriesIsRefusedWhileTheFirstHoldsTheLock() async throws {
+        let rig = try await Rig(twoSteps)
+        _ = try rig.library.approve("s")
+        let lock = rig.directory.appendingPathComponent("run.lock")
+        let fd = open(lock.path, O_CREAT | O_RDWR, 0o600)
+        #expect(flock(fd, LOCK_EX | LOCK_NB) == 0)
+        defer { close(fd) }
+        let commands = FakeCommands()
+        do {
+            _ = try await rig.driver(commands) { _ in [:] }.run("s")
+            Issue.record("expected a refusal")
+        } catch let error as SeriesDriverError { #expect(error == .alreadyRunning) }
+        #expect(commands.calls.isEmpty)
+    }
+
+    @Test func aStepWhoseGoalBudgetDoesNotFitInWhatIsLeftOfTheSeriesBudgetDoesNotStart() async throws {
+        let rig = try await Rig("---\nbudget_usd: 1.00\n---\n" + twoSteps)
+        _ = try rig.library.approve("s")
+        let commands = FakeCommands()
+        let result = try await rig.driver(commands) { _ in [:] }.run("s")
+        guard case .stopped(1, let reason) = result else {
+            Issue.record("expected stopped, got \(result)")
+            return
+        }
+        #expect(reason.contains("does not fit"))
+        #expect(commands.calls.isEmpty)
     }
 
     @Test func theSeriesBudgetStopsBeforeAStepStartsOnceTheThreadsHaveSpentIt() async throws {

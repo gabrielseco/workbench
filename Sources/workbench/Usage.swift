@@ -162,10 +162,11 @@ let workbenchUsage = """
                                  it waits for), running, waiting (checks running, review not clean), clean, or STOPPED
                                  with why; then which steps could start now. Read only; asks `gh` for the checks
       series run <name>          run the approved series: for each step that is ready, one at a time, goal new (--after the
-                                 parent's thread for base: after N), goal approve, run, accept, and ship --yes --watch
-                                 --review-loop, each in the step's project with its env, then read the states again; a step is
+                                 parent's thread for base: after N), goal approve, run, accept, and ship --yes
+                                 --review-loop, each in the step's project with its env, then wait for the checks (up to 45
+                                 minutes) and read the states again; a step is
                                  clean when its PR is open, its checks passed and the review of its head is clean. It stops at
-                                 the first command that fails, when the series budget_usd is spent, or on Ctrl-C (which ends
+                                 the first command that fails, when a step's goal budget no longer fits in the series budget_usd, or on Ctrl-C (which ends
                                  the running command cleanly); nothing is retried or merged. exit 0 all clean, 1 stopped,
                                  14 a step waits for a person or CI, 6 not approved or not valid
       series approve <name>      record one approval over the series file and every goal file it names, and print the

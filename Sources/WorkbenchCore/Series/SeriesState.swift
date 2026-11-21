@@ -21,17 +21,23 @@ public struct SeriesStepLog: Sendable {
         url = project.seriesDirectory(series).appendingPathComponent("steps.jsonl")
     }
 
+    /// The lines that read as JSON objects. A regular file of at most 1 MiB: a FIFO or a huge file reads as no lines, it does not
+    /// hang or fill memory.
+    private func objects() -> [[String: Any]] {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]), values.isRegularFile == true,
+            (values.fileSize ?? 0) <= 1 << 20, let text = try? String(contentsOf: url, encoding: .utf8)
+        else { return [] }
+        return text.split(separator: "\n").compactMap {
+            try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any]
+        }
+    }
+
     /// The latest record of each step. A line that does not read is skipped, and so is a thread name that is not a thread id:
     /// nothing from the file reaches a path unchecked.
     public func read() -> [Int: SeriesRecord] {
-        // A regular file of at most 1 MiB: a FIFO or a huge file reads as no records, it does not hang or fill memory.
-        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]), values.isRegularFile == true,
-            (values.fileSize ?? 0) <= 1 << 20, let text = try? String(contentsOf: url, encoding: .utf8)
-        else { return [:] }
         var found: [Int: SeriesRecord] = [:]
-        for line in text.split(separator: "\n") {
-            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-                let step = object["step"] as? Int, let thread = object["thread"] as? String, SafeNames.isThreadID(thread)
+        for object in objects() {
+            guard let step = object["step"] as? Int, let thread = object["thread"] as? String, SafeNames.isThreadID(thread)
             else { continue }
             found[step] = SeriesRecord(
                 step: step, thread: thread, at: object["at"] as? String ?? "", stopped: object["stopped"] as? String)
@@ -39,9 +45,28 @@ public struct SeriesStepLog: Sendable {
         return found
     }
 
+    /// Steps whose driver wrote a start marker and has recorded no thread since: it died, or is still running, between making the
+    /// thread and recording it. The latest line of a step counts; a thread record or `starting: false` clears the marker.
+    public func starting() -> [Int: String] {
+        var found: [Int: String] = [:]
+        for object in objects() {
+            guard let step = object["step"] as? Int else { continue }
+            if object["starting"] as? Bool == true { found[step] = object["at"] as? String ?? "" } else { found[step] = nil }
+        }
+        return found
+    }
+
     public func append(_ record: SeriesRecord) throws {
         var object: [String: Any] = ["step": record.step, "thread": record.thread, "at": record.at]
         if let stopped = record.stopped { object["stopped"] = stopped }
+        try write(object)
+    }
+
+    public func markStarting(step: Int, at: String, starting: Bool = true) throws {
+        try write(["step": step, "at": at, "starting": starting])
+    }
+
+    private func write(_ object: [String: Any]) throws {
         var line = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         line.append(0x0A)
         if !FileManager.default.fileExists(atPath: url.path) { FileManager.default.createFile(atPath: url.path, contents: nil) }
@@ -95,6 +120,15 @@ public struct SeriesStepFacts: Sendable {
 }
 
 public enum SeriesScheduler {
+    static let checksRunning = "the checks are still running"
+    static let noChecks = "no checks reported yet"
+
+    /// A wait that time resolves by itself (CI), as opposed to one that needs a person (a review that asked for fixes).
+    public static func isTransient(_ state: SeriesStepState) -> Bool {
+        if case .waiting(_, let reason) = state { return reason == checksRunning || reason == noChecks }
+        return false
+    }
+
     /// A step is clean when its pull request is open with every check `pass` or `skipping` (never "the command exited 0": a
     /// cancelled check exits 0) and the last review round of its head commit had the verdict `clean`. A merged one is clean.
     public static func state(_ facts: SeriesStepFacts?) -> SeriesStepState {
@@ -125,8 +159,8 @@ public enum SeriesScheduler {
         if let error = facts.checksError { return waiting("the checks could not be read: \(error)") }
         guard let checks = facts.checks else { return waiting("the checks have not been read") }
         switch checks.state {
-        case .none: return waiting("no checks reported yet")
-        case .pending: return waiting("the checks are still running")
+        case .none: return waiting(noChecks)
+        case .pending: return waiting(checksRunning)
         case .failed:
             let names = checks.checks.filter { $0.outcome == .failed }.map(\.name).sorted().joined(separator: ", ")
             return stopped("checks failed: \(names)")

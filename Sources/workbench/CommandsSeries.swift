@@ -159,7 +159,12 @@ extension Commands {
         }
         switch result {
         case .finished:
-            out("every step is clean: workbench series status \(name) lists the pull requests in the order to merge them")
+            out("every step is clean: review and merge in this order")
+            let loaded = try seriesLoad(library, name)
+            let states = await library.states(loaded, git: ctx.git, gh: try? GitRunner.discover(tool: "gh"))
+            for (number, state) in states.sorted(by: { $0.key < $1.key }) {
+                if case .clean(_, let pr) = state { out("  \(number): \(pr ?? "(merged)")") }
+            }
             return 0
         case .stopped(let step, let reason):
             err("series \(name) stopped at step \(step): \(reason)")

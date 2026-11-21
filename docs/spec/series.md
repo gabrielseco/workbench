@@ -103,14 +103,22 @@ A step is ready when it is `pending` and every step in its `after` is `clean`; *
 A step runs the same commands a person would, each as a child `workbench` process in the step's project, with the step's `env`
 (`step:N` resolved to `origin/<the branch of step N's pull request>`): `goal new <series>-<N> --from <goal file>` (with
 `--after <step's parent thread>` for `base: after N`, or `--base <branch>`), `goal approve`, `run`, `accept -m "chore: <title>" --yes`,
-and `ship --yes --watch --review-loop`. The thread is recorded in `steps.jsonl` as soon as `goal new` prints it. So the review loop,
+and `ship --yes --review-loop`. The thread is recorded in `steps.jsonl` as soon as `goal new` prints it. So the review loop,
 the timeouts and every budget are the ones those commands have, and each thread's goal keeps its own `budget_usd`.
 
 - **Stop rule:** the first command that exits non-zero ends the series. While the thread has no pull request the reason is written
   to `steps.jsonl` and `status` shows STOPPED; once one is open its own state is read. Nothing is retried. Fix the step with the usual
   commands (`next`, `send-back`, `accept`, `ship`); when it reads clean, `series run` continues from the next step.
 - **Series budget:** before a step starts, what the steps' threads have cost (their logs' `cost_usd`; the follow-up threads of a
-  review round are not counted, each has its own goal's cap) is compared with `budget_usd`; at or over it, the series stops.
+  review round are not counted, each has its own goal's cap) plus that step's own goal budget (`budget_usd` of the goal file, else
+  the project's default) must fit in the series `budget_usd`; otherwise the series stops before spending it.
 - **Ctrl-C** ends the running command cleanly (it ends its own turn) and the series stops.
+- **One run at a time:** `series run` holds `run.lock` in the series folder; a second one is refused (exit 6). A start marker is
+  written to `steps.jsonl` before `goal new`; a run that died between making the thread and recording it is found by the next one
+  (the one thread named `…-<series>-<N>` is recorded and the run stops once so you see it; several are left for you).
+- **What is approved is what runs:** the series and its goal files are read again each round and the run refuses (exit 6) when they
+  no longer match the approval; the goal is handed to `goal new` from a copy of the approved text (`.snapshots/step-N.md`), not
+  from the file.
+- Ctrl-C gives the child up to 60 s to end its turn before anything is killed.
 - It never merges, and a step that was started is not started again: a step with a thread but no pull request is `running` and waits
   for a person.
