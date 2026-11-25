@@ -55,6 +55,8 @@ public struct ReviewStageConfig: Sendable, Equatable {
     public var providerIsReviewerAlias = false
     /// Where the stage's `model` is written, for an error found once the provider it inherits is known.
     public var modelLine: Int?
+    /// Where `reasoning_effort` is written, to name it when the provider it is used with turns out to be OpenCode.
+    public var effortLine: Int?
     public var inputs: [ReviewStageInput] = ReviewStageInput.defaults
     /// Globs over the files the pull request changes. Empty means every change.
     public var appliesTo: [String] = []
@@ -312,6 +314,7 @@ extension ReviewConfig {
             stage.model = selection.model
             stage.reasoningEffort = selection.reasoningEffort
             stage.modelLine = table.entries["model"]?.line
+            stage.effortLine = table.entries["reasoning_effort"]?.line
             stage.allowUnpriced = selection.allowUnpriced
         }
         if keys.contains("reviewer"), let entry = table.entries["reviewer"] {

@@ -70,6 +70,15 @@ import Testing
         #expect(reasoning.count == 1 && reasoning[0].contains("reasoning_effort"), "refused like the other roles: \(reasoning)")
     }
 
+    @Test func aStageEffortIsRefusedWhenTheStageInheritsOpencodeFromTheRole() {
+        let text = Self.gateway + "[agents.review]\nprovider = \"opencode\"\nmodel = \"sonnet-claude\"\n"
+        let found = problems(text + "[review.stage.pr-review]\nreasoning_effort = \"high\"")
+        #expect(found.count == 1 && found[0].contains("reasoning_effort") && found[0].contains("opencode"), "\(found)")
+        let ownProvider = problems(
+            text + "[review.stage.pr-review]\nprovider = \"codex\"\nreasoning_effort = \"high\"")
+        #expect(ownProvider.isEmpty, "a stage on another provider keeps its effort: \(ownProvider)")
+    }
+
     @Test(arguments: ["goal"])
     func aRoleNotYetProvenOnOpencodeIsRefusedAtLoadNotAtRunTime(role: String) {
         let found = problems(Self.gateway + "[agents.\(role)]\nprovider = \"opencode\"")

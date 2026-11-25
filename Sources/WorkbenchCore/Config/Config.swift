@@ -104,6 +104,16 @@ public struct Config: Sendable, Equatable {
         return try parse(text)
     }
 
+    /// A review stage that sets an effort but no provider uses the review role's, which may be OpenCode: it takes no effort.
+    private static func refuseInheritedOpencodeEffort(agents: AgentsConfig, review: ReviewConfig, fail: ReviewConfig.Fail) {
+        guard agents.review.provider == .opencode else { return }
+        for stage in review.definitions.values where stage.provider == nil && stage.reasoningEffort != nil {
+            let table = "review.stage.\(stage.name)"
+            let why = "'reasoning_effort' in [\(table)] is not used by opencode (its role runs on it)"
+            fail(.invalidValue, stage.effortLine ?? 1, why)
+        }
+    }
+
     // swiftlint:disable:next function_body_length
     public static func parse(_ text: String) throws -> Config {
         let (document, syntaxProblems) = TOMLSubset.parse(text)
@@ -257,6 +267,7 @@ public struct Config: Sendable, Equatable {
         let run = RunConfig.parse(document, fail: fail)
         let agents = AgentsConfig.parse(document, fail: fail)
         let mcpServers = McpServer.parse(document, fail: fail)
+        Self.refuseInheritedOpencodeEffort(agents: agents, review: review, fail: fail)
         claudePath = agents.claudeExecutable(claudePathLine: document.tables[""]?.entries["claude_path"]?.line, fail: fail)
             ?? claudePath
 
