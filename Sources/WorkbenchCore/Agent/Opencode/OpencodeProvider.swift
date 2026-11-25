@@ -125,6 +125,12 @@ public struct OpencodeProvider: AgentProvider {
         if let forwarder {
             environment[gateway.apiKeyVariable] = forwarder.placeholderKey
         } else if let key = request.environment[gateway.apiKeyVariable], !key.isEmpty {
+            guard key.utf8.count >= ForwardPolicy.minimumKeyLength else {
+                throw AgentFailure(
+                    .authOrConfig,
+                    "The gateway key in $\(gateway.apiKeyVariable) is shorter than \(ForwardPolicy.minimumKeyLength) characters, "
+                        + "so it could not be removed from an answer that echoes it; use a longer key.", retry: .afterFix)
+            }
             environment[gateway.apiKeyVariable] = key
         } else {
             throw AgentFailure(

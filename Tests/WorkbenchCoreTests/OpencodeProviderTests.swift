@@ -153,6 +153,17 @@ private func refusal(_ provider: OpencodeProvider, _ request: AgentRequest) -> A
         #expect(refusal(provider(forwarder, dirs: nil), f.request()) == nil, "a read-only turn needs no sandbox")
     }
 
+    @Test func aKeyTooShortToBeRemovedFromAnAnswerIsRefusedWhenItWouldReachTheChild() throws {
+        let f = try Fixture()
+        defer { f.cleanUp() }
+        let short = try #require(refusal(provider(), f.request { $0.environment["LITELLM_API_KEY"] = "secret" }))
+        #expect(short.kind == .authOrConfig && short.retry == .afterFix)
+        #expect(short.message.contains("shorter than 8"), "\(short.message)")
+        #expect(!FileManager.default.fileExists(atPath: f.output.appendingPathComponent("opencode").path))
+        // With a forwarder the child never holds the key, and the forwarder is what checks it.
+        #expect(refusal(provider(forwarder), f.request { $0.environment["LITELLM_API_KEY"] = "secret" }) == nil)
+    }
+
     @Test func aRequestOpencodeCannotHonourIsRefusedBeforeAnythingIsWritten() throws {
         let f = try Fixture()
         defer { f.cleanUp() }

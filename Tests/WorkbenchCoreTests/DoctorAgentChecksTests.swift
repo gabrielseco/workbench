@@ -42,6 +42,15 @@ private func doctorGoal(model: String?) -> DoctorGoal {
         #expect(empty.contains { $0.kind == "missing_key" }, "an empty key is not a key")
     }
 
+    @Test func aKeyTooShortToBeKeptOutOfAnAnswerIsAProblemToo() throws {
+        let cfg = try config(present + gateway)
+        let found = issues(Doctor.agents(cfg, searchPath: "/bin", environment: ["LITELLM_API_KEY": "secret"]), .plan)
+        let short = try #require(found.first { $0.kind == "short_key" })
+        #expect(short.severity == .problem && short.message.contains("$LITELLM_API_KEY"), "\(short.message)")
+        let fine = issues(Doctor.agents(cfg, searchPath: "/bin", environment: ["LITELLM_API_KEY": "12345678"]), .plan)
+        #expect(!fine.contains { $0.kind == "short_key" || $0.kind == "missing_key" })
+    }
+
     @Test func theKeyVariableTheConfigNamesIsTheOneChecked() throws {
         let cfg = try config(present + table + "api_key_env = \"MY_KEY\"\n" + plan)
         let set = issues(Doctor.agents(cfg, searchPath: "/bin", environment: ["MY_KEY": "k"]), .plan)

@@ -63,7 +63,10 @@ public final class LoopbackForwarder: @unchecked Sendable {
             let host = configuration.upstream.host, !host.isEmpty, configuration.upstream.user == nil,
             configuration.upstream.password == nil
         else { throw StartError("the upstream must be an http or https URL with a host and no credentials") }
-        guard !configuration.apiKey.isEmpty else { throw StartError("the forwarder needs a key to add") }
+        guard configuration.apiKey.utf8.count >= ForwardPolicy.minimumKeyLength else {
+            let why = "so it could not be removed from an answer that echoes it"
+            throw StartError("the gateway key is shorter than \(ForwardPolicy.minimumKeyLength) characters, \(why)")
+        }
         self.configuration = configuration
         self.relay = UpstreamRelay(limits: configuration.limits, key: configuration.apiKey)
     }
@@ -116,7 +119,9 @@ public final class LoopbackForwarder: @unchecked Sendable {
             base.scheme = "http"
             base.host = "127.0.0.1"
             base.port = port
-            base.percentEncodedPath = configuration.upstream.path
+            // As written (encoded): `URL.path` is decoded, and the setter raises on text that is not valid percent-encoding.
+            let written = URLComponents(url: configuration.upstream, resolvingAgainstBaseURL: false)
+            base.percentEncodedPath = written?.percentEncodedPath ?? ""
             guard let url = base.url else { throw StartError("the base URL could not be made") }
             return url
         }

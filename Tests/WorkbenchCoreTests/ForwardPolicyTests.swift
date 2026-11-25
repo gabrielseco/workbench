@@ -124,6 +124,15 @@ private func refusal(_ body: () throws -> Void) -> ForwardPolicy.Refusal? {
         #expect(try ForwardPolicy.upstreamURL(base: base, target: "/v1/models?a=b&c=d").query == "a=b&c=d")
     }
 
+    @Test func aBasePathThatIsPercentEncodedIsComparedAndKeptEncoded() throws {
+        let encoded = try #require(URL(string: "https://gw.example/team%20one/v1"))
+        let url = try ForwardPolicy.upstreamURL(base: encoded, target: "/team%20one/v1/chat/completions?a=b")
+        #expect(url.absoluteString == "https://gw.example/team%20one/v1/chat/completions?a=b")
+        let raw = refusal { _ = try ForwardPolicy.upstreamURL(base: encoded, target: "/team one/v1/x") }
+        #expect(raw != nil, "a raw space is not the base")
+        #expect(refusal { _ = try ForwardPolicy.upstreamURL(base: encoded, target: "/v1/models") }?.status == 403)
+    }
+
     @Test func theUpstreamsPortAndAnEmptyBasePathAreKept() throws {
         let withPort = try #require(URL(string: "http://127.0.0.1:9000/api/v1/"))
         #expect(try ForwardPolicy.upstreamURL(base: withPort, target: "/api/v1/models").absoluteString == "http://127.0.0.1:9000/api/v1/models")

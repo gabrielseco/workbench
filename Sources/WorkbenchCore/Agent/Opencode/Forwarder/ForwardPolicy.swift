@@ -108,7 +108,12 @@ public enum ForwardPolicy {
         let split = target.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
         let path = String(split[0])
         let query = split.count > 1 ? String(split[1]) : nil
-        let basePath = base.path.hasSuffix("/") ? String(base.path.dropLast()) : base.path
+        guard var parts = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            throw Refusal(500, "the upstream is not a URL")
+        }
+        // The base path as it is written (encoded): a client's target is encoded, and Foundation's setters want encoded text.
+        let encodedBase = parts.percentEncodedPath
+        let basePath = encodedBase.hasSuffix("/") ? String(encodedBase.dropLast()) : encodedBase
         guard path == basePath || path.hasPrefix(basePath + "/") else {
             throw Refusal(403, "only paths under \(basePath.isEmpty ? "/" : basePath) are forwarded")
         }
@@ -123,9 +128,6 @@ public enum ForwardPolicy {
         // RFC 3986 path and query characters and `%XX` get that far.
         guard isEncoded(path, allowing: "") else { throw Refusal(400, "the path is not valid percent-encoded text") }
         if let query, !isEncoded(query, allowing: "?") { throw Refusal(400, "the query is not valid percent-encoded text") }
-        guard var parts = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
-            throw Refusal(500, "the upstream is not a URL")
-        }
         parts.percentEncodedPath = path
         parts.percentEncodedQuery = query
         guard let url = parts.url else { throw Refusal(400, "the target is not a URL") }
@@ -171,9 +173,13 @@ public enum ForwardPolicy {
         }
     }
 
-    /// `text` with the exact key removed. A key under 8 characters is left alone: it is not one, and removing it would only damage words.
+    /// A gateway key shorter than this cannot be told from ordinary text, so it cannot be kept out of an answer that echoes it: it is
+    /// refused where it would be used (the forwarder, the provider, doctor) and never let through.
+    public static let minimumKeyLength = 8
+
+    /// `text` with the exact key removed. Nothing is removed for a key under `minimumKeyLength`, which is refused before it gets here.
     public static func redact(_ text: Data, key: String) -> Data {
-        guard key.utf8.count >= 8, let keyData = key.data(using: .utf8), !keyData.isEmpty else { return text }
+        guard key.utf8.count >= minimumKeyLength, let keyData = key.data(using: .utf8), !keyData.isEmpty else { return text }
         var out = Data()
         var rest = text[...]
         while let found = rest.range(of: keyData) {
