@@ -40,6 +40,7 @@ bash scripts/verify-cli/doctor.sh                  # doctor after approve and du
 bash scripts/verify-cli/verifier-config.sh         # [verifier] and doctor on a clone, no turn, costs nothing
 bash scripts/verify-cli/agents-config.sh           # [providers.*], [agents.*] and doctor on a clone, no turn, costs nothing
 VERIFY_CLI_OPENCODE_BASE_URL=https://gateway.example/v1 scripts/verify-cli/from-branch.sh opencode-plan   # plan on OpenCode through a real gateway: doctor steps, then one read-only turn (about 10 cents)
+VERIFY_CLI_OPENCODE_BASE_URL=https://gateway.example/v1 scripts/verify-cli/from-branch.sh opencode-run    # the coding role on OpenCode: doctor, two refusals, then one real coding turn under sandbox-exec (about 10 cents)
 bash scripts/verify-cli/agent-recovery.sh          # a killed judge and review round closed on the next start; a clone, no turn, costs nothing
 bash scripts/verify-cli/verifier.sh                # one real verifier run on a throwaway skill (a coding turn, then the verifier)
 bash scripts/verify-cli/run.sh                     # [run]: the verifier's helper can only reach the app Workbench started, which is gone after
