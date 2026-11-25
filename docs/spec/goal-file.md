@@ -355,7 +355,7 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # [providers.codex]                     # P9: the executable of a provider (claude: the same as claude_path)
 # executable = "/opt/homebrew/bin/codex"
 # models = ["gpt-6.1-sol", "gpt-6-astra"]  # P25: names added to this provider's model menu in the app's Agents card (nothing else reads them)
-# [providers.opencode]                  # P28: OpenCode through one OpenAI-compatible gateway; `run`, `plan` and `ship` so far
+# [providers.opencode]                  # P28: OpenCode through one OpenAI-compatible gateway; `run`, `judge`, `plan` and `ship` so far
 # base_url = "https://gateway.example/v1"  # required: http or https, a host, no credentials; models are the gateway's names
 # api_key_env = "LITELLM_API_KEY"       # the environment variable the key is read from (the key is never in a config)
 # [agents.run]                          # every model is chosen in an [agents.<role>] table: goal, run, judge,
@@ -706,7 +706,7 @@ no effort key. The model and effort are part of what `goal approve` binds, so ch
 goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `judge`, `review` and
 `goal` on `claude` or `codex`, `run` on `claude` only; anything else is refused when the config loads, not ignored, until
 coding on the second provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
-`"opencode"` (P28) is accepted for `run`, `plan` and `ship` only, and only with `[providers.opencode]` holding a `base_url`: it takes the
+`"opencode"` (P28) is accepted for `run`, `judge`, `plan` and `ship` only, and only with `[providers.opencode]` holding a `base_url`: it takes the
 gateway's model name in `model` (`sonnet-claude`) and no `reasoning_effort`, and has no dollar cap, so a goal with `budget_usd` is refused by
 `goal approve` and `run` (as on Codex: change it to `spend_policy: timeout_only`) and the other evaluations follow the `allow_unpriced` rule
 above. `plan` and `ship` run with no shell and no edit tool. A **coding turn** (`run`) is one fresh process per turn, like Codex's, and runs
@@ -714,8 +714,11 @@ the whole `opencode` process under macOS's `sandbox-exec` (macOS only: elsewhere
 own scratch and state, none under `.git` (so the change is left uncommitted and `accept` commits it), and no network but a loopback forwarder
 that Workbench runs for the turn and stops when it ends. The forwarder holds the real key (`$LITELLM_API_KEY` by default, which `run` refuses
 to start without, or with fewer than 8 characters); the agent's environment holds a placeholder. Its cost is the gateway's, per step, and is
-on `turn.ended`; its reads are not confined (a stated limit, `doctor` says so). A role not yet proven on it (judge, review, goal drafting)
-is refused when the config loads, like any other unsupported pair.
+on `turn.ended`; its reads are not confined (a stated limit, `doctor` says so). The **judge** (`workbench judge`) and the other read-only
+turns run with no shell and no edit tool, in an empty folder, and also behind a forwarder, so the key is never in their environment either;
+the judge's last message is its verdict (JSON as text), and a judge whose turn has screenshots is refused for OpenCode, by name, because it
+takes no images and there is no text substitute for them. A role not yet proven on it (review, goal drafting) is refused when the config
+loads, like any other unsupported pair.
 `allow_unpriced` is for evaluations on a provider without a dollar cap: unset or `true` they run timeout-only,
 `false` refuses them; `[agents.run]` refuses the key, because spending is approved in the goal. A model is resolved per role, and no role inherits another's: for coding the goal's
 `model`, then `[agents.run]`'s; for the judge `judge --model`, then `[agents.judge]`'s; for review the stage's `model`, then

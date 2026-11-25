@@ -124,9 +124,10 @@ extension ThreadService {
             table: config.allowUnpricedTable(.judge))
         let answerFolder = project.threadDirectory(id).appendingPathComponent("judge")
         let request: AgentRequest
-        if agent.provider == .codex {
-            // Codex has no structured output: it is asked for the same JSON as text, and writes its last message to a file
-            // beside the evidence, never inside the folder it reads.
+        if agent.provider != .claude {
+            // Codex and OpenCode have no structured output: they are asked for the same JSON as text (Codex writes its last message to a
+            // file beside the evidence, never inside the folder it reads; OpenCode's last message is its answer). OpenCode takes no images,
+            // so a judge with screenshots is refused for it, by name, rather than judged without them.
             // With no screenshots the judge would run in the thread folder, which holds `judge/`: it gets an empty folder
             // of its own instead, so its answer is never inside what it reads.
             let readFolder = screenshots.isEmpty ? answerFolder.appendingPathComponent("empty") : folder
@@ -151,11 +152,20 @@ extension ThreadService {
                 limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), evidenceFiles: screenshots,
                 reasoningEffort: agent.reasoningEffort)
         }
+        // An OpenCode judge runs behind a forwarder that holds the key, started only once nothing has refused the request and stopped on
+        // every way out: the verdict goes into the log, and what the judge reads (a diff) is not trusted.
+        var gateway: OpencodeGatewaySession?
+        defer { gateway?.stop() }
+        let runner: any AgentProvider
         let shown: [String]
         do {
             if case .failure(let refusal) = spend { throw refusal }
             if let refusal = request.validate(against: provider) { throw refusal }
-            shown = try provider.invocation(for: request).displayArguments
+            if agent.provider == .opencode {
+                gateway = try OpencodeGatewaySession.start(config: config, environment: environment)
+            }
+            runner = gateway?.provider ?? provider
+            shown = try runner.invocation(for: request).displayArguments
         } catch {
             try await attempts.refused(Self.judgeFailureText(error))
             return try await recordJudge(log, agent: agent, turn: turn, failure: Self.judgeFailureText(error), argv: [])
@@ -179,7 +189,7 @@ extension ThreadService {
             data: .object(Self.agentFields(agent, ["argv": .array(shown.map { .string($0) })])))
         let attempt = try await attempts.start()
         let execution: AgentExecution
-        do { execution = try AgentRunner.start(provider: provider, request: request) } catch {
+        do { execution = try AgentRunner.start(provider: runner, request: request) } catch {
             try await attempts.end(attempt, "failed", reason: Self.judgeFailureText(error))
             return try await recordJudge(log, agent: agent, turn: turn, failure: Self.judgeFailureText(error), argv: shown)
         }

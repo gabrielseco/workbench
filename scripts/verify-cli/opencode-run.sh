@@ -1,5 +1,5 @@
 #!/bin/bash
-# verify-cli scenario for the coding role on OpenCode (P28 task 5), with the real `opencode` through a real OpenAI-compatible gateway.
+# verify-cli scenario for the coding and judge roles on OpenCode (P28 task 5), with the real `opencode` through a real OpenAI-compatible gateway.
 #   VERIFY_CLI_OPENCODE_BASE_URL=https://gateway.example/v1 LITELLM_API_KEY=... scripts/verify-cli/from-branch.sh opencode-run
 #   (or directly, in the main checkout, on a clean origin/main with no active thread; VERIFY_CLI_FROM_BRANCH=1 on a branch)
 # Needs macOS (the turn runs under `sandbox-exec`), `opencode` on PATH, the key in $LITELLM_API_KEY (or the variable
@@ -13,8 +13,10 @@
 # gateway/<model>, with no `--auto`; turn.ended says succeeded with a cost above 0 and names no session; the transcript holds
 # OpenCode's own stream; the file the goal asked for is in the worktree, uncommitted (the sandbox cannot commit: `accept` does); the
 # main checkout is untouched; the key is in no file of the thread; no process of the worktree is left; there is one turn.started and one
-# turn.ended. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 leaves
-# [providers.opencode] out, so the doctor, the budget refusal, the unset-key refusal and every step of the real turn must FAIL. The frame and
+# turn.ended. Then `workbench judge` runs on the same thread, also on OpenCode: it exits 0, judge.ran is ok with provider opencode
+# and the model and a verdict that names the goal's criterion, its logged command names gateway/<model> and not the prompt, no process of
+# the worktree is left, and the key is still in no file of the thread. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 leaves
+# [providers.opencode] out, so the doctor, the budget refusal, the unset-key refusal, every step of the real turn and of the judge must FAIL. The frame and
 # the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -46,7 +48,7 @@ config() {
     python3 -I - "$BACKUP" "$CFG" "$1" <<'PY'
 import re, sys
 src, dst, extra = sys.argv[1:4]
-drop = {'agents.run', 'providers.opencode'}
+drop = {'agents.run', 'agents.judge', 'providers.opencode'}
 out, skip = [], False
 for line in open(src).read().split('\n'):
     m = re.match(r'^\s*\[([^\[\]]+)\]\s*(#.*)?$', line)
@@ -62,6 +64,9 @@ base_url = \"$OC_URL\"
 api_key_env = \"$KEY_ENV\""
 [ "$SABOTAGE" = 1 ] && GATEWAY=""
 RUN_ROLE="[agents.run]
+provider = \"opencode\"
+model = \"$OC_MODEL\"
+[agents.judge]
 provider = \"opencode\"
 model = \"$OC_MODEL\""
 RC=0
@@ -193,6 +198,40 @@ check "the change is left uncommitted: the sandbox cannot commit" "see above" le
 
 main_untouched() { [ -z "$(g status --porcelain)" ]; }
 check "the main checkout is untouched" "git status shows changes" main_untouched
+
+# --- the judge on the same thread, also on OpenCode ---------------------------------------------------------------
+
+wb "$T_RUN" judge "$ID" >"$SCRATCH/judge.out" 2>&1
+judge_exit=$?
+head -8 "$SCRATCH/judge.out" | sed 's/^/    /'
+check "judge on opencode: exit 0" "workbench judge exited $judge_exit" test "$judge_exit" = 0
+
+LOG2=$(wb "$T_WB" log "$ID" --json)
+judge_events() {
+    echo "$LOG2" | py "
+r=[e for e in lines if e['kind']=='judge.ran']
+if len(r)!=1: sys.exit('    expected one judge.ran, found %d' % len(r))
+d=r[0]['data']
+if d.get('ok') is not True: sys.exit('    judge.ran: ok=%s, reason %s' % (d.get('ok'), d.get('reason')))
+if d.get('provider')!='opencode' or d.get('model')!='$OC_MODEL': sys.exit('    judge.ran names %s / %s' % (d.get('provider'), d.get('model')))
+ids=[c.get('id') for c in d.get('criteria', [])]
+print('    judge.ran ok on opencode, criteria %s, cost %s' % (ids, d.get('cost_usd')))
+sys.exit(0 if ids==['c1'] else 1)"
+}
+check "judge.ran is ok on opencode with a verdict on c1" "see above" judge_events
+
+judge_argv() {
+    echo "$LOG2" | py "
+a=next(e['data']['argv'] for e in lines if e['kind']=='judge.started')
+print('    argv: %s' % ' '.join(a[:9]))
+ok=('gateway/$OC_MODEL' in a and '--standalone' in a and '--auto' not in a
+    and not any('opencode-probe' in v or 'Criteria' in v for v in a))
+sys.exit(0 if ok else 1)"
+}
+check "the judge's logged command names gateway/$OC_MODEL and not the prompt" "see above" judge_argv
+
+left=$( [ -n "$WT" ] && pgrep -fl "$WT")
+check "no process of the worktree left after the judge" "$left" test -z "$left"
 
 # The key was in the runner's environment; it must be in nothing the thread kept, nor in the argv.
 key_kept() {
