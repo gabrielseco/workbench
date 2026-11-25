@@ -11,6 +11,12 @@ import Testing
 
 private let realKey = "sk-real-gateway-key-0123456789"
 
+#if canImport(Darwin)
+    private let streamSocket = SOCK_STREAM
+#else
+    private let streamSocket = Int32(SOCK_STREAM.rawValue)
+#endif
+
 // MARK: A fake gateway and a raw client, over real loopback sockets
 
 /// What the fake gateway saw of one request.
@@ -38,7 +44,7 @@ private final class FakeGateway: @unchecked Sendable {
     var reply: @Sendable (Seen) -> Reply = { _ in .json(status: 200, body: "{}") }
 
     init() throws {
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        let fd = socket(AF_INET, streamSocket, 0)
         var one: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(MemoryLayout<Int32>.size))
         var address = sockaddr_in()
@@ -160,7 +166,7 @@ private struct Answer {
 /// A client that speaks raw HTTP/1.1 to the forwarder, as OpenCode's would.
 private enum Client {
     static func dial(_ port: Int) -> Int32? {
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        let fd = socket(AF_INET, streamSocket, 0)
         var address = sockaddr_in()
         #if canImport(Darwin)
             address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
