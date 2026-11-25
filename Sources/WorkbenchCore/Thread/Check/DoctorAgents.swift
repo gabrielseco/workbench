@@ -43,6 +43,7 @@ extension Doctor {
         switch provider {
         case .claude: ClaudeProvider(config: config).capabilities
         case .codex: CodexProvider().capabilities
+        case .opencode: config.agentProvider(.opencode)?.capabilities
         default: nil
         }
     }

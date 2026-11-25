@@ -355,6 +355,9 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # [providers.codex]                     # P9: the executable of a provider (claude: the same as claude_path)
 # executable = "/opt/homebrew/bin/codex"
 # models = ["gpt-6.1-sol", "gpt-6-astra"]  # P25: names added to this provider's model menu in the app's Agents card (nothing else reads them)
+# [providers.opencode]                  # P28: OpenCode through one OpenAI-compatible gateway; `plan` and `ship` only so far
+# base_url = "https://gateway.example/v1"  # required: http or https, a host, no credentials; models are the gateway's names
+# api_key_env = "LITELLM_API_KEY"       # the environment variable the key is read from (the key is never in a config)
 # [agents.run]                          # every model is chosen in an [agents.<role>] table: goal, run, judge,
 # model = "opus"                        # review, ship, plan. A goal's `model` wins for run; unset = provider default
 # [agents.judge]                        # provider, model, reasoning_effort, and allow_unpriced (not run)
@@ -703,6 +706,9 @@ no effort key. The model and effort are part of what `goal approve` binds, so ch
 goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `judge`, `review` and
 `goal` on `claude` or `codex`, `run` on `claude` only; anything else is refused when the config loads, not ignored, until
 coding on the second provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
+`"opencode"` (P28) is accepted for `plan` and `ship` only, and only with `[providers.opencode]` holding a `base_url`: it takes the
+gateway's model name in `model` (`sonnet-claude`), no `reasoning_effort`, runs with no shell and no edit tool, and has no dollar cap, so it
+follows the `allow_unpriced` rule above. A role not yet proven on it is refused when the config loads, like any other unsupported pair.
 `allow_unpriced` is for evaluations on a provider without a dollar cap: unset or `true` they run timeout-only,
 `false` refuses them; `[agents.run]` refuses the key, because spending is approved in the goal. A model is resolved per role, and no role inherits another's: for coding the goal's
 `model`, then `[agents.run]`'s; for the judge `judge --model`, then `[agents.judge]`'s; for review the stage's `model`, then

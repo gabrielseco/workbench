@@ -57,6 +57,10 @@ extension Config {
         switch provider {
         case .claude: ClaudeReadOnlyAgent(config: self, environment: environment)
         case .codex: CodexReadOnlyAgent(executable: executable(for: .codex), environment: environment)
+        case .opencode:
+            agents.opencode.map {
+                OpencodeReadOnlyAgent(executable: executable(for: .opencode), gateway: $0, environment: environment)
+            }
         default: nil
         }
     }

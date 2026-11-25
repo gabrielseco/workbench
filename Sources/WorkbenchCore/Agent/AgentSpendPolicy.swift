@@ -54,6 +54,7 @@ extension Config {
         switch provider {
         case .claude: ClaudeProvider(config: self)
         case .codex: CodexProvider(executable: executable(for: .codex))
+        case .opencode: agents.opencode.map { OpencodeProvider(executable: executable(for: .opencode), gateway: $0) }
         default: nil
         }
     }

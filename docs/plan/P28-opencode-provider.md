@@ -90,7 +90,10 @@ One PR each, in this order. Task 1 is docs and a script, no product code.
    lines, an unknown event type and a stream that stops short are tested the way `CodexCodingDecoder`'s are.
 4. **The fake.** `fake-claude` learns an OpenCode-shaped stream and the failure modes the soak needs (hang, crash, ignored SIGTERM,
    leftover child, an error event). The reliability tests for a turn that always ends run for `opencode` as they do for the others.
-5. **Roles stop knowing Codex.** `supportedProviders`, `knownProviders`, `defaultProvider` in `AgentsConfig.swift`, `ModelCatalog`,
+5. **Roles stop knowing Codex. Started:** `[providers.opencode]` (`base_url`, `api_key_env`), the registries, doctor, and `plan` and `ship`
+   run on it through `OpencodeReadOnlyAgent` (a role not yet proven is refused when the config loads); judge, review, goal drafting, the
+   chat and the verifier follow in their own PRs, and `run` waits for the forwarder.
+   Original text: **Roles stop knowing Codex.** `supportedProviders`, `knownProviders`, `defaultProvider` in `AgentsConfig.swift`, `ModelCatalog`,
    `AgentSetup`, `DoctorAgents`, `VerifierConfig`, `ReviewConfig` and the app's agent picker take the provider list from one place.
    `ThreadRunnerCodex.swift` and `ThreadService+PRReviewCodex.swift` become provider-generic code that asks `capabilities`, or are
    split into what is shared and what is the adapter's. A role set to `opencode` works in the goal screen, `plan`, `run`, the judge,
