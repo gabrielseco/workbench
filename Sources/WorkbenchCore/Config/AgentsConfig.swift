@@ -15,7 +15,7 @@ public enum AgentRole: String, Sendable, Equatable, CaseIterable {
     /// refused when it loads, not ignored. OpenCode is added role by role, as each one is proven on it (docs/plan/P28-opencode-provider.md).
     public var supportedProviders: [AgentProviderID] {
         switch self {
-        case .plan, .ship: [.claude, .codex, .opencode]
+        case .plan, .ship, .run: [.claude, .codex, .opencode]
         default: [.claude, .codex]
         }
     }
@@ -316,6 +316,10 @@ extension AgentSelection {
                 }
             } else {
                 fail(.wrongType, entry.line, "'reasoning_effort' must be a string, found \(entry.value.typeName)")
+            }
+            // The adapter refuses an effort, so a config that sets one would only fail at its first turn.
+            if selection.provider == .opencode {
+                fail(.invalidValue, entry.line, "'reasoning_effort' in [\(name)] is not used by opencode yet: remove it")
             }
         }
         if let entry = table.entries["allow_unpriced"] {

@@ -30,10 +30,10 @@ extension ThreadRunner {
         var limits = AgentLimits(timeout: options.timeoutOverride ?? goal.turnTimeout)
         limits.killGrace = options.killGrace
         let agent = config.resolvedRunAgent(goalModel: goal.model)
-        if agent.provider == .codex {
+        if agent.provider != .claude {
             // One fresh process: no session, no tool patterns, and the rules are already at the top of the prompt.
             return AgentRequest(
-                provider: .codex, model: agent.model, prompt: prompt, workingDirectory: worktree,
+                provider: agent.provider, model: agent.model, prompt: prompt, workingDirectory: worktree,
                 outputDirectory: outputDirectory, policy: .scopedCoding, spend: spend(for: goal, options: options),
                 purpose: .coding,
                 environment: options.parentEnvironment, limits: limits, reasoningEffort: agent.reasoningEffort)

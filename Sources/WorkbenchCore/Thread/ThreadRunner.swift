@@ -58,7 +58,7 @@ public actor ThreadRunner {
         let agent = config.resolvedRunAgent(goalModel: goal.model)
         // What this provider cannot do comes before the approval check: it is what has to change, and approving again
         // before changing it would only meet it next.
-        try Self.requireProviderCanCode(agent: agent, goal: goal, options: options)
+        try Self.requireCodingProviderReady(agent: agent, goal: goal, config: config, options: options)
         try requireReadAlso(config, goal: goal)
         try Self.requireApprovedAgent(
             state: store.state(of: threadID), agent: agent, spendPolicy: goal.spendPolicyName)
@@ -203,7 +203,7 @@ public actor ThreadRunner {
             (prompt, promptInfo) = try await firstPrompt(
                 goal: goal, config: config, baseCommit: baseCommit, options: options, screenshots: screenshots)
         }
-        if runAgent.provider == .codex {
+        if runAgent.provider != .claude {
             (prompt, promptInfo) = await codexPrompt(
                 first: prompt, info: promptInfo, followUp: codexFollowUp, worktree: worktree,
                 base: baseCommit ?? goal.base, config: config)
@@ -271,8 +271,8 @@ public actor ThreadRunner {
 
         let agent = config.resolvedRunAgent(goalModel: goal.model)
         codingProvider = agent.provider
-        let provider: any AgentProvider =
-            agent.provider == .codex ? CodexProvider(executable: config.executable(for: .codex)) : ClaudeProvider(config: config)
+        let (provider, forwarder) = try makeCodingProvider(agent: agent, config: config, options: options)
+        defer { forwarder?.stop() }
         var request = try grantedAgentRequest(
             sessionID: sessionID, resume: resume, prompt: prompt, config: config, goal: goal, worktree: worktree,
             outputDirectory: promptURL.deletingLastPathComponent(), options: options)
@@ -289,7 +289,7 @@ public actor ThreadRunner {
             var data: [String: JSONValue] = [
                 "resume": .bool(resume),
                 "pid": pid.map { .int(Int($0)) } ?? .null,
-                "argv": .array(([executable.path] + invocation.displayArguments).map { .string($0) }),
+                "argv": .array(([invocation.shown(orResolved: executable)] + invocation.displayArguments).map { .string($0) }),
                 "prompt_ref": .string("prompts/turn-\(turn).md"),
             ]
             // A Codex turn has no session to name: it is one fresh process, and cannot be resumed.

@@ -69,7 +69,7 @@ Linux is first-class for the library and the CLI: `Process/Platform*.swift` is t
 ## Agents are providers
 
 Goal drafting, chat, planning, coding, judging and review are separate **roles**, each configured in
-`[agents.<role>]` with its own provider (Claude, Codex, or OpenCode through one OpenAI-compatible gateway, for the roles proven on it so far: `docs/plan/P28-opencode-provider.md`), model and effort. A provider adapter (`Sources/WorkbenchCore/Agent`)
+`[agents.<role>]` with its own provider (Claude, Codex, or OpenCode through one OpenAI-compatible gateway, for the roles proven on it so far, coding included: `docs/plan/P28-opencode-provider.md`), model and effort. A provider adapter (`Sources/WorkbenchCore/Agent`)
 turns a role's request into a CLI invocation and its output into normalized activity, over the same process layer; there is no
 general workflow engine. Rules that hold across providers:
 - **Native controls enforce the permission,** not a Workbench parser. A combination a provider cannot enforce fails
