@@ -184,6 +184,9 @@ import Testing
         let upstreamEnded = pollUntil(seconds: 15) { rig.gateway.connectionWasClosed }
         #expect(upstreamEnded, "and the upstream request was cancelled, not left to run on")
         #expect(rig.forwarder.isRunning, "the forwarder itself is untouched")
+        // The next client gets an ordinary short answer: with the endless one still configured it would be fed the same flood, and
+        // reading and decoding that took longer the slower the machine (seen as a flake on Linux, never on macOS).
+        rig.gateway.reply = { _ in .json(status: 200, body: "{\"data\":[]}") }
         #expect(
             pollUntil(seconds: 20) { Client.call(port: rig.port, Client.get("/v1/models"), seconds: 3)?.status == 200 },
             "and serves the next client")
