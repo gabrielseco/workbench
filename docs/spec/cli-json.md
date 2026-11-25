@@ -113,7 +113,8 @@ doctor keys: v, base, passed, claude, model, thread, approved_for, spend_policy,
   `issues` is `{kind, severity, message}` each, found before anything is spawned from the adapter's own capabilities:
   `policy_without_controls` (the provider has no verified controls for what the responsibility needs: coding confinement for
   `run`, read-only evidence for the others), `missing_executable` (not on the environment's `PATH`, or the path in
-  `[providers.<id>] executable` is not executable), `budget_without_cap` (the active thread's goal has `budget_usd` and the
+  `[providers.<id>] executable` is not executable), `missing_key` (OpenCode only: the environment variable `[providers.opencode]
+  api_key_env` names, `LITELLM_API_KEY` by default, is unset or empty, so the first turn would fail; a problem), `budget_without_cap` (the active thread's goal has `budget_usd` and the
   `run` provider cannot enforce a dollar limit; the message names the fix, `spend_policy: timeout_only`), `unpriced_not_allowed` (a
   goal draft, judge or review on a provider with no dollar cap, chosen with `provider`, and `allow_unpriced = false` in its
   table: it is refused before it starts, and the message names the key; a review on the default Codex is not reported),

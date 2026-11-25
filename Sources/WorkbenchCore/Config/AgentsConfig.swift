@@ -12,8 +12,13 @@ public enum AgentRole: String, Sendable, Equatable, CaseIterable {
     case plan
 
     /// The providers an adapter exists for, in the order messages list them. A config that names another pair is
-    /// refused when it loads, not ignored.
-    public var supportedProviders: [AgentProviderID] { [.claude, .codex] }
+    /// refused when it loads, not ignored. OpenCode is added role by role, as each one is proven on it (docs/plan/P28-opencode-provider.md).
+    public var supportedProviders: [AgentProviderID] {
+        switch self {
+        case .plan, .ship: [.claude, .codex, .opencode]
+        default: [.claude, .codex]
+        }
+    }
 
     /// What the thread did before `[agents]` existed, used when the config names nothing.
     public var defaultProvider: AgentProviderID { self == .review ? .codex : .claude }
@@ -71,6 +76,8 @@ public struct ResolvedAgent: Sendable, Equatable {
 /// `[providers.<id>]` and `[agents.<role>]`.
 public struct AgentsConfig: Sendable, Equatable {
     public var executables: [AgentProviderID: String] = [:]
+    /// `[providers.opencode]`: the gateway OpenCode reaches its model through. Nil when the table is absent.
+    public var opencode: OpencodeProvider.Gateway?
     /// `[providers.<id>] models`: names this project adds to that provider's model menu (the app's Agents card). Nothing else reads them.
     public var models: [AgentProviderID: [String]] = [:]
     public var goal: AgentSelection?
@@ -96,9 +103,11 @@ public struct AgentsConfig: Sendable, Equatable {
     static let providerPrefix = "providers."
     static let agentPrefix = "agents."
     static let providerKeys: Set<String> = ["executable", "models"]
+    /// Keys only `[providers.opencode]` takes: the gateway's URL and the environment variable its key is read from.
+    static let opencodeKeys: Set<String> = ["base_url", "api_key_env"]
     static let selectionKeys: Set<String> = ["provider", "model", "reasoning_effort", "allow_unpriced"]
     /// Providers that can be named at all, whatever role they are named for.
-    static let knownProviders: [AgentProviderID] = [.claude, .codex]
+    static let knownProviders: [AgentProviderID] = [.claude, .codex, .opencode]
 
     static func owns(table name: String) -> Bool {
         name.hasPrefix(providerPrefix) || name.hasPrefix(agentPrefix)
@@ -130,12 +139,13 @@ public struct AgentsConfig: Sendable, Equatable {
 extension AgentsConfig {
     static func parse(_ document: TOMLDocument, fail: ReviewConfig.Fail) -> AgentsConfig {
         var config = AgentsConfig()
-        for (name, table) in document.tables.sorted(by: { $0.value.line < $1.value.line }) where owns(table: name) {
-            if name.hasPrefix(providerPrefix) {
-                parseProvider(String(name.dropFirst(providerPrefix.count)), table: table, into: &config, fail: fail)
-            } else {
-                parseAgent(String(name.dropFirst(agentPrefix.count)), table: table, into: &config, fail: fail)
-            }
+        let tables = document.tables.sorted(by: { $0.value.line < $1.value.line }).filter { owns(table: $0.key) }
+        // The provider tables first: an agent that names OpenCode needs `[providers.opencode]`, wherever it is written.
+        for (name, table) in tables where name.hasPrefix(providerPrefix) {
+            parseProvider(String(name.dropFirst(providerPrefix.count)), table: table, into: &config, fail: fail)
+        }
+        for (name, table) in tables where name.hasPrefix(agentPrefix) {
+            parseAgent(String(name.dropFirst(agentPrefix.count)), table: table, into: &config, fail: fail)
         }
         return config
     }
@@ -145,9 +155,12 @@ extension AgentsConfig {
             fail(.unknownTable, table.line, "unknown table [providers.\(id)]: the providers are \(list(knownProviders))")
             return
         }
-        for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !providerKeys.contains(key) {
-            fail(.unknownKey, entry.line, "unknown key '\(key)' in [providers.\(id)]")
+        let allowed = provider == .opencode ? providerKeys.union(opencodeKeys) : providerKeys
+        for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !allowed.contains(key) {
+            let hint = opencodeKeys.contains(key) ? ": it belongs to [providers.opencode]" : ""
+            fail(.unknownKey, entry.line, "unknown key '\(key)' in [providers.\(id)]\(hint)")
         }
+        if provider == .opencode { parseOpencodeGateway(table, into: &config, fail: fail) }
         if let entry = table.entries["models"], let names = modelNames(entry, provider: id, fail: fail) {
             config.models[provider] = names
         }
@@ -161,6 +174,47 @@ extension AgentsConfig {
         } else {
             config.executables[provider] = value
         }
+    }
+
+    /// `base_url` and `api_key_env` of `[providers.opencode]`. The URL is checked like any value that reaches a config file OpenCode
+    /// reads: http or https with a host and no credentials. The key itself is never in the project's config, only the name of the
+    /// environment variable that holds it.
+    private static func parseOpencodeGateway(_ table: TOMLTable, into config: inout AgentsConfig, fail: ReviewConfig.Fail) {
+        func string(_ key: String) -> (value: String, line: Int)? {
+            guard let entry = table.entries[key] else { return nil }
+            guard case .string(let value) = entry.value else {
+                fail(.wrongType, entry.line, "'\(key)' must be a string, found \(entry.value.typeName)")
+                return nil
+            }
+            return (value, entry.line)
+        }
+        guard let url = string("base_url") else {
+            if table.entries["base_url"] == nil {
+                fail(.missingKey, table.line, "[providers.opencode] needs 'base_url': the gateway's OpenAI-compatible endpoint")
+            }
+            return
+        }
+        let variable = string("api_key_env")
+        let gateway = OpencodeProvider.Gateway(baseURL: url.value, apiKeyVariable: variable?.value ?? "LITELLM_API_KEY")
+        func valid(url: String, variable: String) -> Bool {
+            (try? OpencodeConfig(
+                policy: .readOnly, providerName: gateway.providerName, modelName: "model", baseURL: url,
+                apiKeyVariable: variable)) != nil
+        }
+        var ok = true
+        if !valid(url: gateway.baseURL, variable: "KEY") {
+            fail(
+                .invalidValue, url.line,
+                "'base_url' must be an http or https URL with a host, and no credentials, query, fragment or spaces")
+            ok = false
+        }
+        if !valid(url: "https://gateway.invalid/v1", variable: gateway.apiKeyVariable) {
+            fail(
+                .invalidValue, variable?.line ?? table.line,
+                "'api_key_env' must be the name of an environment variable in upper case, such as LITELLM_API_KEY")
+            ok = false
+        }
+        if ok { config.opencode = gateway }
     }
 
     /// What a menu or `ConfigEdit` may carry as a model: what `[agents.<role>] model` accepts (`SafeNames.isModelName`, which goes to
@@ -202,7 +256,8 @@ extension AgentsConfig {
         for (key, entry) in table.entries.sorted(by: { $0.key < $1.key }) where !selectionKeys.contains(key) {
             fail(.unknownKey, entry.line, "unknown key '\(key)' in [\(tableName)]")
         }
-        let selection = AgentSelection.parse(table, name: tableName, role: role, fail: fail)
+        let selection = AgentSelection.parse(
+            table, name: tableName, role: role, opencodeConfigured: config.opencode != nil, fail: fail)
         if role == .run, let entry = table.entries["allow_unpriced"] {
             fail(
                 .invalidValue, entry.line,
@@ -228,12 +283,14 @@ extension AgentSelection {
     /// `inheritsProvider`: a review stage table, whose missing `provider` comes from `[agents.review]` (checked once
     /// both are known, in `Config.load`).
     static func parse(
-        _ table: TOMLTable, name: String, role: AgentRole, inheritsProvider: Bool = false, fail: ReviewConfig.Fail
+        _ table: TOMLTable, name: String, role: AgentRole, inheritsProvider: Bool = false, opencodeConfigured: Bool = false,
+        fail: ReviewConfig.Fail
     ) -> AgentSelection {
         var selection = AgentSelection()
         if let entry = table.entries["provider"] {
             if case .string(let value) = entry.value {
-                selection.provider = provider(value, line: entry.line, role: role, table: name, fail: fail)
+                selection.provider = provider(
+                    value, line: entry.line, role: role, table: name, opencodeConfigured: opencodeConfigured, fail: fail)
             } else {
                 fail(.wrongType, entry.line, "'provider' must be a string, found \(entry.value.typeName)")
             }
@@ -273,7 +330,7 @@ extension AgentSelection {
 
     /// A provider id for `role`, or nil after `fail` has been told why not.
     static func provider(
-        _ value: String, line: Int, role: AgentRole, table: String, fail: ReviewConfig.Fail
+        _ value: String, line: Int, role: AgentRole, table: String, opencodeConfigured: Bool, fail: ReviewConfig.Fail
     ) -> AgentProviderID? {
         guard let id = AgentProviderID(value), AgentsConfig.knownProviders.contains(id) else {
             fail(.invalidValue, line, "'provider' must be \(AgentsConfig.list(AgentsConfig.knownProviders))")
@@ -284,6 +341,13 @@ extension AgentSelection {
                 .invalidValue, line,
                 "[\(table)] cannot use \"\(id)\" yet: \(role.rawValue) runs on \(AgentsConfig.list(role.supportedProviders)) "
                     + "only until its second provider is enabled (docs/archive/P9-agent-providers.md, task 4)")
+            return nil
+        }
+        guard id != .opencode || opencodeConfigured else {
+            fail(
+                .missingKey, line,
+                "[\(table)] names \"opencode\", which needs [providers.opencode] with a 'base_url' "
+                    + "(the gateway it reaches its model through)")
             return nil
         }
         return id

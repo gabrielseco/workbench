@@ -71,7 +71,17 @@ public struct OpencodeProvider: AgentProvider {
         OpencodeRunLayout(root: request.outputDirectory.appendingPathComponent("opencode", isDirectory: true))
     }
 
-    public func invocation(for request: AgentRequest) throws -> AgentInvocation {
+    /// Everything an invocation is made of, decided and checked, before anything is written.
+    private struct Prepared {
+        var config: OpencodeConfig
+        var coding: Bool
+        var environment: [String: String]
+        var executable: URL
+        var arguments: [String]
+        var layout: OpencodeRunLayout
+    }
+
+    private func prepared(for request: AgentRequest) throws -> Prepared {
         func refuse(_ why: String) -> AgentFailure { AgentFailure(.unsupportedCapability, why, retry: .afterFix) }
         guard request.spend == .timeoutOnly else {
             throw refuse("OpenCode cannot enforce a dollar limit; its requests are timeout-only.")
@@ -128,26 +138,43 @@ public struct OpencodeProvider: AgentProvider {
                 .missingExecutable, "Could not find \"\(executable)\" on PATH. Install OpenCode or set its path.",
                 retry: .afterFix)
         }
-
-        let arguments = ["run", "--standalone", "--format", "json", "--archived", "-m", config.modelID, "--", request.prompt]
         // The prompt is after `--`: without it a prompt that starts with dashes is read as a flag.
-        let shown = Array(arguments[..<(arguments.firstIndex(of: "--") ?? arguments.count)])
+        let arguments = ["run", "--standalone", "--format", "json", "--archived", "-m", config.modelID, "--", request.prompt]
+        return Prepared(
+            config: config, coding: coding, environment: environment, executable: found, arguments: arguments, layout: layout)
+    }
+
+    private static func shown(_ arguments: [String]) -> [String] {
+        Array(arguments[..<(arguments.firstIndex(of: "--") ?? arguments.count)])
+    }
+
+    /// The command as it is logged, without the prompt and without writing anything: the same checks as `invocation`.
+    public func displayArguments(for request: AgentRequest) throws -> [String] {
+        let plan = try prepared(for: request)
+        let shown = Self.shown(plan.arguments)
+        return plan.coding ? ["-f", plan.layout.profileFile.path, plan.executable.path] + shown : shown
+    }
+
+    public func invocation(for request: AgentRequest) throws -> AgentInvocation {
+        let plan = try prepared(for: request)
+        let shown = Self.shown(plan.arguments)
         do {
-            try layout.create()
-            try config.json().write(to: layout.configFile, options: .atomic)
-            guard coding, let userDirectories else {
+            try plan.layout.create()
+            try plan.config.json().write(to: plan.layout.configFile, options: .atomic)
+            guard plan.coding, let userDirectories else {
                 return AgentInvocation(
-                    executable: found.path, arguments: arguments, environment: environment, displayArguments: shown)
+                    executable: plan.executable.path, arguments: plan.arguments, environment: plan.environment,
+                    displayArguments: shown)
             }
             func real(_ url: URL) -> URL { URL(fileURLWithPath: realpath(url.path, nil).map { String(cString: $0) } ?? url.path) }
             let profile = try OpencodeSandbox.profile(
-                worktree: real(request.workingDirectory), scratch: real(layout.scratch), state: real(layout.state),
+                worktree: real(request.workingDirectory), scratch: real(plan.layout.scratch), state: real(plan.layout.state),
                 user: userDirectories, denyReads: OpencodeSandbox.credentialDirectories(home: home))
-            try profile.write(to: layout.profileFile, atomically: true, encoding: .utf8)
-            let wrapped = ["-f", layout.profileFile.path, found.path] + arguments
+            try profile.write(to: plan.layout.profileFile, atomically: true, encoding: .utf8)
+            let wrapped = ["-f", plan.layout.profileFile.path, plan.executable.path] + plan.arguments
             return AgentInvocation(
-                executable: "/usr/bin/sandbox-exec", arguments: wrapped, environment: environment,
-                displayArguments: ["-f", layout.profileFile.path, found.path] + shown)
+                executable: "/usr/bin/sandbox-exec", arguments: wrapped, environment: plan.environment,
+                displayArguments: ["-f", plan.layout.profileFile.path, plan.executable.path] + shown)
         } catch let failure as AgentFailure {
             throw failure
         } catch {

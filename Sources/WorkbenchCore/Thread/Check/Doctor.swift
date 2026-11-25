@@ -274,7 +274,7 @@ public final class Doctor: @unchecked Sendable {
         report.approvedFor = goal?.approvedFor
         report.spendLine = goal?.spendLine
         report.agents = Self.agents(
-            config, searchPath: options.environment["PATH"], goal: goal)
+            config, searchPath: options.environment["PATH"], goal: goal, environment: options.environment)
         report.reviewWarnings = Self.reviewWarnings(
             config.review, root: project.root, hasVerifier: report.verifier?.skill != nil)
         report.mcpWarnings = TaskLibrary(project: project).mcpProblems(servers: config.mcpServers)

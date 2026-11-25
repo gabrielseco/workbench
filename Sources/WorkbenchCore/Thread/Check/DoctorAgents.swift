@@ -43,6 +43,7 @@ extension Doctor {
         switch provider {
         case .claude: ClaudeProvider(config: config).capabilities
         case .codex: CodexProvider().capabilities
+        case .opencode: config.agentProvider(.opencode)?.capabilities
         default: nil
         }
     }
@@ -60,7 +61,7 @@ extension Doctor {
     /// Each responsibility's resolved provider and model with what is wrong or limited about it. Reads the adapters'
     /// capabilities, not a second list of what they can do. `capabilities` is replaced in tests.
     static func agents(
-        _ config: Config, searchPath: String?, goal: DoctorGoal? = nil,
+        _ config: Config, searchPath: String?, goal: DoctorGoal? = nil, environment: [String: String]? = nil,
         capabilities: ((AgentProviderID) -> AgentCapabilities?)? = nil
     ) -> [DoctorAgent] {
         var found = [
@@ -77,6 +78,7 @@ extension Doctor {
             guard let resolved = found[index].resolved else { continue }
             found[index].issues = issues(
                 role: found[index].role, resolved: resolved, config: config, searchPath: searchPath, goal: goal,
+                environment: environment,
                 caps: capabilities?(resolved.provider) ?? Self.capabilities(of: resolved.provider, config: config))
         }
         // Each listed stage resolves on its own: one can be forbidden, or move to a provider without a dollar cap.
@@ -122,7 +124,7 @@ extension Doctor {
 
     private static func issues(
         role: AgentRole, resolved: ResolvedAgent, config: Config, searchPath: String?,
-        goal: DoctorGoal?, caps: AgentCapabilities?
+        goal: DoctorGoal?, environment: [String: String]?, caps: AgentCapabilities?
     ) -> [DoctorAgentIssue] {
         var out: [DoctorAgentIssue] = []
         func add(_ kind: String, _ severity: DoctorAgentIssue.Severity, _ message: String) {
@@ -134,6 +136,14 @@ extension Doctor {
             add(
                 "missing_executable", .problem,
                 "\(provider) is not installed or not on PATH (looked for `\(executable)`)")
+        }
+        // A configured gateway whose key is not in the environment fails the first turn; `environment` is nil where it is not known.
+        if provider == .opencode, let gateway = config.agents.opencode, let environment,
+            environment[gateway.apiKeyVariable]?.isEmpty ?? true {
+            add(
+                "missing_key", .problem,
+                "opencode reads its gateway key from $\(gateway.apiKeyVariable), which is not set; "
+                    + "\(role.rawValue) would fail on its first turn")
         }
         guard let caps else {
             add(

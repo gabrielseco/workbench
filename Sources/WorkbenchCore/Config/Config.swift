@@ -475,6 +475,9 @@ public struct Config: Sendable, Equatable {
 
         # [providers.codex]                # which executable runs a provider (claude: same as claude_path)
         # executable = "/opt/homebrew/bin/codex"
+        # [providers.opencode]             # OpenCode reaches its model through one OpenAI-compatible gateway (plan, ship)
+        # base_url = "https://gateway.example/v1"
+        # api_key_env = "LITELLM_API_KEY"  # the environment variable the key is read from; the key is never in this file
 
         # [agents.run]                     # provider, model and reasoning_effort per responsibility: every model is set here
         # model = "opus"                   # the coding turns; a goal's own `model` wins; unset = the provider's default
