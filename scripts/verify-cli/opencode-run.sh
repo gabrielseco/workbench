@@ -280,8 +280,9 @@ sys.exit(0 if (c or 0) > 0 else 1)"
 }
 check "the review's cost is on record (the gateway reports one)" "pr_review.finished carries no cost" review_cost
 
-left=$( [ -n "$WT" ] && pgrep -fl "$WT")
-check "no process of the worktree left after the review" "$left" test -z "$left"
+# The reviewer ran in the round's folder (brief, diff, checkout), not in the coding worktree.
+left=$(pgrep -fl "$THREAD_DIR/pr-review")
+check "no process of the review's folder left after the review" "$left" test -z "$left"
 
 # The key was in the runner's environment; it must be in nothing the thread kept, nor in the argv.
 key_kept() {
