@@ -39,8 +39,21 @@ cp "$CFG" "$BACKUP" || die "could not back up the config"
 restore_config() { [ -f "$BACKUP" ] && mv -f "$BACKUP" "$CFG"; }
 trap restore_config EXIT
 
-config() { # <extra config text>: the original config and then this text
-    { cat "$BACKUP"; printf '\n%s\n' "$1"; } >"$CFG"
+# <extra config text>: the original config without the tables this scenario writes (a project may already have them), then this text
+config() {
+    python3 -I - "$BACKUP" "$CFG" "$1" <<'PY'
+import re, sys
+src, dst, extra = sys.argv[1:4]
+drop = {'agents.plan', 'agents.ship', 'agents.judge', 'providers.opencode'}
+out, skip = [], False
+for line in open(src).read().split('\n'):
+    m = re.match(r'^\s*\[([^\[\]]+)\]\s*(#.*)?$', line)
+    if m:
+        skip = m.group(1).strip() in drop
+    if not skip:
+        out.append(line)
+open(dst, 'w').write('\n'.join(out).rstrip('\n') + '\n\n' + extra + '\n')
+PY
 }
 GATEWAY="[providers.opencode]
 base_url = \"$OC_URL\"
@@ -192,6 +205,15 @@ sys.exit(1 if hits else 0)
 PY
 }
 check "the gateway key is in no file of the thread" "see above" key_kept
+
+plan_cost=$(wb "$T_WB" log "$ID" --json | py "e=[x['data'] for x in lines if x['kind']=='plan.ended']
+print('%.4f USD over %d plan turn(s)' % (sum(x.get('cost_usd') or 0 for x in e), len(e)))")
+echo "cost of the plan turn: $plan_cost (model $OC_MODEL)"
+
+# The thread is ended here, not left active: abandon keeps the branch and saves the changes.
+wb "$T_WB" abandon "$ID" >/dev/null
+ended=$(wb "$T_WB" status "$ID" --json | py "print(d['ended'] or '')")
+check "thread ended (abandon)" "thread $ID is still active" test -n "$ended"
 
 restore_config
 finish
