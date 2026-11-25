@@ -154,7 +154,7 @@ extension Doctor {
                     + "run is refused on it. Change the goal to `spend_policy: timeout_only` (and remove budget_usd), "
                     + "then approve it again")
         }
-        if caps.policies.contains(policy), !caps.confinesReads {
+        if caps.policies.contains(policy), !caps.confinesReads(for: policy) {
             add(
                 "unconfined_reads", .note,
                 role == .run

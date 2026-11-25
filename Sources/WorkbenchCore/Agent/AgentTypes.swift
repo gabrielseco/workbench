@@ -4,7 +4,7 @@ import Foundation
 /// Orchestration (run, judge, review, goal drafting) builds an `AgentRequest`; an `AgentProvider` turns it
 /// into one child process; `AgentRunner` runs that child over `ProcessRunner`. See docs/archive/P9-agent-providers.md.
 
-/// A provider's stable name: `claude`, `codex`. Built-in providers only, so it is checked like any name
+/// A provider's stable name: `claude`, `codex`, `opencode`. Built-in providers only, so it is checked like any name
 /// that reaches a path or a log.
 public struct AgentProviderID: Hashable, Sendable, Codable, CustomStringConvertible {
     public let rawValue: String
@@ -17,6 +17,7 @@ public struct AgentProviderID: Hashable, Sendable, Codable, CustomStringConverti
     public var description: String { rawValue }
     public static let claude = AgentProviderID("claude")!  // swiftlint:disable:this force_unwrapping
     public static let codex = AgentProviderID("codex")!  // swiftlint:disable:this force_unwrapping
+    public static let opencode = AgentProviderID("opencode")!  // swiftlint:disable:this force_unwrapping
 }
 
 /// What the agent may do. Orchestration picks one; the adapter translates it to the provider's own tested
@@ -49,11 +50,14 @@ public struct AgentCapabilities: Sendable, Equatable {
     public var hardDollarCap: Bool
     /// Whether a read-only turn cannot read outside the working directory.
     public var confinesReads: Bool
+    /// The same for a coding turn, when it differs: nil means the same as `confinesReads`. OpenCode confines a read-only turn (it has no shell)
+    /// but a coding turn has one, and a sandbox only refuses writes, so it can read what the system lets any process read.
+    public var confinesCodingReads: Bool?
 
     public init(
         policies: Set<AgentPolicy>, resume: AgentResumeSupport, streamsActivity: Bool = false,
         imageAttachments: Bool = false, structuredOutput: Bool = false, reportsUsage: Bool = false,
-        hardDollarCap: Bool = false, confinesReads: Bool = false
+        hardDollarCap: Bool = false, confinesReads: Bool = false, confinesCodingReads: Bool? = nil
     ) {
         self.policies = policies
         self.resume = resume
@@ -63,6 +67,11 @@ public struct AgentCapabilities: Sendable, Equatable {
         self.reportsUsage = reportsUsage
         self.hardDollarCap = hardDollarCap
         self.confinesReads = confinesReads
+        self.confinesCodingReads = confinesCodingReads
+    }
+
+    public func confinesReads(for policy: AgentPolicy) -> Bool {
+        policy == .scopedCoding ? confinesCodingReads ?? confinesReads : confinesReads
     }
 }
 
