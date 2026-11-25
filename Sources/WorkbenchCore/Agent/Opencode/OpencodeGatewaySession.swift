@@ -72,3 +72,22 @@ public final class OpencodeGatewaySession: @unchecked Sendable {
         }
     }
 }
+
+extension OpencodeGatewaySession {
+    /// For a read-only turn whose provider was built elsewhere (goal drafting, the chat, a task edit): the provider to run and the session
+    /// to stop when the turn is over. Anything but an OpenCode provider without a forwarder is returned as it is, with no session.
+    public static func around(
+        _ provider: any AgentProvider, environment: [String: String]
+    ) throws -> (provider: any AgentProvider, session: OpencodeGatewaySession?) {
+        guard let opencode = provider as? OpencodeProvider, opencode.forwarder == nil else { return (provider, nil) }
+        let session = try start(gateway: opencode.gateway, executable: opencode.executable, environment: environment)
+        return (session.provider, session)
+    }
+
+    /// Why text from a turn is no answer although there is some: the provider did not report the turn as finished (OpenCode's stream
+    /// with no final stop). Nil when it finished, or when there is no text to doubt.
+    public static func unfinished(_ completion: AgentCompletion, name: String) -> String? {
+        guard completion.summary != nil, completion.provider != .succeeded else { return nil }
+        return "\(name) did not finish its turn, so there is no answer"
+    }
+}
