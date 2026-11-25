@@ -145,6 +145,14 @@ extension Doctor {
                 "opencode reads its gateway key from $\(gateway.apiKeyVariable), which is not set; "
                     + "\(role.rawValue) would fail on its first turn")
         }
+        if provider == .opencode, let gateway = config.agents.opencode, let key = environment?[gateway.apiKeyVariable],
+            !key.isEmpty, key.utf8.count < ForwardPolicy.minimumKeyLength {
+            let length = ForwardPolicy.minimumKeyLength
+            add(
+                "short_key", .problem,
+                "the gateway key in $\(gateway.apiKeyVariable) is shorter than \(length) characters, so it could not be "
+                    + "kept out of an answer that echoes it; use a longer key")
+        }
         guard let caps else {
             add(
                 "policy_without_controls", .problem,
