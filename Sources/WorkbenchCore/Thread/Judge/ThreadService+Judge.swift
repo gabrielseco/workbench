@@ -124,9 +124,10 @@ extension ThreadService {
             table: config.allowUnpricedTable(.judge))
         let answerFolder = project.threadDirectory(id).appendingPathComponent("judge")
         let request: AgentRequest
-        if agent.provider == .codex {
-            // Codex has no structured output: it is asked for the same JSON as text, and writes its last message to a file
-            // beside the evidence, never inside the folder it reads.
+        if agent.provider != .claude {
+            // Codex and OpenCode have no structured output: they are asked for the same JSON as text (Codex writes its last message to a
+            // file beside the evidence, never inside the folder it reads; OpenCode's last message is its answer). OpenCode takes no images,
+            // so a judge with screenshots is refused for it, by name, rather than judged without them.
             // With no screenshots the judge would run in the thread folder, which holds `judge/`: it gets an empty folder
             // of its own instead, so its answer is never inside what it reads.
             let readFolder = screenshots.isEmpty ? answerFolder.appendingPathComponent("empty") : folder
@@ -151,11 +152,20 @@ extension ThreadService {
                 limits: AgentLimits(timeout: timeout, maxLineBytes: 1 << 20), evidenceFiles: screenshots,
                 reasoningEffort: agent.reasoningEffort)
         }
+        // An OpenCode judge runs behind a forwarder that holds the key, started only once nothing has refused the request and stopped on
+        // every way out: the verdict goes into the log, and what the judge reads (a diff) is not trusted.
+        var gateway: OpencodeGatewaySession?
+        defer { gateway?.stop() }
+        let runner: any AgentProvider
         let shown: [String]
         do {
             if case .failure(let refusal) = spend { throw refusal }
             if let refusal = request.validate(against: provider) { throw refusal }
-            shown = try provider.invocation(for: request).displayArguments
+            if agent.provider == .opencode {
+                gateway = try OpencodeGatewaySession.start(config: config, environment: environment)
+            }
+            runner = gateway?.provider ?? provider
+            shown = try runner.invocation(for: request).displayArguments
         } catch {
             try await attempts.refused(Self.judgeFailureText(error))
             return try await recordJudge(log, agent: agent, turn: turn, failure: Self.judgeFailureText(error), argv: [])
@@ -179,35 +189,37 @@ extension ThreadService {
             data: .object(Self.agentFields(agent, ["argv": .array(shown.map { .string($0) })])))
         let attempt = try await attempts.start()
         let execution: AgentExecution
-        do { execution = try AgentRunner.start(provider: provider, request: request) } catch {
+        do { execution = try AgentRunner.start(provider: runner, request: request) } catch {
             try await attempts.end(attempt, "failed", reason: Self.judgeFailureText(error))
             return try await recordJudge(log, agent: agent, turn: turn, failure: Self.judgeFailureText(error), argv: shown)
         }
         attach(execution)
         let completion = await execution.completion
-        try await attempts.end(attempt, AttemptLog.outcome(of: completion.process, failure: completion.failure))
+        // What the turn cost is spent whatever came of it: a failure after a paid step records it too.
+        func noVerdict(_ why: String) async throws -> JudgeResult {
+            try await recordJudge(log, agent: agent, turn: turn, cost: completion.usage?.costUSD, failure: why, argv: shown)
+        }
+        let end = Self.judgeAttemptEnd(completion, provider: agent.provider)
+        try await attempts.end(attempt, end.outcome, reason: end.reason)
         if let why = Self.judgeProcessProblem(completion.process, timeout: timeout, name: "\(agent.provider)") {
-            return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: shown)
+            return try await noVerdict(why)
         }
-        if let failure = completion.failure {
-            return try await recordJudge(log, agent: agent, turn: turn, failure: failure.message, argv: shown)
-        }
+        if let failure = completion.failure { return try await noVerdict(failure.message) }
         var written: String?
         if case .file(let url)? = completion.answer { written = Self.readAnswer(url) }
         guard let answer = completion.summary ?? written else {
-            var failure = "the verdict was not usable: no result"
-            // A Codex run that wrote no answer file is named by the file it was asked for, not by "no result".
-            if let file = request.answerFile {
-                failure = "the verdict was not usable: \(agent.provider) left no answer in \(file.path)"
-            }
-            return try await recordJudge(log, agent: agent, turn: turn, failure: failure, argv: shown)
+            return try await noVerdict(Self.judgeNoAnswer(provider: agent.provider, answerFile: request.answerFile))
+        }
+        // Text from a turn the provider did not report as finished is not a verdict (OpenCode's stream without its final stop is `unknown`).
+        guard completion.provider == .succeeded else {
+            return try await noVerdict("\(agent.provider) did not finish its turn, so there is no verdict")
         }
         do {
             let verdict = try Judge.verdict(fromAnswer: answer, criteria: goal.criteria)
             return try await recordJudge(
                 log, agent: agent, turn: turn, verdict: verdict, cost: completion.usage?.costUSD, argv: shown)
         } catch {
-            return try await recordJudge(log, agent: agent, turn: turn, failure: "\(error)", argv: shown)
+            return try await noVerdict("\(error)")
         }
     }
 
@@ -217,6 +229,19 @@ extension ThreadService {
         data["provider"] = .string("\(agent.provider)")
         data["model"] = agent.model.map { .string($0) } ?? .null
         return data
+    }
+
+    /// How the judge's attempt ended: a success only if the provider said it finished. A clean exit from an unfinished stream is not one.
+    static func judgeAttemptEnd(_ completion: AgentCompletion, provider: AgentProviderID) -> (outcome: String, reason: String?) {
+        let outcome = AttemptLog.outcome(of: completion.process, failure: completion.failure)
+        guard outcome == "succeeded", completion.provider != .succeeded else { return (outcome, nil) }
+        return ("failed", "\(provider) did not finish its turn")
+    }
+
+    /// Why there is no verdict when the turn left no answer. A Codex run that wrote no answer file is named by the file it was asked for.
+    static func judgeNoAnswer(provider: AgentProviderID, answerFile: URL?) -> String {
+        guard let answerFile else { return "the verdict was not usable: no result" }
+        return "the verdict was not usable: \(provider) left no answer in \(answerFile.path)"
     }
 
     private static func judgeFailureText(_ error: Error) -> String {

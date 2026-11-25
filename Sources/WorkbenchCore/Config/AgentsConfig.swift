@@ -15,7 +15,7 @@ public enum AgentRole: String, Sendable, Equatable, CaseIterable {
     /// refused when it loads, not ignored. OpenCode is added role by role, as each one is proven on it (docs/plan/P28-opencode-provider.md).
     public var supportedProviders: [AgentProviderID] {
         switch self {
-        case .plan, .ship, .run: [.claude, .codex, .opencode]
+        case .plan, .ship, .run, .judge: [.claude, .codex, .opencode]
         default: [.claude, .codex]
         }
     }

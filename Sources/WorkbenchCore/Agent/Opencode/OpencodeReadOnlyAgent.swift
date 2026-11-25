@@ -56,10 +56,18 @@ public struct OpencodeReadOnlyAgent: ReadOnlyAgent {
         do { try scratch.prepare() } catch { return failed("the scratch folder could not be made: \(error)") }
         // Whatever it left running or wrote goes with the turn, also on a stop, a timeout or a failure.
         defer { scratch.clear() }
+        // The key stays in a forwarder for the turn: this turn has no shell, but it has a code tool and reads text that may be hostile,
+        // and what it says goes into the log.
+        let session: OpencodeGatewaySession
+        do {
+            session = try OpencodeGatewaySession.start(gateway: gateway, executable: executable, environment: environment)
+        } catch { return failed("\(error)") }
+        defer { session.stop() }
+        let adapter = session.provider
         let invocation: AgentInvocation
         do {
-            if let refusal = agentRequest.validate(against: provider) { throw refusal }
-            invocation = try provider.invocation(for: agentRequest)
+            if let refusal = agentRequest.validate(against: adapter) { throw refusal }
+            invocation = try adapter.invocation(for: agentRequest)
         } catch { return failed((error as? AgentFailure)?.message ?? "\(error)") }
 
         var spawn = SpawnRequest(
@@ -69,7 +77,7 @@ public struct OpencodeReadOnlyAgent: ReadOnlyAgent {
         let run: ProcessRun
         do { run = try ProcessRunner.start(spawn) } catch { return failed("opencode could not be started") }
         attach(run)
-        var decoder = provider.makeDecoder(for: agentRequest)
+        var decoder = adapter.makeDecoder(for: agentRequest)
         var exit: ProcessExit?
         for await event in run.events {
             switch event {

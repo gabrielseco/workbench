@@ -80,8 +80,9 @@ private struct Fixture {
         #expect(answer.failure == nil)
         let text = try #require(answer.text)
         #expect(text.contains("cwd=\(f.scratch.url.path)/empty"), "it cannot read the checkout: \(text)")
-        #expect(text.contains("key=[key removed]") && text.contains("gh="), "the key reaches it, and nothing else does: \(text)")
-        #expect(!text.contains("gh-secret") && !text.contains("the-secret-key-123"), "and it is not handed back")
+        #expect(text.contains("key=forwarder"), "it holds a placeholder: \(text)")
+        #expect(text.contains("gh="), "and nothing else of the parent's: \(text)")
+        #expect(!text.contains("gh-secret") && !text.contains("the-secret-key-123"), "the real key never reaches it")
         #expect(text.contains("cfg=\(f.scratch.url.path)/opencode/opencode.json"), "it runs on the config Workbench wrote")
         #expect(answer.costUSD == 0.25, "the gateway's per-step cost is carried, not unknown")
         #expect(!FileManager.default.fileExists(atPath: f.scratch.url.path), "whatever it wrote goes with the turn")
@@ -122,8 +123,9 @@ private struct Fixture {
         defer { f.cleanUp() }
         let answer = await f.agent().run(f.request("MODE-KEYERR")) { _ in }
         let why = try #require(answer.failure)
+        // The child never held the key, so the gateway's echo is the placeholder; `redacted` is the second line of defence.
         #expect(!why.contains("the-secret-key-123"), "the failure goes to the event log: \(why)")
-        #expect(why.contains("[key removed]") && why.contains("Invalid API key"), "the rest of the message is kept: \(why)")
+        #expect(why.contains("Invalid API key: forwarder"), "the rest of the message is kept: \(why)")
         let direct = f.agent().redacted("a \(f.environment["LITELLM_API_KEY"]!) b")
         #expect(direct == "a [key removed] b")
         var short = f.environment
@@ -170,7 +172,7 @@ private struct Fixture {
         noKey["LITELLM_API_KEY"] = nil
         let answer = await f.agent(noKey).run(f.request("MODE-OK")) { _ in }
         #expect(answer.text == nil)
-        #expect(answer.failure?.contains("LITELLM_API_KEY is not set") == true, "\(String(describing: answer.failure))")
+        #expect(answer.failure?.contains("$LITELLM_API_KEY, which is not set") == true, "\(String(describing: answer.failure))")
     }
 
     @Test func aRequestWithNoFolderToKeepItsRunInIsRefused() async throws {

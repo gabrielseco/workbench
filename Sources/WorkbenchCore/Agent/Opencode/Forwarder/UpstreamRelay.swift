@@ -24,6 +24,8 @@ final class UpstreamRelay: NSObject, URLSessionDataDelegate, @unchecked Sendable
         var status = 0
         var headers: [(String, String)] = []
         var body = Data()
+        /// The delegate has asked for the task to be cancelled: once is enough, and every later chunk of a flood would only ask again.
+        var cancelAsked = false
 
         private let lock = NSLock()
         private var outbox: [Data] = []
@@ -133,7 +135,10 @@ final class UpstreamRelay: NSObject, URLSessionDataDelegate, @unchecked Sendable
         switch exchange.state {
         case .streaming:
             let frame = Data("\(String(data.count, radix: 16))\r\n".utf8) + data + Data("\r\n".utf8)
-            if !exchange.enqueue(frame, limit: limits.maxQueuedBytes) { dataTask.cancel() }
+            if !exchange.enqueue(frame, limit: limits.maxQueuedBytes), !exchange.cancelAsked {
+                exchange.cancelAsked = true
+                dataTask.cancel()
+            }
         case .buffering:
             let room = limits.maxErrorBodyBytes - exchange.body.count
             if room > 0 { exchange.body.append(data.prefix(room)) }

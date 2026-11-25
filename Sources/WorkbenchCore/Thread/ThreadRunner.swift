@@ -271,8 +271,8 @@ public actor ThreadRunner {
 
         let agent = config.resolvedRunAgent(goalModel: goal.model)
         codingProvider = agent.provider
-        let (provider, forwarder) = try makeCodingProvider(agent: agent, config: config, options: options)
-        defer { forwarder?.stop() }
+        let (provider, gateway) = try makeCodingProvider(agent: agent, config: config, options: options)
+        defer { gateway?.stop() }
         var request = try grantedAgentRequest(
             sessionID: sessionID, resume: resume, prompt: prompt, config: config, goal: goal, worktree: worktree,
             outputDirectory: promptURL.deletingLastPathComponent(), options: options)

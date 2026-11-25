@@ -178,12 +178,16 @@ import Testing
     @Test func aClientThatStopsReadingIsDroppedWhenItsBacklogPassesTheBoundAndTheUpstreamRequestEnds() throws {
         let rig = try Rig { $0.limits.maxQueuedBytes = 256 * 1024 }
         defer { rig.tearDown() }
-        let fd = try stalledClient(rig, pauseMs: 0)
+        // Paced: the bound (256 KiB) is passed in the first few chunks, and an upstream that saturates the CPU is not what this is about.
+        let fd = try stalledClient(rig, pauseMs: 1)
         defer { close(fd) }
         #expect(pollUntil(seconds: 15) { rig.forwarder.liveConnectionCount == 0 }, "the connection was let go without a stop")
         let upstreamEnded = pollUntil(seconds: 15) { rig.gateway.connectionWasClosed }
         #expect(upstreamEnded, "and the upstream request was cancelled, not left to run on")
         #expect(rig.forwarder.isRunning, "the forwarder itself is untouched")
+        // The next client gets an ordinary short answer: with the endless one still configured it would be fed the same flood, and
+        // reading and decoding that took longer the slower the machine (seen as a flake on Linux, never on macOS).
+        rig.gateway.reply = { _ in .json(status: 200, body: "{\"data\":[]}") }
         #expect(
             pollUntil(seconds: 20) { Client.call(port: rig.port, Client.get("/v1/models"), seconds: 3)?.status == 200 },
             "and serves the next client")
