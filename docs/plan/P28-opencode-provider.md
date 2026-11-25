@@ -77,7 +77,7 @@ One PR each, in this order. Task 1 is docs and a script, no product code.
    toolchain a real check needs (SwiftPM, node, a temp dir, `$HOME` caches, the gateway's HTTPS: network is needed for the model, so the
    profile allows only the gateway's host or a local proxy). Output: a section in `P28-capabilities.md`; if it holds, the profile
    becomes part of task 2's config. If it does not, coding on OpenCode is out of scope and the plan says so.
-2. **The run config.** `OpencodeConfig` writes, per run, a JSON file in the turn's output directory and passes it as
+2. **The run config. Built** (`OpencodeConfig`, `OpencodeRunLayout`, and the `sandbox-exec` profile `OpencodeSandbox`; not wired to anything yet). `OpencodeConfig` writes, per run, a JSON file in the turn's output directory and passes it as
    `OPENCODE_CONFIG` (plus whatever task 1 shows is needed to ignore the user's config and the background service): the gateway
    provider with its base URL from the project's `[providers.opencode]` table, the key as `{env:LITELLM_API_KEY}` (never written to
    disk), one model, and the permission rules for the request's policy. Pure function, tested for what it writes per policy, with the
