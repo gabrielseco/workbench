@@ -20,7 +20,8 @@ import Testing
         code=$(/usr/bin/curl -s -m 10 -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer forwarder' "$base/models")
         echo x > "$D/escape.txt" 2>/dev/null; esc=$?
         echo '{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}'
-        if [ -f "$D/hang" ]; then sleep 300 & wait; fi
+        if [ -f "$D/hang" ]; then sleep 300 & echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; wait; fi
+        if [ -f "$D/ignoreterm" ]; then trap '' TERM; sleep 300 & echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; wait; fi
         echo "turn" >> a.txt
         if [ -f "$D/crash" ]; then echo boom >&2; exit 70; fi
         echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"key='$LITELLM_API_KEY' http='$code' escape='$esc' base='$base' cwd='$(pwd -P)'"}}'
@@ -58,6 +59,12 @@ import Testing
         /// What the fake printed, from the turn's recorded stream.
         func said() -> String {
             fx.transcript(id).compactMap { $0["part"]?["text"]?.stringValue }.joined(separator: "\n")
+        }
+
+        /// The pid of the background child the fake started in `hang` and `ignoreterm`, from what it said.
+        func childPID() -> Int32? {
+            guard let match = said().range(of: #"child=[0-9]+"#, options: .regularExpression) else { return nil }
+            return Int32(said()[match].dropFirst("child=".count))
         }
 
         /// The address the forwarder had for the turn, from the config the runner wrote for it.
@@ -183,6 +190,25 @@ import Testing
             let ended = try #require(r.ended().first)
             #expect(r.ended().count == 1, "one turn.ended per turn.started")
             #expect(ended.data["result"] == .string(RunResult.timedOut.rawValue), "and it says how it ended: \(ended.data)")
+            let worktree = r.fx.project.worktreesDirectory.appendingPathComponent(r.id)
+            #expect(OrphanSweeper.orphans(inside: worktree).isEmpty, "no process of the turn is left")
+            let child = try #require(r.childPID(), "the fake started a background child")
+            #expect(kill(child, 0) != 0, "and its child is gone")
+            #expect(try await refusesConnections(try r.forwarderPort()), "and the forwarder is stopped")
+        }
+
+        @Test func aTurnThatIgnoresSigtermAndHasAChildIsKilledWithItsChildAndNothingIsLeftBehind() async throws {
+            let r = try await opencodeRun()
+            defer { r.gateway.stop() }
+            try r.put("ignoreterm")
+            let report = try await r.run(timeout: 3) { $0.killGrace = 1 }
+            #expect(r.fx.transcript(r.id).filter { $0["type"]?.stringValue == "step_start" }.count == 1, "it reached its hang")
+            #expect(report.result == .timedOut, "\(report.result)")
+            let ended = try #require(r.ended().first)
+            #expect(r.ended().count == 1, "one turn.ended per turn.started")
+            #expect(ended.data["escalated_to_kill"] == .bool(true), "SIGTERM was ignored, so SIGKILL was needed: \(ended.data)")
+            let child = try #require(r.childPID(), "the fake started a background child that also ignores SIGTERM")
+            #expect(kill(child, 0) != 0, "the child was killed too, not left running")
             let worktree = r.fx.project.worktreesDirectory.appendingPathComponent(r.id)
             #expect(OrphanSweeper.orphans(inside: worktree).isEmpty, "no process of the turn is left")
             #expect(try await refusesConnections(try r.forwarderPort()), "and the forwarder is stopped")
