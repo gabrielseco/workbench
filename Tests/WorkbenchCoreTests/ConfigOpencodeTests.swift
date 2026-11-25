@@ -48,7 +48,17 @@ import Testing
         #expect(found.count == 1 && found[0].contains("[providers.opencode]") && found[0].contains("base_url"), "\(found)")
     }
 
-    @Test(arguments: ["run", "judge", "review", "goal"])
+    @Test func theCodingRoleCanRunOnOpencodeWithTheGatewayAndNoEffort() throws {
+        let config = try parse(Self.gateway + "[agents.run]\nprovider = \"opencode\"\nmodel = \"sonnet-claude\"")
+        #expect(config.resolvedRunAgent().provider == .opencode && config.resolvedRunAgent().model == "sonnet-claude")
+        #expect(config.resolvedJudgeAgent().provider == .claude, "no other role moves")
+        let found = problems(Self.gateway + "[agents.run]\nprovider = \"opencode\"\nreasoning_effort = \"high\"")
+        #expect(found.count == 1 && found[0].contains("reasoning_effort") && found[0].contains("opencode"), "\(found)")
+        let noGateway = problems("[agents.run]\nprovider = \"opencode\"")
+        #expect(noGateway.count == 1 && noGateway[0].contains("[providers.opencode]"), "\(noGateway)")
+    }
+
+    @Test(arguments: ["judge", "review", "goal"])
     func aRoleNotYetProvenOnOpencodeIsRefusedAtLoadNotAtRunTime(role: String) {
         let found = problems(Self.gateway + "[agents.\(role)]\nprovider = \"opencode\"")
         #expect(found.count == 1 && found[0].contains("cannot use \"opencode\" yet"), "\(role): \(found)")

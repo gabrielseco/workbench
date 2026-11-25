@@ -215,7 +215,9 @@ public struct ThreadService: Sendable {
         let agent = config?.resolvedRunAgent(goalModel: file.goal.model)
             ?? ResolvedAgent(provider: .claude, model: file.goal.model, allowUnpriced: false)
         // The run would refuse this goal, so say so now rather than after the approval.
-        if agent.provider == .codex, file.goal.budgetUSD != nil { throw ThreadServiceError.budgetNeedsCap(provider: "codex") }
+        if agent.provider != .claude, file.goal.budgetUSD != nil {
+            throw ThreadServiceError.budgetNeedsCap(provider: "\(agent.provider)")
+        }
         let binding = ApprovedAgent(agent, spendPolicy: file.goal.spendPolicyName)
         // An unchanged goal is approved already; it is approved again only for coding settings it was not approved for.
         if file.goal.approval == .approved, store.state(of: id).approvedAgent == binding { return file }

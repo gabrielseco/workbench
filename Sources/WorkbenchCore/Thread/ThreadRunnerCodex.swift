@@ -9,15 +9,20 @@ extension ThreadRunner {
 
     /// Refuses, before anything is touched, what the coding provider cannot do. Claude can do all of it.
     static func requireProviderCanCode(agent: ResolvedAgent, goal: Goal, options: RunOptions) throws {
-        guard agent.provider == .codex else { return }
+        guard agent.provider != .claude else { return }
+        // OpenCode has no sandbox of its own: a coding turn runs under macOS's `sandbox-exec`, so it cannot run anywhere else.
+        if agent.provider == .opencode, OpencodeSandbox.userDirectories() == nil {
+            throw RunnerError.codingUnsupported(
+                "opencode cannot confine a shell by itself; its coding turns run under macOS's sandbox, which this machine lacks")
+        }
         if goal.budgetUSD != nil {
             throw RunnerError.codingUnsupported(
-                "codex cannot enforce a dollar limit, and this goal has a budget_usd. Change the goal to "
+                "\(agent.provider) cannot enforce a dollar limit, and this goal has a budget_usd. Change the goal to "
                     + "`spend_policy: timeout_only` (and remove budget_usd), then run `workbench goal approve` again.")
         }
         if options.budgetOverride != nil {
             throw RunnerError.invalidBudget(
-                "codex has no dollar cap, so there is no budget to override; the turn is bounded by its timeout "
+                "\(agent.provider) has no dollar cap, so there is no budget to override; the turn is bounded by its timeout "
                     + "(turn_timeout_min in the goal)")
         }
     }
@@ -48,7 +53,7 @@ extension ThreadRunner {
     func codexRerun(
         store: ThreadStore, lastTurn: Int, config: Config, goal: Goal
     ) -> (feedback: String?, check: CheckAttachment?)? {
-        guard lastTurn > 0, config.resolvedRunAgent(goalModel: goal.model).provider == .codex else { return nil }
+        guard lastTurn > 0, config.resolvedRunAgent(goalModel: goal.model).provider != .claude else { return nil }
         guard let check = store.state(of: threadID).review.check, check.result != "passed" else { return (nil, nil) }
         let output = CheckAttachment.load(
             from: project.checkOutputURL(threadID, turn: check.turn), turn: check.turn, result: check.result,
