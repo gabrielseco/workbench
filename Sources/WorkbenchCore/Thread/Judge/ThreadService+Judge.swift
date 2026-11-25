@@ -195,7 +195,8 @@ extension ThreadService {
         }
         attach(execution)
         let completion = await execution.completion
-        try await attempts.end(attempt, AttemptLog.outcome(of: completion.process, failure: completion.failure))
+        let end = Self.judgeAttemptEnd(completion, provider: agent.provider)
+        try await attempts.end(attempt, end.outcome, reason: end.reason)
         if let why = Self.judgeProcessProblem(completion.process, timeout: timeout, name: "\(agent.provider)") {
             return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: shown)
         }
@@ -205,12 +206,13 @@ extension ThreadService {
         var written: String?
         if case .file(let url)? = completion.answer { written = Self.readAnswer(url) }
         guard let answer = completion.summary ?? written else {
-            var failure = "the verdict was not usable: no result"
-            // A Codex run that wrote no answer file is named by the file it was asked for, not by "no result".
-            if let file = request.answerFile {
-                failure = "the verdict was not usable: \(agent.provider) left no answer in \(file.path)"
-            }
-            return try await recordJudge(log, agent: agent, turn: turn, failure: failure, argv: shown)
+            let why = Self.judgeNoAnswer(provider: agent.provider, answerFile: request.answerFile)
+            return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: shown)
+        }
+        // Text from a turn the provider did not report as finished is not a verdict (OpenCode's stream without its final stop is `unknown`).
+        guard completion.provider == .succeeded else {
+            let why = "\(agent.provider) did not finish its turn, so there is no verdict"
+            return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: shown)
         }
         do {
             let verdict = try Judge.verdict(fromAnswer: answer, criteria: goal.criteria)
@@ -227,6 +229,19 @@ extension ThreadService {
         data["provider"] = .string("\(agent.provider)")
         data["model"] = agent.model.map { .string($0) } ?? .null
         return data
+    }
+
+    /// How the judge's attempt ended: a success only if the provider said it finished. A clean exit from an unfinished stream is not one.
+    static func judgeAttemptEnd(_ completion: AgentCompletion, provider: AgentProviderID) -> (outcome: String, reason: String?) {
+        let outcome = AttemptLog.outcome(of: completion.process, failure: completion.failure)
+        guard outcome == "succeeded", completion.provider != .succeeded else { return (outcome, nil) }
+        return ("failed", "\(provider) did not finish its turn")
+    }
+
+    /// Why there is no verdict when the turn left no answer. A Codex run that wrote no answer file is named by the file it was asked for.
+    static func judgeNoAnswer(provider: AgentProviderID, answerFile: URL?) -> String {
+        guard let answerFile else { return "the verdict was not usable: no result" }
+        return "the verdict was not usable: \(provider) left no answer in \(answerFile.path)"
     }
 
     private static func judgeFailureText(_ error: Error) -> String {

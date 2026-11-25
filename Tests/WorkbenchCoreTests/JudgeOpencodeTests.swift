@@ -60,6 +60,7 @@ private func opencodeJudged(answer: String? = oneCriterion, screenshots: Bool = 
         text=$(sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g' "$D/answer" 2>/dev/null | tr -d '\\n')
         echo '{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}'
         echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"'"$text"'"}}'
+        [ -f "$D/nostop" ] && exit 0
         echo '{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"stop","cost":0.07,"tokens":{"input":100,"output":30}}}'
         """.write(to: script, atomically: true, encoding: .utf8)
     chmod(script.path, 0o755)
@@ -144,6 +145,20 @@ private func opencodeJudged(answer: String? = oneCriterion, screenshots: Bool = 
         let short = try await j.judge(again: true, environment: j.env(key: "short"))
         #expect(short.failure?.contains("shorter than 8") == true, "\(String(describing: short.failure))")
         #expect(j.runs == 0)
+    }
+
+    @Test func aValidVerdictFromATurnThatNeverFinishedIsNoVerdict() async throws {
+        let j = try await opencodeJudged()
+        try "".write(to: j.dir.appendingPathComponent("nostop"), atomically: true, encoding: .utf8)
+        let result = try await j.judge()
+        // The text is a well-formed verdict, but the stream stopped short of its final stop, and exit 0 with empty stderr said nothing else.
+        #expect(result.verdict == nil, "an answer from a turn that did not finish is not used")
+        #expect(result.failure?.contains("did not finish its turn") == true, "\(String(describing: result.failure))")
+        let ran = try #require(j.events.last { $0.kind == .judgeRan })
+        #expect(ran.data["ok"] == false, "the record says so, and not ok: true")
+        let ended = try #require(j.events.last { $0.kind == .agentAttemptEnded })
+        #expect(ended.data["outcome"] != "succeeded", "nor is the attempt recorded as a success: \(ended.data)")
+        #expect(j.runs == 1)
     }
 
     @Test func anAnswerThatIsNotAVerdictIsAFailureNotAGuess() async throws {
