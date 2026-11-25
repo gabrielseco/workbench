@@ -167,6 +167,16 @@ private func opencodeJudged(answer: String? = oneCriterion, screenshots: Bool = 
         #expect(result.verdict == nil && result.failure?.contains("verdict was not usable") == true)
     }
 
+    @Test func aJudgeThatFailsAfterAPaidStepStillRecordsWhatItCost() async throws {
+        let j = try await opencodeJudged(answer: "Looks good to me.")
+        let result = try await j.judge()
+        #expect(result.verdict == nil)
+        #expect(result.costUSD == 0.07, "the spend is in the result: \(String(describing: result.costUSD))")
+        let ran = try #require(j.events.last { $0.kind == .judgeRan })
+        #expect(ran.data["ok"] == false)
+        #expect(ran.data["cost_usd"] == .double(0.07), "and on the record, so failed judgments do not hide it: \(ran.data)")
+    }
+
     @Test func aMissingOpencodeIsAJudgeFailureAndNothingStarts() async throws {
         var j = try await opencodeJudged()
         j.config.agents.executables[.opencode] = "/nonexistent/opencode"

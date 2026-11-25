@@ -195,31 +195,31 @@ extension ThreadService {
         }
         attach(execution)
         let completion = await execution.completion
+        // What the turn cost is spent whatever came of it: a failure after a paid step records it too.
+        func noVerdict(_ why: String) async throws -> JudgeResult {
+            try await recordJudge(log, agent: agent, turn: turn, cost: completion.usage?.costUSD, failure: why, argv: shown)
+        }
         let end = Self.judgeAttemptEnd(completion, provider: agent.provider)
         try await attempts.end(attempt, end.outcome, reason: end.reason)
         if let why = Self.judgeProcessProblem(completion.process, timeout: timeout, name: "\(agent.provider)") {
-            return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: shown)
+            return try await noVerdict(why)
         }
-        if let failure = completion.failure {
-            return try await recordJudge(log, agent: agent, turn: turn, failure: failure.message, argv: shown)
-        }
+        if let failure = completion.failure { return try await noVerdict(failure.message) }
         var written: String?
         if case .file(let url)? = completion.answer { written = Self.readAnswer(url) }
         guard let answer = completion.summary ?? written else {
-            let why = Self.judgeNoAnswer(provider: agent.provider, answerFile: request.answerFile)
-            return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: shown)
+            return try await noVerdict(Self.judgeNoAnswer(provider: agent.provider, answerFile: request.answerFile))
         }
         // Text from a turn the provider did not report as finished is not a verdict (OpenCode's stream without its final stop is `unknown`).
         guard completion.provider == .succeeded else {
-            let why = "\(agent.provider) did not finish its turn, so there is no verdict"
-            return try await recordJudge(log, agent: agent, turn: turn, failure: why, argv: shown)
+            return try await noVerdict("\(agent.provider) did not finish its turn, so there is no verdict")
         }
         do {
             let verdict = try Judge.verdict(fromAnswer: answer, criteria: goal.criteria)
             return try await recordJudge(
                 log, agent: agent, turn: turn, verdict: verdict, cost: completion.usage?.costUSD, argv: shown)
         } catch {
-            return try await recordJudge(log, agent: agent, turn: turn, failure: "\(error)", argv: shown)
+            return try await noVerdict("\(error)")
         }
     }
 
