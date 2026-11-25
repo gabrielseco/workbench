@@ -2,12 +2,17 @@ import Foundation
 
 extension ThreadService {
     static func agentMissing(_ executable: String, provider: AgentProviderID) -> String {
-        "`\(executable)` was not found: install \(provider == .codex ? "Codex" : "Claude Code") or put it on PATH"
+        let product = switch provider {
+        case .codex: "Codex"
+        case .opencode: "OpenCode"
+        default: "Claude Code"
+        }
+        return "`\(executable)` was not found: install \(product) or put it on PATH"
     }
 
     /// What the reviewer is asked and bounded by: read-only, its answer in the round's folder beside the checkout,
-    /// never inside it. Codex works inside the checkout and writes its answer to a file; Claude has only `Read`, in
-    /// the round's folder (brief, diff and checkout), and its answer text is written to the same file afterwards.
+    /// never inside it. Codex works inside the checkout and writes its answer to a file; Claude and OpenCode can only read, in
+    /// the round's folder (brief, diff and checkout), and their answer text is written to the same file afterwards.
     func reviewRequest(_ round: PRReviewRound, proof: [String]) -> AgentRequest {
         // A refused spend never reaches here as a request that runs: `runRound` refuses it first.
         let capabilities = round.makeProvider()?.capabilities ?? AgentCapabilities(policies: [], resume: .none)
@@ -15,6 +20,15 @@ extension ThreadService {
         let limits = AgentLimits(
             timeout: round.settings.timeout, maxLineBytes: 1 << 20, maxOutputBytes: PRReview.transcriptLimit)
         let images = proof.map { URL(fileURLWithPath: $0) }
+        if round.agent.provider == .opencode {
+            return AgentRequest(
+                provider: .opencode, model: round.agent.model,
+                prompt: PRReview.instruction(
+                    brief: round.paths.brief.lastPathComponent, checkout: round.paths.tree.lastPathComponent, task: round.task),
+                images: images, workingDirectory: round.paths.folder, outputDirectory: round.paths.folder,
+                policy: .readOnlyEvidence, spend: spend, purpose: .review, environment: round.settings.environment,
+                limits: limits, answerFile: round.paths.answer, reasoningEffort: round.agent.reasoningEffort)
+        }
         if round.agent.provider == .claude {
             return AgentRequest(
                 provider: .claude, model: round.agent.model,
@@ -99,6 +113,11 @@ extension ThreadService {
             }
             if let failure = completion.failure {
                 return AgentRunReport(text: transcript, problem: failure.message, costUSD: cost)
+            }
+            // Text from a turn the provider did not report as finished is not a review (OpenCode's stream with no final stop).
+            if completion.summary != nil, completion.provider != .succeeded {
+                return AgentRunReport(
+                    text: transcript, problem: "\(name) did not finish its turn, so there is no review", costUSD: cost)
             }
             if let text = completion.summary, let file = request.answerFile {
                 try? text.write(to: file, atomically: true, encoding: .utf8)

@@ -61,7 +61,16 @@ import Testing
         #expect(noGateway.count == 1 && noGateway[0].contains("[providers.opencode]"), "\(noGateway)")
     }
 
-    @Test(arguments: ["review", "goal"])
+    @Test func theReviewRoleAndItsStagesCanRunOnOpencode() {
+        let found = problems(Self.gateway + "[agents.review]\nprovider = \"opencode\"\nmodel = \"sonnet-claude\"")
+        #expect(found.isEmpty, "\(found)")
+        let stage = problems(Self.gateway + "[review.stage.pr-review]\nprovider = \"opencode\"\nmodel = \"sonnet-claude\"")
+        #expect(stage.isEmpty, "a stage may choose it too: \(stage)")
+        let reasoning = problems(Self.gateway + "[agents.review]\nprovider = \"opencode\"\nreasoning_effort = \"high\"")
+        #expect(reasoning.count == 1 && reasoning[0].contains("reasoning_effort"), "refused like the other roles: \(reasoning)")
+    }
+
+    @Test(arguments: ["goal"])
     func aRoleNotYetProvenOnOpencodeIsRefusedAtLoadNotAtRunTime(role: String) {
         let found = problems(Self.gateway + "[agents.\(role)]\nprovider = \"opencode\"")
         #expect(found.count == 1 && found[0].contains("cannot use \"opencode\" yet"), "\(role): \(found)")

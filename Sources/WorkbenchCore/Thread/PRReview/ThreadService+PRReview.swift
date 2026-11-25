@@ -135,8 +135,7 @@ extension ThreadService {
 
         try FileManager.default.createDirectory(at: paths.folder, withIntermediateDirectories: true)
         let argv =
-            (try? context.makeProvider()?
-                .invocation(for: reviewRequest(context, proof: (try? context.proof?.get()) ?? [])).displayArguments) ?? []
+            (try? context.displayArguments(for: reviewRequest(context, proof: (try? context.proof?.get()) ?? []))) ?? []
 
         // The attempt is on record before anything is spent, and this process is the thread's live holder while it
         // runs (`stop` reaches it; a run or another review is refused).
@@ -174,16 +173,7 @@ extension ThreadService {
         // A stage that asked for proof and has none must not pass on the diff alone.
         var proof: [String] = []
         let reviews = round.task == .review
-        // Claude takes no images and there is no text substitute: say so before the proof itself is looked for.
-        if reviews, round.agent.provider == .claude, round.stage.config.needsProof {
-            let why =
-                "claude cannot take images, and there is no text substitute for visual evidence: "
-                + "the \(round.stage.name) stage reads proof, so it cannot run on claude"
-            do { try await round.attempts?.refused(why) } catch {
-                return outcome.failed("\(why); the refusal could not be recorded: \(error)")
-            }
-            return outcome.failed(why)
-        }
+        if reviews, let refused = await refuseProofWithoutImages(round, outcome) { return refused }
         switch round.proof {
         case .failure(let reason): return outcome.failed(reason)
         case .success(let files): proof = files
@@ -262,7 +252,7 @@ extension ThreadService {
             }
             return outcome.failed(why)
         }
-        guard let provider = round.makeProvider() else { return await refuse("there is no adapter for \(round.agent.provider)") }
+        guard var provider = round.makeProvider() else { return await refuse("there is no adapter for \(round.agent.provider)") }
         if case .failure(let failure) = round.spend(capabilities: provider.capabilities) { return await refuse(failure.message) }
         guard ExecutableResolver.resolve(round.executable, searchPath: round.settings.environment["PATH"]) != nil else {
             return await refuse(Self.agentMissing(round.executable, provider: round.agent.provider))
@@ -271,6 +261,12 @@ extension ThreadService {
         if let refusal = request.validate(against: provider) { return await refuse(refusal.message) }
 
         if round.settings.stopRequested() { return outcome.failed("the review was stopped") }
+        // An OpenCode review reads a diff that may be hostile and says what it likes: the key stays in a forwarder for the turn.
+        var gateway: OpencodeGatewaySession?
+        defer { gateway?.stop() }
+        if round.agent.provider == .opencode {
+            do { (gateway, provider) = try Self.startGateway(round) } catch { return await refuse("\(error)") }
+        }
         round.setupDone?()
         let transcript = await runAgent(provider, request: request, round: round, attach: attach)
         try? transcript.text.write(to: paths.transcript, atomically: true, encoding: .utf8)
@@ -297,6 +293,25 @@ extension ThreadService {
         outcome.verdict = verdict
         outcome.findings = answer
         return outcome
+    }
+
+    /// A stage that reads screenshots cannot run on a provider that takes no images, and there is no text substitute: said before the
+    /// proof itself is looked for. Nil when the round may go on.
+    private func refuseProofWithoutImages(_ round: PRReviewRound, _ outcome: PRReviewOutcome) async -> PRReviewOutcome? {
+        guard [.claude, .opencode].contains(round.agent.provider), round.stage.config.needsProof else { return nil }
+        var outcome = outcome
+        let why =
+            "\(round.agent.provider) cannot take images, and there is no text substitute for visual evidence: "
+            + "the \(round.stage.name) stage reads proof, so it cannot run on \(round.agent.provider)"
+        do { try await round.attempts?.refused(why) } catch {
+            return outcome.failed("\(why); the refusal could not be recorded: \(error)")
+        }
+        return outcome.failed(why)
+    }
+
+    private static func startGateway(_ round: PRReviewRound) throws -> (OpencodeGatewaySession, OpencodeProvider) {
+        let session = try OpencodeGatewaySession.start(config: round.config, environment: round.settings.environment)
+        return (session, session.provider)
     }
 
     /// What the round's brief file says: the stage's review brief, or the explanation asked for.
