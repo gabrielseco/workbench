@@ -389,6 +389,42 @@ private func refusal(_ provider: OpencodeProvider, _ request: AgentRequest) -> A
         #expect(answer.contains("alpha beta"))
     }
 
+    @Test func aLostAnswerLineBeforeTheFinalStopIsNotASuccessButALostToolLineIs() throws {
+        func lost(_ kind: String) -> [AgentActivity] {
+            var d = OpencodeDecoder(purpose: .review, maxRawBytes: 4096)
+            return d.consume(oversizedPreview: #"{"type":"\#(kind)","sessionID":"ses_1","part":{"#, totalBytes: 2_000_000)
+        }
+        func run(_ kind: String, then final: [String]) -> AgentDecoderResult {
+            var d = OpencodeDecoder(purpose: .review, maxRawBytes: 4096)
+            _ = d.consume(line: text("an earlier message"))
+            _ = d.consume(oversizedPreview: #"{"type":"\#(kind)","sessionID":"ses_1","part":{"#, totalBytes: 2_000_000)
+            for line in final { _ = d.consume(line: line) }
+            return d.finish(exit: exit())
+        }
+        let answer = run("text", then: [finish("stop")])
+        #expect(answer.outcome == .failed && answer.failure?.kind == .protocolError, "the real answer was dropped")
+        let replaced = run("text", then: [text("the answer again"), finish("stop")])
+        #expect(replaced.outcome == .succeeded, "a later text replaces the loss")
+        #expect(run("tool_use", then: [finish("stop")]).outcome == .succeeded, "a big tool output does not fail the turn")
+        #expect(run("step_finish", then: [finish("stop")]).outcome == .succeeded, "a later stop is the end")
+        #expect(run("step_finish", then: []).outcome != .succeeded, "the lost line may have been the stop")
+        #expect(run("something_new", then: [finish("stop")]).outcome == .failed, "an unknown lost line may have been the answer")
+        #expect(!lost("tool_use").isEmpty)
+    }
+
+    @Test func aFinalServiceUnavailableIsTransientAndANoCreditStatusNeedsAFix() throws {
+        func end(_ error: String) throws -> AgentFailure {
+            try #require(decode([#"{"type":"error","error":\#(error)}"#], exit: exit(.exited(1))).result.failure)
+        }
+        let busy = try end(#"{"type":"provider.internal","message":"Service Unavailable","status":503}"#)
+        #expect(busy.kind == .capacity && busy.retry == .transient)
+        #expect(try end(#"{"type":"x","message":"Bad Gateway","status":502}"#).retry == .transient)
+        #expect(try end(#"{"type":"x","message":"Payment Required","status":402}"#).kind == .budgetExceeded)
+        #expect(try end(#"{"type":"x","message":"Forbidden","status":403}"#).kind == .authOrConfig)
+        let ordinary = try end(#"{"type":"x","message":"Bad Request","status":400}"#)
+        #expect(ordinary.retry == .never, "an ordinary 4xx is not worth another try")
+    }
+
     @Test func aProcessThatSaidNothingButFailedKeepsWhatStderrSaid() throws {
         let (_, result) = decode([], exit: exit(.exited(1), tail: "Standalone server exited before reporting readiness"))
         #expect(result.outcome == .unknown)

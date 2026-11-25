@@ -11,12 +11,21 @@ struct OpencodeDecoder: AgentDecoder {
     static let maxRecordedDenials = 100
     static let maxDeniedInputCharacters = 4096
 
+    /// An `error` event: OpenCode's own kind, the gateway's message and the HTTP status when it had one.
+    struct ProviderError: Equatable {
+        var type: String
+        var message: String
+        var status: Int?
+    }
+
     private var session: AgentSessionHandle?
     private var lastText: String?
     private var usage = AgentUsage()
     private var sawUsage = false
     private var finishedWithStop = false
-    private var lastError: (type: String, message: String)?
+    /// A line that may have been the answer was dropped for size, and no later `text` replaced it.
+    private var answerLost = false
+    private var lastError: ProviderError?
     private var denials: [AgentDenial] = []
     private var denialCount = 0
 
@@ -43,6 +52,7 @@ struct OpencodeDecoder: AgentDecoder {
         case "text":
             guard let text = part["text"] as? String else { break }
             lastText = text
+            answerLost = false
             out.append(.text(String(text.prefix(maxRawBytes))))
         case "tool_use":
             out += tool(part)
@@ -51,7 +61,8 @@ struct OpencodeDecoder: AgentDecoder {
         case "error":
             let error = object["error"] as? [String: Any]
             let message = error?["message"] as? String ?? "an error"
-            lastError = (error?["type"] as? String ?? "unknown", message)
+            lastError = ProviderError(
+                type: error?["type"] as? String ?? "unknown", message: message, status: error?["status"] as? Int)
             // An error after a `stop` is the end of the turn, and it is a failure (a `retry` is the event for one OpenCode recovers from).
             finishedWithStop = false
             out.append(.diagnostic(String(message.prefix(maxRawBytes))))
@@ -112,8 +123,19 @@ struct OpencodeDecoder: AgentDecoder {
     }
 
     mutating func consume(oversizedPreview preview: String, totalBytes: Int) -> [AgentActivity] {
-        // The lost line may have been the step that ends the turn; without it the turn is not a success.
-        finishedWithStop = false
+        // Every event starts `{"type":"<kind>"`, so the kept start says what was lost. A tool call or a step start is harmless to the
+        // outcome; a step finish may have been the stop; a text may have been the answer; anything else could be either.
+        let kind = preview.range(of: #"^\{"type":"([a-z_]+)""#, options: .regularExpression).map {
+            String(preview[$0].dropFirst(9).dropLast())
+        }
+        switch kind {
+        case "tool_use", "step_start", "retry": break
+        case "step_finish": finishedWithStop = false
+        case "text": answerLost = true
+        default:
+            answerLost = true
+            finishedWithStop = false
+        }
         return [.diagnostic("A line of \(totalBytes) bytes was over the limit; kept the first \(preview.utf8.count).")]
     }
 
@@ -121,6 +143,14 @@ struct OpencodeDecoder: AgentDecoder {
         let ended = exit.cause == .natural && exit.termination == .exited(0)
         let answer = lastText.map { AgentAnswer.text($0) }
         let counted = sawUsage ? usage : nil
+        if finishedWithStop, answerLost {
+            return AgentDecoderResult(
+                outcome: .failed, answer: answer, session: session, usage: counted,
+                failure: AgentFailure(
+                    .protocolError, "A line of the answer was over the size limit and was dropped, so the answer is incomplete.",
+                    retry: .never),
+                permissionDenials: denials, permissionDenialCount: denialCount)
+        }
         if finishedWithStop {
             return AgentDecoderResult(
                 outcome: ended ? .succeeded : .failed, answer: answer, session: session, usage: counted,
@@ -133,24 +163,27 @@ struct OpencodeDecoder: AgentDecoder {
         }
         return AgentDecoderResult(
             outcome: .failed, answer: answer, session: session, usage: counted,
-            failure: Self.classify(type: lastError.type, message: lastError.message, maxBytes: maxRawBytes),
+            failure: Self.classify(lastError, maxBytes: maxRawBytes),
             permissionDenials: denials, permissionDenialCount: denialCount)
     }
 
     /// What a gateway or provider error means for the person: log in, wait, or change the config.
-    static func classify(type: String, message: String, maxBytes: Int) -> AgentFailure {
+    static func classify(_ error: ProviderError, maxBytes: Int) -> AgentFailure {
+        let (type, message, status) = (error.type, error.message, error.status)
         let text = message.lowercased()
         let shown = String(message.prefix(min(maxBytes, 1024)))
         if text.contains("credit balance") || text.contains("insufficient") || text.contains("exceededbudget")
-            || text.contains("budget has been exceeded") {
+            || text.contains("budget has been exceeded") || status == 402 {
             return AgentFailure(.budgetExceeded, "The gateway refused for lack of credit or budget: \(shown)", retry: .afterFix)
         }
-        if text.contains("401") || text.contains("unauthorized") || text.contains("invalid api key")
+        if status == 401 || status == 403 || text.contains("401") || text.contains("unauthorized")
+            || text.contains("invalid api key")
             || text.contains("authentication") || type.contains("auth") {
             return AgentFailure(.authOrConfig, "The gateway refused the key: \(shown)", retry: .afterFix)
         }
-        if text.contains("rate limit") || text.contains("429") || text.contains("overloaded") || text.contains("capacity")
-            || text.contains("timed out") || text.contains("connection") {
+        let busy = status.map { $0 == 429 || $0 == 408 || (500...599).contains($0) } ?? false
+        if busy || text.contains("rate limit") || text.contains("429") || text.contains("overloaded") || text.contains("capacity")
+            || text.contains("service unavailable") || text.contains("timed out") || text.contains("connection") {
             return AgentFailure(.capacity, "The gateway or its model is busy or unreachable: \(shown)", retry: .transient)
         }
         return AgentFailure(.process, shown, retry: .never)
