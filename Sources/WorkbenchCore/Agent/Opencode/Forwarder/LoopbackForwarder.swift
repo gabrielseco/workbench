@@ -72,6 +72,9 @@ public final class LoopbackForwarder: @unchecked Sendable {
 
     public var isRunning: Bool { lock.withLock { started && !stopped } }
 
+    /// Connections being served now. For tests and for whoever starts the forwarder to check it has let go.
+    var liveConnectionCount: Int { lock.withLock { live } }
+
     private var isStopped: Bool { lock.withLock { stopped } }
 
     #if canImport(Darwin)
@@ -101,6 +104,9 @@ public final class LoopbackForwarder: @unchecked Sendable {
             config.requestCachePolicy = .reloadIgnoringLocalCacheData
             let queue = OperationQueue()
             queue.maxConcurrentOperationCount = 1
+            // Its callbacks must not wait behind whatever else the process is running at the default priority: with that bucket's
+            // threads all blocked (a busy process, or a test run), every forwarder stalled behind them.
+            queue.qualityOfService = .userInitiated
             session = URLSession(configuration: config, delegate: relay, delegateQueue: queue)
             let reader = pipes[0]
             let thread = Thread { [self] in acceptLoop(listener: listener, wake: reader) }
@@ -206,7 +212,7 @@ public final class LoopbackForwarder: @unchecked Sendable {
 
     private func serve(_ client: Int32) {
         defer { close(client) }
-        ForwarderSocket.configure(client, timeout: configuration.clientReadTimeout)
+        ForwarderSocket.configure(client)
         do {
             let (head, leftover) = try readHead(client)
             let upstream = try ForwardPolicy.upstreamURL(base: configuration.upstream, target: head.target)
@@ -232,18 +238,33 @@ public final class LoopbackForwarder: @unchecked Sendable {
             ForwarderSocket.respond(client, status: 503, body: ForwardPolicy.errorBody("the forwarder is stopping"))
             return
         }
-        let exchange = UpstreamRelay.Exchange(client: client)
+        let exchange = UpstreamRelay.Exchange()
         let task = session.dataTask(with: request)
         relay.register(exchange, for: task)
         defer { relay.unregister(task) }
         task.resume()
-        // Until the upstream answer is done: end it when the forwarder stops or the client goes away.
-        while exchange.finished.wait(timeout: .now() + .milliseconds(200)) != .success {
-            if isStopped || ForwarderSocket.hasHungUp(client) {
+        // This thread owns the socket and is the only one that writes it. It writes what the delegate queued, and ends the upstream
+        // request when the forwarder stops, the client goes away or stops reading (a write that makes no progress, or an outbox past
+        // its bound). Once it has cancelled it returns at once and the caller closes the socket: the delegate never touches the
+        // socket, and an exchange that is no longer registered is ignored, so nothing waits for a completion a stopped session may
+        // never deliver.
+        while true {
+            _ = exchange.ready.wait(timeout: .now() + .milliseconds(Int(ForwarderSocket.slice)))
+            let batch = exchange.take()
+            for frame in batch.frames {
+                let written = ForwarderSocket.deliver(
+                    client, frame, stopped: { self.isStopped || exchange.overflowed },
+                    timeout: self.configuration.clientReadTimeout)
+                if !written {
+                    task.cancel()
+                    return
+                }
+            }
+            if exchange.overflowed || (!batch.done && (isStopped || ForwarderSocket.hasHungUp(client))) {
                 task.cancel()
-                _ = exchange.finished.wait(timeout: .now() + .seconds(5))
                 return
             }
+            if batch.done { return }
         }
     }
 

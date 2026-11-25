@@ -103,6 +103,21 @@ private func refusal(_ body: () throws -> Void) -> ForwardPolicy.Refusal? {
         #expect(refusal { _ = try ForwardPolicy.upstreamURL(base: base, target: target) } != nil, "\(target)")
     }
 
+    @Test(arguments: [
+        "/v1/%", "/v1/%z", "/v1/%zz", "/v1/%2", "/v1/a%", "/v1/models?q=%", "/v1/models?q=%g1", "/v1/ü", "/v1/models?q=ü",
+        "/v1/a{b}", "/v1/a\"b", "/v1/a<b>", "/v1/a|b", "/v1/a^b", "/v1/a`b",
+    ])
+    func aTargetThatIsNotValidPercentEncodingIsRefusedAndNeverReachesFoundation(target: String) {
+        // Foundation's percentEncoded setters raise on an invalid string, which would end the process, so it must not get one.
+        let found = refusal { _ = try ForwardPolicy.upstreamURL(base: base, target: target) }
+        #expect(found?.status == 400, "\(target)")
+    }
+
+    @Test(arguments: ["/v1/a%20b", "/v1/models?q=a%20b", "/v1/a%C3%BCb", "/v1/models?q=%41", "/v1/a:b@c", "/v1/models?a=b&c=d;e"])
+    func validPercentEscapesAndTheCharactersAUrlMayHoldAreKept(target: String) throws {
+        #expect(try ForwardPolicy.upstreamURL(base: base, target: target).absoluteString == "https://gw.example\(target)")
+    }
+
     @Test func aBadQueryIsRefusedAndAGoodOneIsKept() throws {
         #expect(refusal { _ = try ForwardPolicy.upstreamURL(base: base, target: "/v1/models?a=b c") }?.status == 400)
         #expect(refusal { _ = try ForwardPolicy.upstreamURL(base: base, target: "/v1/models?a=b#x") }?.status == 400)

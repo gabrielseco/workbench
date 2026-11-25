@@ -13,8 +13,10 @@ private let realKey = "sk-real-gateway-key-0123456789"
 
 #if canImport(Darwin)
     private let streamSocket = SOCK_STREAM
+    private let noSignal: Int32 = 0
 #else
     private let streamSocket = Int32(SOCK_STREAM.rawValue)
+    private let noSignal = Int32(MSG_NOSIGNAL)
 #endif
 
 // MARK: A fake gateway and a raw client, over real loopback sockets
@@ -32,6 +34,8 @@ private enum Reply {
     /// A streamed 200: each chunk is sent as it is reached; `gate`, when set, holds the rest back until the test signals it.
     case stream(first: String, gate: DispatchSemaphore?, rest: String)
     case redirect(String)
+    /// Streams `chunkKilobytes` at a time, every `pauseMs`, until its peer closes the connection, and records that it did.
+    case flood(chunkKilobytes: Int, pauseMs: Int)
     /// Answers nothing, and records whether the forwarder closed the connection (a cancelled request).
     case silent
 }
@@ -86,6 +90,11 @@ private final class FakeGateway: @unchecked Sendable {
 
     private func handle(_ client: Int32) {
         defer { close(client) }
+        // A peer that goes away mid-answer is an error from `send`, not a signal that ends the test process.
+        #if canImport(Darwin)
+            var one: Int32 = 1
+            setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
+        #endif
         guard let request = Self.read(client) else { return }
         lock.withLock { seen.append(request) }
         switch reply(request) {
@@ -100,11 +109,21 @@ private final class FakeGateway: @unchecked Sendable {
             Self.write(
                 client,
                 "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
-            Self.write(client, "\(String(first.utf8.count, radix: 16))\r\n\(first)\r\n")
+            let sent = Self.write(client, "\(String(first.utf8.count, radix: 16))\r\n\(first)\r\n")
             gate?.wait()
-            Self.write(client, "\(String(rest.utf8.count, radix: 16))\r\n\(rest)\r\n0\r\n\r\n")
+            let finished = sent && Self.write(client, "\(String(rest.utf8.count, radix: 16))\r\n\(rest)\r\n0\r\n\r\n")
+            if !finished { lock.withLock { sawClose = true } }
+        case .flood(let chunkKilobytes, let pauseMs):
+            Self.write(
+                client,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+            let chunk = String(repeating: "x", count: chunkKilobytes * 1024)
+            while Self.write(client, "\(String(chunk.utf8.count, radix: 16))\r\n\(chunk)\r\n") {
+                Thread.sleep(forTimeInterval: Double(pauseMs) / 1000)
+            }
+            lock.withLock { sawClose = true }
         case .silent:
-            for _ in 0..<100 {
+            for _ in 0..<400 {
                 var entry = pollfd(fd: client, events: Int16(POLLIN), revents: 0)
                 if poll(&entry, 1, 50) > 0 {
                     var byte: UInt8 = 0
@@ -117,13 +136,18 @@ private final class FakeGateway: @unchecked Sendable {
         }
     }
 
-    private static func write(_ fd: Int32, _ text: String) {
+    @discardableResult
+    private static func write(_ fd: Int32, _ text: String) -> Bool {
         let bytes = Array(text.utf8)
-        var sent = 0
-        while sent < bytes.count {
-            let n = send(fd, bytes, bytes.count - sent, 0)
-            if n <= 0 { return }
-            sent += n
+        return bytes.withUnsafeBufferPointer { buffer -> Bool in
+            var sent = 0
+            while sent < buffer.count {
+                guard let start = buffer.baseAddress else { return true }
+                let n = send(fd, start + sent, buffer.count - sent, noSignal)
+                if n <= 0 { return false }
+                sent += n
+            }
+            return true
         }
     }
 
@@ -235,11 +259,11 @@ private enum Client {
     }
 
     /// One whole request and its answer.
-    static func call(port: Int, _ request: String) -> Answer? {
+    static func call(port: Int, _ request: String, seconds: Double = 8) -> Answer? {
         guard let fd = dial(port) else { return nil }
         defer { close(fd) }
         say(fd, request)
-        return parse(readAll(fd))
+        return parse(readAll(fd, seconds: seconds))
     }
 
     static func post(_ target: String = "/v1/chat/completions", body: String = "{\"x\":1}", extra: [String] = []) -> String {
@@ -278,7 +302,11 @@ private struct Rig {
 
 // MARK: The tests
 
-@Suite struct LoopbackForwarderTests {
+/// Serialized: these tests block their threads (waiting on sockets for seconds), and Swift Testing runs a synchronous test on the
+/// cooperative pool, whose width is the core count. Dozens of them at once leave URLSession (which needs that pool to deliver its
+/// callbacks) nothing to run on, and every forwarder in the process stalls: seen as responses that never come, only in a full parallel
+/// run. One at a time leaves the pool free.
+@Suite(.serialized) struct LoopbackForwarderTests {
     @Test func itListensOnLoopbackOnAnEphemeralPortAndHandsBackTheBaseUrlWithTheUpstreamsPath() throws {
         let rig = try Rig()
         defer { rig.tearDown() }
@@ -393,6 +421,65 @@ private struct Rig {
         #expect(answer.headers["content-length"] == "\(answer.body.count)")
     }
 
+    @Test func aSuccessfulAnswerWhoseHeaderEchoesTheKeyDoesNotCarryItToTheClient() throws {
+        let rig = try Rig()
+        defer { rig.tearDown() }
+        rig.gateway.reply = { _ in .json(status: 200, body: "{}", headers: ["X-Echo": "k=\(realKey)", "X-Other": "fine"]) }
+        let answer = try #require(Client.call(port: rig.port, Client.post()))
+        #expect(answer.status == 200 && answer.headers["x-other"] == "fine")
+        #expect(!(answer.headers["x-echo"] ?? "").contains(realKey), "a 200 is cleaned as an error is: \(answer.headers)")
+        #expect(answer.headers["x-echo"] == "k=[key removed]")
+    }
+
+    @Test func aMalformedTargetOverTheWireIsAnAnswerAndTheServerStaysUp() throws {
+        let rig = try Rig()
+        defer { rig.tearDown() }
+        for target in ["/v1/%", "/v1/models?q=%", "/v1/%zz"] {
+            #expect(Client.call(port: rig.port, Client.get(target))?.status == 400, "\(target)")
+        }
+        #expect(Client.call(port: rig.port, Client.get("/v1/models"))?.status == 200, "still serving")
+        #expect(rig.gateway.requests.count == 1)
+    }
+
+    /// A client that sends its request and then reads nothing, with an answer that never ends.
+    private func stalledClient(_ rig: Rig, pauseMs: Int) throws -> Int32 {
+        rig.gateway.reply = { _ in .flood(chunkKilobytes: 64, pauseMs: pauseMs) }
+        let fd = try #require(Client.dial(rig.port))
+        var small: Int32 = 4096
+        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &small, socklen_t(MemoryLayout<Int32>.size))
+        Client.say(fd, Client.post())
+        #expect(pollUntil { !rig.gateway.requests.isEmpty }, "the request reached the upstream")
+        return fd
+    }
+
+    @Test func aClientThatStopsReadingIsDroppedWhenItsBacklogPassesTheBoundAndTheUpstreamRequestEnds() throws {
+        let rig = try Rig { $0.limits.maxQueuedBytes = 256 * 1024 }
+        defer { rig.tearDown() }
+        let fd = try stalledClient(rig, pauseMs: 0)
+        defer { close(fd) }
+        #expect(pollUntil(seconds: 15) { rig.forwarder.liveConnectionCount == 0 }, "the connection was let go without a stop")
+        let upstreamEnded = pollUntil(seconds: 15) { rig.gateway.connectionWasClosed }
+        #expect(upstreamEnded, "and the upstream request was cancelled, not left to run on")
+        #expect(rig.forwarder.isRunning, "the forwarder itself is untouched")
+        #expect(
+            pollUntil(seconds: 20) { Client.call(port: rig.port, Client.get("/v1/models"), seconds: 3)?.status == 200 },
+            "and serves the next client")
+    }
+
+    @Test func stopEndsAConnectionThatIsBlockedWritingToAClientThatReadsNothing() throws {
+        // Paced, and the backlog bound out of reach: the connection thread is stuck in its write, not dropped for a backlog.
+        let rig = try Rig { $0.limits.maxQueuedBytes = 1024 * 1024 * 1024 }
+        defer { rig.tearDown() }
+        let fd = try stalledClient(rig, pauseMs: 5)
+        defer { close(fd) }
+        Thread.sleep(forTimeInterval: 0.5)
+        #expect(rig.forwarder.liveConnectionCount == 1, "still being served, and stuck")
+        rig.forwarder.stop()
+        let ended = pollUntil(seconds: 15) { rig.forwarder.liveConnectionCount == 0 }
+        #expect(ended, "stop reached the blocked write and ended the connection")
+        #expect(pollUntil(seconds: 15) { rig.gateway.connectionWasClosed }, "and the upstream request")
+    }
+
     @Test func anUpstreamErrorBodyIsBoundedWhenItIsLarge() throws {
         let rig = try Rig { $0.limits.maxErrorBodyBytes = 100 }
         defer { rig.tearDown() }
@@ -419,7 +506,8 @@ private struct Rig {
         Client.say(fd, Client.post())
         #expect(pollUntil { !rig.gateway.requests.isEmpty }, "the request reached the upstream")
         close(fd)
-        #expect(pollUntil { rig.gateway.connectionWasClosed }, "the upstream request was cancelled when the client left")
+        let cancelled = pollUntil(seconds: 15) { rig.gateway.connectionWasClosed }
+        #expect(cancelled, "the upstream request was cancelled when the client left")
     }
 
     @Test func aClientThatSendsNothingIsClosedAfterTheReadTimeout() throws {
@@ -461,7 +549,7 @@ private struct Rig {
         rig.forwarder.stop()
         #expect(!rig.forwarder.isRunning)
         #expect(pollUntil { Client.dial(rig.port) == nil }, "the port refuses connections")
-        #expect(pollUntil { rig.gateway.connectionWasClosed }, "the upstream request was cancelled")
+        #expect(pollUntil(seconds: 15) { rig.gateway.connectionWasClosed }, "the upstream request was cancelled")
         _ = Client.readAll(fd, seconds: 3)
     }
 
@@ -496,9 +584,9 @@ private struct Rig {
     }
 }
 
-/// Polls `condition` for up to five seconds.
-private func pollUntil(_ condition: () -> Bool) -> Bool {
-    let deadline = Date().addingTimeInterval(5)
+/// Polls `condition` for up to `seconds` (five by default).
+private func pollUntil(seconds: Double = 5, _ condition: () -> Bool) -> Bool {
+    let deadline = Date().addingTimeInterval(seconds)
     while Date() < deadline {
         if condition() { return true }
         Thread.sleep(forTimeInterval: 0.05)

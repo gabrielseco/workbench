@@ -23,6 +23,9 @@ public enum ForwardPolicy {
         public var maxTargetBytes = 2 * 1024
         /// A non-2xx answer is buffered to be cleaned of the key before it is passed on; past this it is cut.
         public var maxErrorBodyBytes = 64 * 1024
+        /// What may wait to be written to a client that reads slowly. Past it the client is dropped and the upstream request ended: a
+        /// model's tokens are small, so a backlog this size means the client has stopped reading.
+        public var maxQueuedBytes = 4 * 1024 * 1024
         public init() {}
     }
 
@@ -116,9 +119,10 @@ public enum ForwardPolicy {
             || path.unicodeScalars.contains { $0.value < 0x21 || $0.value == 0x7F }
             || path.split(separator: "/").contains { $0 == "." || $0 == ".." }
         guard !bad else { throw Refusal(403, "the path is not one the forwarder passes on") }
-        if let query, query.unicodeScalars.contains(where: { $0.value < 0x21 || $0.value == 0x7F }) || query.contains("#") {
-            throw Refusal(400, "the query is not valid")
-        }
+        // Foundation's `percentEncoded…` setters raise on a string that is not valid percent-encoding, which would end the process: only
+        // RFC 3986 path and query characters and `%XX` get that far.
+        guard isEncoded(path, allowing: "") else { throw Refusal(400, "the path is not valid percent-encoded text") }
+        if let query, !isEncoded(query, allowing: "?") { throw Refusal(400, "the query is not valid percent-encoded text") }
         guard var parts = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
             throw Refusal(500, "the upstream is not a URL")
         }
@@ -126,6 +130,13 @@ public enum ForwardPolicy {
         parts.percentEncodedQuery = query
         guard let url = parts.url else { throw Refusal(400, "the target is not a URL") }
         return url
+    }
+
+    /// Only unreserved and sub-delimiter characters, `:`, `@`, `/` (and `allowing`), and `%` followed by two hex digits.
+    static func isEncoded(_ text: String, allowing extra: String) -> Bool {
+        let allowed = "A-Za-z0-9._~!$&'()*+,;=:@/\\-" + NSRegularExpression.escapedPattern(for: extra)
+        let pattern = "^(?:[\(allowed)]|%[0-9A-Fa-f]{2})*\\z"
+        return text.range(of: pattern, options: .regularExpression) != nil
     }
 
     /// The headers passed upstream: the ones a model call needs, by name. The client's `Authorization`, cookies and anything that names
@@ -149,6 +160,15 @@ public enum ForwardPolicy {
             "content-length", "content-encoding", "set-cookie", "set-cookie2", "www-authenticate", "authorization", "location",
         ]
         return !drop.contains(name.lowercased())
+    }
+
+    /// An answer's headers as they are passed back: only the ones that may be, with the exact key removed from every value, for a
+    /// success as for an error.
+    public static func cleanedHeaders(_ headers: [(String, String)], key: String) -> [(String, String)] {
+        headers.compactMap { name, value in
+            guard passesBack(name), !value.contains("\r"), !value.contains("\n") else { return nil }
+            return (name, String(decoding: redact(Data(value.utf8), key: key), as: UTF8.self))
+        }
     }
 
     /// `text` with the exact key removed. A key under 8 characters is left alone: it is not one, and removing it would only damage words.
