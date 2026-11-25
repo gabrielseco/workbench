@@ -14,7 +14,7 @@
 # OpenCode's own stream; the file the goal asked for is in the worktree, uncommitted (the sandbox cannot commit: `accept` does); the
 # main checkout is untouched; the key is in no file of the thread; no process of the worktree is left; there is one turn.started and one
 # turn.ended. Then `workbench judge` runs on the same thread, also on OpenCode: it exits 0, judge.ran is ok with provider opencode
-# and the model and a verdict that names the goal's criterion, its logged command names gateway/<model> and not the prompt, no process of
+# and the model and a verdict that names the goal's criterion (`auto_advance` already judged the turn on OpenCode, so it is `--again`), its logged command names gateway/<model> and not the prompt, no process of
 # the worktree is left, and the key is still in no file of the thread. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 leaves
 # [providers.opencode] out, so the doctor, the budget refusal, the unset-key refusal, every step of the real turn and of the judge must FAIL. The frame and
 # the other switches are in lib.sh. Run by hand, not by CI.
@@ -201,7 +201,8 @@ check "the main checkout is untouched" "git status shows changes" main_untouched
 
 # --- the judge on the same thread, also on OpenCode ---------------------------------------------------------------
 
-wb "$T_RUN" judge "$ID" >"$SCRATCH/judge.out" 2>&1
+# `auto_advance` judges a passing turn by itself, on the judge's own provider (so already on OpenCode here): the command asks again.
+wb "$T_RUN" judge "$ID" --again >"$SCRATCH/judge.out" 2>&1
 judge_exit=$?
 head -8 "$SCRATCH/judge.out" | sed 's/^/    /'
 check "judge on opencode: exit 0" "workbench judge exited $judge_exit" test "$judge_exit" = 0
@@ -210,12 +211,14 @@ LOG2=$(wb "$T_WB" log "$ID" --json)
 judge_events() {
     echo "$LOG2" | py "
 r=[e for e in lines if e['kind']=='judge.ran']
-if len(r)!=1: sys.exit('    expected one judge.ran, found %d' % len(r))
-d=r[0]['data']
+if not r: sys.exit('    no judge.ran')
+bad=[e['data'].get('reason') for e in r if e['data'].get('ok') is not True]
+if bad: sys.exit('    a judge.ran is not ok: %s' % bad)
+d=r[-1]['data']
 if d.get('ok') is not True: sys.exit('    judge.ran: ok=%s, reason %s' % (d.get('ok'), d.get('reason')))
 if d.get('provider')!='opencode' or d.get('model')!='$OC_MODEL': sys.exit('    judge.ran names %s / %s' % (d.get('provider'), d.get('model')))
 ids=[c.get('id') for c in d.get('criteria', [])]
-print('    judge.ran ok on opencode, criteria %s, cost %s' % (ids, d.get('cost_usd')))
+print('    %d judge.ran, all ok; the last on opencode, criteria %s, cost %s' % (len(r), ids, d.get('cost_usd')))
 sys.exit(0 if ids==['c1'] else 1)"
 }
 check "judge.ran is ok on opencode with a verdict on c1" "see above" judge_events
