@@ -142,7 +142,6 @@ This is a throwaway thread that tests `workbench plan` on OpenCode; its branch i
 GOAL
 
 start_thread verify-cli-opencode-plan "$GOAL_SRC"
-remove_on_pass branch "$BRANCH"
 PLANS="$THREAD_DIR/plans"
 
 wb "$T_RUN" plan "$ID" --model "$OC_MODEL" >"$SCRATCH/plan.out" 2>&1
@@ -214,6 +213,9 @@ echo "cost of the plan turn: $plan_cost (model $OC_MODEL)"
 wb "$T_WB" abandon "$ID" >/dev/null
 ended=$(wb "$T_WB" status "$ID" --json | py "print(d['ended'] or '')")
 check "thread ended (abandon)" "thread $ID is still active" test -n "$ended"
+
+# A plan turn makes no branch (a coding turn does), so there is only one to remove if something made it.
+branch_exists "$BRANCH" && remove_on_pass branch "$BRANCH"
 
 restore_config
 finish
