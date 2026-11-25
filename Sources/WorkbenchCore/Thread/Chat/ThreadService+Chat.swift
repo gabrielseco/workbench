@@ -86,6 +86,10 @@ extension ThreadService {
             existing = id
         }
         if let refusal = Chat.refusal(history: history, message: text, costUSD: spent, newImages: images.count) { throw refusal }
+        // Before a thread is made or another one abandoned: a request that cannot be served must not cost the person their active thread.
+        if agent.provider == .opencode, !images.isEmpty {
+            throw ChatRefusal.unavailable("opencode cannot take images, and there is no text substitute for them")
+        }
         guard let provider = config.agentProvider(agent.provider) else {
             throw ChatRefusal.unavailable("there is no adapter for \(agent.provider)")
         }

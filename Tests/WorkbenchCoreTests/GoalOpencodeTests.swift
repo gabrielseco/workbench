@@ -106,6 +106,25 @@ private func opencodeDrafting(answer: String = proposalJSON, stops: Bool = true)
         #expect(o.runs == 0 && o.d.threads.isEmpty)
     }
 
+    @Test func aChatScreenshotIsRefusedBeforeTheActiveThreadIsAbandoned() async throws {
+        let o = try await opencodeDrafting()
+        let image = try o.d.image("shot.png")
+        // An active thread that a new chat would have to abandon (the fixture allows one).
+        let drafted = try await o.d.draft(environment: o.environment)
+        let active = try #require(drafted.id)
+        do {
+            _ = try await o.d.fx.service.chat(
+                target: .newThread(name: "idea"), message: "look at this", config: o.d.config, attachments: [image],
+                abandonActive: true, environment: o.environment)
+            Issue.record("a chat with a screenshot started on opencode")
+        } catch let refusal as ChatRefusal {
+            #expect("\(refusal)".contains("opencode cannot take images"), "\(refusal)")
+        }
+        let state = ThreadStore(project: o.d.fx.project).state(of: active)
+        #expect(state.decision == nil, "the active thread was not abandoned")
+        #expect(o.d.threads == [active], "and no chat thread was made: \(o.d.threads)")
+    }
+
     @Test func aChatTurnAndATaskEditRunOnOpencodeBehindTheForwarder() async throws {
         let o = try await opencodeDrafting(answer: "What should happen after the fifth try?")
         let chat = try await o.d.fx.service.chat(
