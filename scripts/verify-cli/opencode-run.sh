@@ -4,7 +4,8 @@
 #   (or directly, in the main checkout, on a clean origin/main with no active thread; VERIFY_CLI_FROM_BRANCH=1 on a branch)
 # Needs macOS (the turn runs under `sandbox-exec`), `opencode` on PATH, the key in $LITELLM_API_KEY (or the variable
 # $VERIFY_CLI_OPENCODE_KEY_ENV names) and the gateway's URL in VERIFY_CLI_OPENCODE_BASE_URL; $VERIFY_CLI_OPENCODE_MODEL is the gateway's
-# model name (default sonnet-claude). The project's .workbench/config.toml gets [providers.opencode] and [agents.run] while it runs and is
+# model name (default sonnet-claude). The project's .workbench/config.toml gets [providers.opencode], [agents.run], [agents.judge] and
+# [agents.review] while it runs and is
 # put back when it ends.
 # Without a turn: doctor must accept the coding role on OpenCode, naming the provider, the model, the missing dollar cap and the stated
 # limit that a coding turn can read files outside its worktree; `goal approve` must refuse a goal with budget_usd, naming opencode and
@@ -15,7 +16,9 @@
 # main checkout is untouched; the key is in no file of the thread; no process of the worktree is left; there is one turn.started and one
 # turn.ended. Then `workbench judge` runs on the same thread, also on OpenCode: it exits 0, judge.ran is ok with provider opencode
 # and the model and a verdict that names the goal's criterion (`auto_advance` already judged the turn on OpenCode, so it is `--again`), its logged command names gateway/<model> and not the prompt, no process of
-# the worktree is left, and the key is still in no file of the thread. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 leaves
+# the worktree is left. Then the work is accepted and `workbench pr-review` reviews the branch on OpenCode too: pr_review.finished is ok
+# with a verdict, provider opencode, the model and a cost, its logged command names gateway/<model>, no process is left, and the key is
+# still in no file of the thread. Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 leaves
 # [providers.opencode] out, so the doctor, the budget refusal, the unset-key refusal, every step of the real turn and of the judge must FAIL. The frame and
 # the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -48,7 +51,7 @@ config() {
     python3 -I - "$BACKUP" "$CFG" "$1" <<'PY'
 import re, sys
 src, dst, extra = sys.argv[1:4]
-drop = {'agents.run', 'agents.judge', 'providers.opencode'}
+drop = {'agents.run', 'agents.judge', 'agents.review', 'providers.opencode'}
 out, skip = [], False
 for line in open(src).read().split('\n'):
     m = re.match(r'^\s*\[([^\[\]]+)\]\s*(#.*)?$', line)
@@ -67,6 +70,9 @@ RUN_ROLE="[agents.run]
 provider = \"opencode\"
 model = \"$OC_MODEL\"
 [agents.judge]
+provider = \"opencode\"
+model = \"$OC_MODEL\"
+[agents.review]
 provider = \"opencode\"
 model = \"$OC_MODEL\""
 RC=0
@@ -236,6 +242,48 @@ check "the judge's logged command names gateway/$OC_MODEL and not the prompt" "s
 left=$( [ -n "$WT" ] && pgrep -fl "$WT")
 check "no process of the worktree left after the judge" "$left" test -z "$left"
 
+# --- the PR review on the same thread, also on OpenCode ----------------------------------------------------------
+
+# The work is accepted (committed), then `pr-review` reviews the thread's own branch, read-only, in a throwaway checkout.
+wb "$T_RUN" accept "$ID" --yes -m "verify-cli: opencode scenario" >"$SCRATCH/accept.out" 2>&1
+accept_exit=$?
+check "the work is accepted" "workbench accept exited $accept_exit" test "$accept_exit" = 0
+wb "$T_RUN" pr-review "$ID" >"$SCRATCH/review.out" 2>&1
+review_exit=$?
+head -8 "$SCRATCH/review.out" | sed 's/^/    /'
+check "pr-review on opencode: exit 0 or 1 (a verdict was reached)" "workbench pr-review exited $review_exit" \
+    bash -c 'test "$1" = 0 || test "$1" = 1' _ "$review_exit"
+
+LOG3=$(wb "$T_WB" log "$ID" --json)
+review_events() {
+    echo "$LOG3" | py "
+f=[e for e in lines if e['kind']=='pr_review.finished']
+if not f: sys.exit('    no pr_review.finished')
+d=f[-1]['data']
+print('    pr_review.finished: ok=%s verdict=%s provider=%s cost=%s' % (d.get('ok'), d.get('verdict'), d.get('provider'), d.get('cost_usd')))
+sys.exit(0 if d.get('ok') is True and d.get('verdict') in ('clean','fix') and d.get('provider')=='opencode' and d.get('model')=='$OC_MODEL' else 1)"
+}
+check "pr_review.finished is ok with a verdict, on opencode and the model" "see above" review_events
+
+review_argv() {
+    echo "$LOG3" | py "
+a=next(e['data']['argv'] for e in lines if e['kind']=='pr_review.started')
+print('    argv: %s' % ' '.join(a[:9]))
+sys.exit(0 if 'gateway/$OC_MODEL' in a and '--standalone' in a and '--auto' not in a else 1)"
+}
+check "the review's logged command names gateway/$OC_MODEL, without --auto" "see above" review_argv
+
+review_cost() {
+    echo "$LOG3" | py "
+c=[e['data'].get('cost_usd') for e in lines if e['kind']=='pr_review.finished'][-1]
+sys.exit(0 if (c or 0) > 0 else 1)"
+}
+check "the review's cost is on record (the gateway reports one)" "pr_review.finished carries no cost" review_cost
+
+# The reviewer ran in the round's folder (brief, diff, checkout), not in the coding worktree.
+left=$(pgrep -fl "$THREAD_DIR/pr-review")
+check "no process of the review's folder left after the review" "$left" test -z "$left"
+
 # The key was in the runner's environment; it must be in nothing the thread kept, nor in the argv.
 key_kept() {
     python3 -I - "$THREAD_DIR" "$KEY_ENV" <<'PY'
@@ -270,6 +318,8 @@ print('%.4f USD over %d turn(s)' % (sum(x.get('cost_usd') or 0 for x in e), len(
 wb "$T_WB" abandon "$ID" >/dev/null
 ended=$(wb "$T_WB" status "$ID" --json | py "print(d['ended'] or '')")
 check "thread ended (abandon)" "thread $ID is still active" test -n "$ended"
+# The accepted thread keeps its worktree (the branch is checked out there): it goes first, then the branch.
+[ -n "$WT" ] && [ -d "$WT" ] && remove_on_pass worktree "$WT"
 branch_exists "$BRANCH" && remove_on_pass branch "$BRANCH"
 
 restore_config

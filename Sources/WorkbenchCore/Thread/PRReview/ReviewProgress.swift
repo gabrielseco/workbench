@@ -34,6 +34,10 @@ public enum ReviewProgress {
     }
 
     static func agentName(_ config: Config, stage: String = ReviewConfig.prReviewStage) -> String {
-        config.resolvedReviewAgent(stage: stage).provider == .claude ? "Claude" : "Codex"
+        switch config.resolvedReviewAgent(stage: stage).provider {
+        case .claude: "Claude"
+        case .opencode: "OpenCode"
+        default: "Codex"
+        }
     }
 }

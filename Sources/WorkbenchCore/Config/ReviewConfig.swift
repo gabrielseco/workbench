@@ -55,6 +55,8 @@ public struct ReviewStageConfig: Sendable, Equatable {
     public var providerIsReviewerAlias = false
     /// Where the stage's `model` is written, for an error found once the provider it inherits is known.
     public var modelLine: Int?
+    /// Where `reasoning_effort` is written, to name it when the provider it is used with turns out to be OpenCode.
+    public var effortLine: Int?
     public var inputs: [ReviewStageInput] = ReviewStageInput.defaults
     /// Globs over the files the pull request changes. Empty means every change.
     public var appliesTo: [String] = []
@@ -189,7 +191,8 @@ extension ReviewConfig {
         for name in config.tables {
             guard let table = document.tables[tablePrefix + name] else { continue }
             var stage = ReviewStageConfig(name: name)
-            stageSettings(table, into: &stage, keys: stageKeys, fail: fail)
+            let gateway = document.tables["providers.opencode"] != nil
+            stageSettings(table, into: &stage, keys: stageKeys, opencodeConfigured: gateway, fail: fail)
             config.definitions[name] = stage
         }
 
@@ -264,7 +267,10 @@ extension ReviewConfig {
         return names
     }
 
-    private static func stageSettings(_ table: TOMLTable, into stage: inout ReviewStageConfig, keys: Set<String>, fail: Fail) {
+    /// `opencodeConfigured`: the document has `[providers.opencode]` (its own keys are checked with the agents tables).
+    private static func stageSettings(
+        _ table: TOMLTable, into stage: inout ReviewStageConfig, keys: Set<String>, opencodeConfigured: Bool = false, fail: Fail
+    ) {
         func path(_ key: String) -> String? {
             guard keys.contains(key), let entry = table.entries[key] else { return nil }
             guard case .string(let value) = entry.value else {
@@ -302,11 +308,13 @@ extension ReviewConfig {
         }
         if keys.contains("provider") {
             let selection = AgentSelection.parse(
-                table, name: "\(tablePrefix)\(stage.name)", role: .review, inheritsProvider: true, fail: fail)
+                table, name: "\(tablePrefix)\(stage.name)", role: .review, inheritsProvider: true,
+                opencodeConfigured: opencodeConfigured, fail: fail)
             stage.provider = selection.provider
             stage.model = selection.model
             stage.reasoningEffort = selection.reasoningEffort
             stage.modelLine = table.entries["model"]?.line
+            stage.effortLine = table.entries["reasoning_effort"]?.line
             stage.allowUnpriced = selection.allowUnpriced
         }
         if keys.contains("reviewer"), let entry = table.entries["reviewer"] {

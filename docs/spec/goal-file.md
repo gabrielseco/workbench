@@ -706,7 +706,7 @@ no effort key. The model and effort are part of what `goal approve` binds, so ch
 goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `judge`, `review` and
 `goal` on `claude` or `codex`, `run` on `claude` only; anything else is refused when the config loads, not ignored, until
 coding on the second provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
-`"opencode"` (P28) is accepted for `run`, `judge`, `plan` and `ship` only, and only with `[providers.opencode]` holding a `base_url`: it takes the
+`"opencode"` (P28) is accepted for `run`, `judge`, `review` (and a review stage's `provider`), `plan` and `ship` only, and only with `[providers.opencode]` holding a `base_url`: it takes the
 gateway's model name in `model` (`sonnet-claude`) and no `reasoning_effort`, and has no dollar cap, so a goal with `budget_usd` is refused by
 `goal approve` and `run` (as on Codex: change it to `spend_policy: timeout_only`) and the other evaluations follow the `allow_unpriced` rule
 above. `plan` and `ship` run with no shell and no edit tool. A **coding turn** (`run`) is one fresh process per turn, like Codex's, and runs
@@ -717,8 +717,10 @@ to start without, or with fewer than 8 characters); the agent's environment hold
 on `turn.ended`; its reads are not confined (a stated limit, `doctor` says so). The **judge** (`workbench judge`) and the other read-only
 turns run with no shell and no edit tool, in an empty folder, and also behind a forwarder, so the key is never in their environment either;
 the judge's last message is its verdict (JSON as text), and a judge whose turn has screenshots is refused for OpenCode, by name, because it
-takes no images and there is no text substitute for them. A role not yet proven on it (review, goal drafting) is refused when the config
-loads, like any other unsupported pair.
+takes no images and there is no text substitute for them. The **PR review** (`pr-review` and its stages) is the same read-only turn, started in the round's folder (brief, diff, checkout) behind a
+forwarder; its last message is the review and must end in the verdict line, and a turn that did not finish is no review. A stage that reads
+`proof` (screenshots) is refused for OpenCode, by name. A role not yet proven on it (goal drafting) is refused when the config loads, like
+any other unsupported pair.
 `allow_unpriced` is for evaluations on a provider without a dollar cap: unset or `true` they run timeout-only,
 `false` refuses them; `[agents.run]` refuses the key, because spending is approved in the goal. A model is resolved per role, and no role inherits another's: for coding the goal's
 `model`, then `[agents.run]`'s; for the judge `judge --model`, then `[agents.judge]`'s; for review the stage's `model`, then

@@ -77,6 +77,13 @@ struct PRReviewRound: Sendable {
         agent.provider == .codex ? CodexProvider(executable: settings.codexPath) : config.agentProvider(agent.provider)
     }
 
+    /// The argv on record: for OpenCode the pure form, since its invocation writes the run's config and profile.
+    func displayArguments(for request: AgentRequest) throws -> [String] {
+        guard let provider = makeProvider() else { return [] }
+        if let opencode = provider as? OpencodeProvider { return try opencode.displayArguments(for: request) }
+        return try provider.invocation(for: request).displayArguments
+    }
+
     func spend(capabilities: AgentCapabilities) -> Result<AgentSpend, AgentFailure> {
         AgentSpendPolicy.spend(
             role: .review, agent: agent, capabilities: capabilities, cap: PRReview.claudeBudgetUSD,
