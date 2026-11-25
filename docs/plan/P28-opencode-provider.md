@@ -9,7 +9,7 @@ write, a turn always ends and says how, and cost is recorded. A project switches
 
 **Status:** task 1 (the spike) done, results in [`P28-capabilities.md`](P28-capabilities.md): OpenCode's rules confine a read-only turn
 (no shell) but not a coding turn (the shell is unconfined), so read-only roles come first; task 1b showed `sandbox-exec` around the whole process does confine a coding turn, with a loopback
-forwarder for the model (seatbelt cannot allow a host). Open: the shell tool's temp directory.
+forwarder for the model (seatbelt cannot allow a host). The temp directory and the Swift toolchain are settled (finding 4).
 
 ## What exists, and what this adds
 
@@ -72,7 +72,7 @@ One PR each, in this order. Task 1 is docs and a script, no product code.
    - *If coding cannot be confined:* OpenCode is read-only roles only (judge, review, plan, goal, verifier) and `run` refuses it with
      a message, until the confinement is solved (a macOS `sandbox-exec` wrapper is the candidate, with its own task).
    - *If it can:* continue as written.
-1b. **Sandbox a coding turn. Done 2026-11-25 except the temp directory.** Probe `sandbox-exec` (a profile that allows writes only to the worktree and a per-thread scratch
+1b. **Sandbox a coding turn. Done 2026-11-25** (Swift toolchain; other ecosystems get their lists as they come). Probe `sandbox-exec` (a profile that allows writes only to the worktree and a per-thread scratch
    directory, denies network and writes under `.git`) around the whole `opencode` process, with the same attacks as task 1, plus the
    toolchain a real check needs (SwiftPM, node, a temp dir, `$HOME` caches, the gateway's HTTPS: network is needed for the model, so the
    profile allows only the gateway's host or a local proxy). Output: a section in `P28-capabilities.md`; if it holds, the profile
