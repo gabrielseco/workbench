@@ -185,7 +185,7 @@ check "the file the goal asked for is in the worktree" "see above" probe_file
 left_uncommitted() {
     local ahead dirty
     ahead=$(git -C "$WT" rev-list --count "origin/main..HEAD" 2>/dev/null || echo "?")
-    dirty=$(git -C "$WT" status --porcelain | grep -c "scratch/opencode-probe.txt")
+    dirty=$(git -C "$WT" status --porcelain --untracked-files=all | grep -c "scratch/opencode-probe.txt")
     echo "    commits ahead of the base: $ahead; the file is listed as changed: $dirty"
     [ "$ahead" = 0 ] && [ "$dirty" = 1 ]
 }
