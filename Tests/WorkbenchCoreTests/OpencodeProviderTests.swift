@@ -179,7 +179,9 @@ private func refusal(_ provider: OpencodeProvider, _ request: AgentRequest) -> A
     @Test func theCapabilitiesSayWhatWasProbedAndNothingMore() {
         let caps = provider().capabilities
         #expect(caps.policies == [.readOnlyEvidence, .scopedCoding] && caps.resume == .none)
-        #expect(caps.reportsUsage && caps.streamsActivity && caps.confinesReads)
+        #expect(caps.reportsUsage && caps.streamsActivity)
+        #expect(caps.confinesReads(for: .readOnlyEvidence), "no shell, and external_directory is denied")
+        #expect(!caps.confinesReads(for: .scopedCoding), "a coding turn has a shell; the sandbox refuses writes, not reads")
         #expect(!caps.hardDollarCap && !caps.imageAttachments && !caps.structuredOutput)
         #expect(provider().id == .opencode)
     }
@@ -316,6 +318,75 @@ private func refusal(_ provider: OpencodeProvider, _ request: AgentRequest) -> A
         #expect(activity.contains(.diagnostic("retry 2: Service Unavailable")))
         #expect(!activity.contains { if case .unknown = $0 { true } else { false } }, "a retry is a known event")
         #expect(result.outcome == .succeeded && result.failure == nil)
+    }
+
+    @Test func aStopFollowedByAnErrorIsAFailureWithItsClassification() throws {
+        let error = #"{"type":"error","error":{"type":"unknown","message":"429 rate limit reached"}}"#
+        let (_, result) = decode([text("done"), finish("stop"), error], exit: exit())
+        #expect(result.outcome == .failed, "the error is the end of the turn, whatever came before it")
+        let failure = try #require(result.failure)
+        #expect(failure.kind == .capacity && failure.retry == .transient)
+    }
+
+    @Test func aStepThatBeganAfterAStopAndNeverFinishedMeansTheTurnDidNotEndThere() {
+        let (_, result) = decode([text("done"), finish("stop"), start()], exit: exit())
+        #expect(result.outcome != .succeeded)
+        let twoStops = [start(), text("done"), finish("stop"), start(), text("more"), finish("stop")]
+        #expect(decode(twoStops).result.outcome == .succeeded, "the last step is what counts")
+    }
+
+    @Test func tokenCountsThatWouldOverflowStopAtTheLargestIntAndNegativeOnesAreIgnored() {
+        let steps = [
+            finish("tool-calls", input: Int.max, output: 1), finish("tool-calls", input: 1, output: -5),
+            finish("stop", input: 7, output: 1),
+        ]
+        let (_, result) = decode(steps)
+        #expect(result.outcome == .succeeded)
+        #expect(result.usage?.inputTokens == Int.max && result.usage?.outputTokens == 2)
+    }
+
+    @Test func aCostThatIsNotFiniteOrNegativeIsIgnoredSoTheLogCanAlwaysEncodeIt() throws {
+        func step(_ cost: String) -> String {
+            let tokens = #"{"input":1,"output":1}"#
+            return #"{"type":"step_finish","sessionID":"s","part":{"reason":"tool-calls","cost":\#(cost),"tokens":\#(tokens)}}"#
+        }
+        let costs = ["0.01", "1e999", "-3", "1e308", "1e308"].map(step)
+        let (_, result) = decode(costs + [finish("stop", cost: 0.02)])
+        let cost = try #require(result.usage?.costUSD)
+        #expect(cost.isFinite && cost >= 0.03)
+        _ = try JSONEncoder().encode(result.usage)
+    }
+
+    // A stream the real binary produced (a read-only turn through the gateway, which answered 503 once and was retried), trimmed of
+    // machine ids and paths. The hand-written streams above are only as right as what was known when they were written.
+    // swiftlint:disable line_length
+    private static let recorded = [
+        #"{"type":"step_start","sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","part":{"sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","type":"step-start"}}"#,
+        #"{"type":"retry","sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","attempt":2,"error":{"type":"provider.internal","message":"Service Unavailable, the authentication database is temporarily unreachable. Please retry shortly.","status":503}}"#,
+        #"{"type":"tool_use","sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","part":{"sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","type":"tool","tool":"execute","state":{"status":"completed","input":{"code":"return await search(\"shell bash run command\")"},"output":"{\"items\":[{\"path\":\"tools.automation.create\",\"description\":\"C"}}}"#,
+        #"{"type":"tool_use","sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","part":{"sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","type":"tool","tool":"read","state":{"status":"completed","input":{"path":"/w/notes.txt"},"output":"Read file /w/notes.txt, lines 1-1\n1: alpha beta"}}}"#,
+        #"{"type":"step_finish","sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","part":{"sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","type":"step-finish","reason":"tool-calls","cost":0.013182,"tokens":{"input":5726,"output":173,"reasoning":0,"cache":{"read":0,"write":0}}}}"#,
+        #"{"type":"step_start","sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","part":{"sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","type":"step-start"}}"#,
+        #"{"type":"text","sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","part":{"sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","type":"text","text":"**notes.txt** contains one line: `alpha beta`.\n\n**Running `ls`:** I couldn't run it. I have no shell or bash tool in this session. My tools are file read, glob, grep, skill loading, and the Code Mode "}}"#,
+        #"{"type":"step_finish","sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","part":{"sessionID":"ses_ded43ea57ffeqJ77bD2kl9OOW6","type":"step-finish","reason":"stop","cost":0.022858,"tokens":{"input":10384,"output":209,"reasoning":0,"cache":{"read":0,"write":0}}}}"#,
+    ]
+    // swiftlint:enable line_length
+
+    @Test func aRealRecordedStreamDecodesToWhatItDid() throws {
+        let (activity, result) = decode(Self.recorded)
+        #expect(result.outcome == .succeeded && result.failure == nil && result.permissionDenialCount == 0)
+        #expect(result.session?.value == "ses_ded43ea57ffeqJ77bD2kl9OOW6")
+        #expect(result.usage?.inputTokens == 5726 + 10384 && result.usage?.outputTokens == 173 + 209)
+        let cost = try #require(result.usage?.costUSD)
+        #expect(abs(cost - (0.013182 + 0.022858)) < 1e-9)
+        #expect(activity.contains(.tool(name: "read", summary: "/w/notes.txt")))
+        let retried = activity.contains {
+            if case .diagnostic(let d) = $0 { d.hasPrefix("retry 2: Service Unavailable") } else { false }
+        }
+        let unknown = activity.contains { if case .unknown = $0 { true } else { false } }
+        #expect(retried && !unknown, "every event of a real stream is understood")
+        guard case .text(let answer)? = result.answer else { Issue.record("no text answer"); return }
+        #expect(answer.contains("alpha beta"))
     }
 
     @Test func aProcessThatSaidNothingButFailedKeepsWhatStderrSaid() throws {

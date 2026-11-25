@@ -60,7 +60,7 @@ public struct OpencodeProvider: AgentProvider {
     public var capabilities: AgentCapabilities {
         AgentCapabilities(
             policies: [.readOnlyEvidence, .scopedCoding], resume: .none, streamsActivity: true, imageAttachments: false,
-            structuredOutput: false, reportsUsage: true, hardDollarCap: false, confinesReads: true)
+            structuredOutput: false, reportsUsage: true, hardDollarCap: false, confinesReads: true, confinesCodingReads: false)
     }
 
     /// `PATH`, `HOME` and the like, and the locale: nothing of the project's `env_pass`, no other provider's key.

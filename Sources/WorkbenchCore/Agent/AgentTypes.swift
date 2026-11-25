@@ -50,11 +50,14 @@ public struct AgentCapabilities: Sendable, Equatable {
     public var hardDollarCap: Bool
     /// Whether a read-only turn cannot read outside the working directory.
     public var confinesReads: Bool
+    /// The same for a coding turn, when it differs: nil means the same as `confinesReads`. OpenCode confines a read-only turn (it has no shell)
+    /// but a coding turn has one, and a sandbox only refuses writes, so it can read what the system lets any process read.
+    public var confinesCodingReads: Bool?
 
     public init(
         policies: Set<AgentPolicy>, resume: AgentResumeSupport, streamsActivity: Bool = false,
         imageAttachments: Bool = false, structuredOutput: Bool = false, reportsUsage: Bool = false,
-        hardDollarCap: Bool = false, confinesReads: Bool = false
+        hardDollarCap: Bool = false, confinesReads: Bool = false, confinesCodingReads: Bool? = nil
     ) {
         self.policies = policies
         self.resume = resume
@@ -64,6 +67,11 @@ public struct AgentCapabilities: Sendable, Equatable {
         self.reportsUsage = reportsUsage
         self.hardDollarCap = hardDollarCap
         self.confinesReads = confinesReads
+        self.confinesCodingReads = confinesCodingReads
+    }
+
+    public func confinesReads(for policy: AgentPolicy) -> Bool {
+        policy == .scopedCoding ? confinesCodingReads ?? confinesReads : confinesReads
     }
 }
 

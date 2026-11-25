@@ -38,7 +38,8 @@ struct OpencodeDecoder: AgentDecoder {
         let part = object["part"] as? [String: Any] ?? [:]
         switch type {
         case "step_start":
-            break
+            // A step began after a `stop`: the turn did not end there, and only a later `stop` can end it.
+            finishedWithStop = false
         case "text":
             guard let text = part["text"] as? String else { break }
             lastText = text
@@ -51,6 +52,8 @@ struct OpencodeDecoder: AgentDecoder {
             let error = object["error"] as? [String: Any]
             let message = error?["message"] as? String ?? "an error"
             lastError = (error?["type"] as? String ?? "unknown", message)
+            // An error after a `stop` is the end of the turn, and it is a failure (a `retry` is the event for one OpenCode recovers from).
+            finishedWithStop = false
             out.append(.diagnostic(String(message.prefix(maxRawBytes))))
         case "retry":
             // OpenCode retries a transient gateway error itself (a 503 was seen); the turn that follows is the one that counts.
@@ -87,11 +90,20 @@ struct OpencodeDecoder: AgentDecoder {
     private mutating func finish(_ part: [String: Any]) -> [AgentActivity] {
         let tokens = part["tokens"] as? [String: Any]
         let cache = tokens?["cache"] as? [String: Any]
-        func add(_ old: Int?, _ new: Int?) -> Int? { new.map { (old ?? 0) + $0 } ?? old }
+        // Counts come from the gateway: a negative one is ignored and a sum that would overflow stops at the largest Int, so a bad
+        // response cannot trap the process. A cost that is not finite would not encode in the log, so it is ignored.
+        func add(_ old: Int?, _ new: Int?) -> Int? {
+            guard let new, new >= 0 else { return old }
+            let (sum, overflow) = (old ?? 0).addingReportingOverflow(new)
+            return overflow ? Int.max : sum
+        }
         usage.inputTokens = add(usage.inputTokens, tokens?["input"] as? Int)
         usage.outputTokens = add(usage.outputTokens, tokens?["output"] as? Int)
         usage.cachedInputTokens = add(usage.cachedInputTokens, cache?["read"] as? Int)
-        if let cost = part["cost"] as? Double { usage.costUSD = (usage.costUSD ?? 0) + cost }
+        if let cost = part["cost"] as? Double, cost.isFinite, cost >= 0 {
+            let sum = (usage.costUSD ?? 0) + cost
+            usage.costUSD = sum.isFinite ? sum : usage.costUSD
+        }
         sawUsage = true
         // A later step supersedes an earlier error: OpenCode retries, and the turn that ends in `stop` is the one that counts.
         finishedWithStop = part["reason"] as? String == "stop"
