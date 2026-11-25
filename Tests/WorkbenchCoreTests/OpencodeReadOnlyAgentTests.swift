@@ -32,6 +32,13 @@ private struct Fixture {
               ev '{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}'
               ev '{"type":"error","sessionID":"ses_1","error":{"type":"provider.internal","message":"Service Unavailable","status":503}}'
               exit 1 ;;
+            *MODE-PAIDFAIL*)
+              ev '{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"tool-calls","cost":0.4,"tokens":{"input":50,"output":5}}}'
+              ev '{"type":"error","sessionID":"ses_1","error":{"type":"provider.internal","message":"Service Unavailable","status":503}}'
+              exit 1 ;;
+            *MODE-PAIDHANG*)
+              ev '{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"tool-calls","cost":0.3,"tokens":{"input":50,"output":5}}}'
+              exec sleep 30 ;;
             *MODE-NOSTOP*)
               ev '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"half an answer"}}' ;;
             *MODE-HANG*)
@@ -92,6 +99,19 @@ private struct Fixture {
         #expect(answer.text == nil)
         let why = try #require(answer.failure)
         #expect(why.contains("busy or unreachable") && why.contains("Service Unavailable"), "\(why)")
+    }
+
+    @Test func whatTheGatewayChargedBeforeAFailureGoesWithTheFailure() async throws {
+        let f = try Fixture()
+        defer { f.cleanUp() }
+        let failed = await f.agent().run(f.request("MODE-PAIDFAIL")) { _ in }
+        #expect(failed.text == nil && failed.failure != nil)
+        #expect(failed.costUSD == 0.4, "a paid step before the error is still spent")
+        let timedOut = await f.agent().run(f.request("MODE-PAIDHANG", timeout: 1)) { _ in }
+        #expect(timedOut.failure?.contains("did not answer within 1s") == true)
+        #expect(timedOut.costUSD == 0.3, "and so is one before a timeout")
+        let free = await f.agent().run(f.request("MODE-GATEWAY")) { _ in }
+        #expect(free.costUSD == nil, "no step finished: unknown, never 0")
     }
 
     @Test func aStreamThatNeverEndedItsTurnIsNotAnAnswer() async throws {

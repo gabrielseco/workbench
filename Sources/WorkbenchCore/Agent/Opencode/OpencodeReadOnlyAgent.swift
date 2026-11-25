@@ -38,7 +38,10 @@ public struct OpencodeReadOnlyAgent: ReadOnlyAgent {
     }
 
     public func run(_ request: ReadOnlyRequest, attach: @Sendable (ProcessRun) -> Void) async -> ReadOnlyAnswer {
-        func failed(_ why: String) -> ReadOnlyAnswer { ReadOnlyAnswer(text: nil, costUSD: nil, failure: why) }
+        // What the gateway charged before a turn failed is still spent: it goes with the failure, so the log shows it.
+        func failed(_ why: String, cost: Double? = nil) -> ReadOnlyAnswer {
+            ReadOnlyAnswer(text: nil, costUSD: cost, failure: why)
+        }
         guard let scratch = request.scratch, let agentRequest = agentRequest(for: request) else {
             return failed("opencode has no folder to keep its run in")
         }
@@ -70,14 +73,15 @@ public struct OpencodeReadOnlyAgent: ReadOnlyAgent {
         }
         guard let exit else { return failed("opencode did not report how it ended") }
         let result = decoder.finish(exit: exit)
+        let spent = result.usage?.costUSD
         // What the gateway said explains a failure better than the exit status does; a stop or a timeout is the caller's.
-        if exit.cause == .natural, let failure = result.failure { return failed(failure.message) }
+        if exit.cause == .natural, let failure = result.failure { return failed(failure.message, cost: spent) }
         if let why = ClaudeReadOnlyAgent.problem(exit, timeout: request.timeout, name: "opencode", turn: request.turn) {
-            return failed(why)
+            return failed(why, cost: spent)
         }
-        if let failure = result.failure { return failed(failure.message) }
+        if let failure = result.failure { return failed(failure.message, cost: spent) }
         guard result.outcome == .succeeded, case .text(let text)? = result.answer, !text.isEmpty else {
-            return failed("opencode left no answer")
+            return failed("opencode left no answer", cost: spent)
         }
         return ReadOnlyAnswer(text: text, costUSD: result.usage?.costUSD, failure: nil)
     }

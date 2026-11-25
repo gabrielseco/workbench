@@ -8,12 +8,13 @@
 # .workbench/config.toml gets [providers.opencode] and [agents.plan] while it runs and is put back when it ends.
 # Without a turn: doctor must accept `plan` and `ship` on OpenCode and name the provider, the model and the missing dollar cap on their
 # lines, with no "can read files outside" note (a read-only OpenCode turn cannot); and must refuse, naming the problem, a judge on
-# OpenCode (not yet proven), an agent naming OpenCode with no [providers.opencode], and a base_url that is not http(s).
+# OpenCode (not yet proven), an agent naming OpenCode with no [providers.opencode], and a base_url that is not http(s); with the key's
+# variable unset doctor must name it. 
 # With one read-only plan turn (a few cents): `workbench plan` exits 0, the logged command names gateway/<model> and `--standalone`
 # and not `--auto` or the prompt, plan.ended is ok with a cost above 0 (OpenCode reports one), plans/plan-1.md is non-empty with no machine
 # path, status says generated, the plan opened no numbered turn, and the key is in no file of the thread.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 leaves [providers.opencode]
-# out, so the doctor steps for plan and ship, the plan exit, its events, argv, file, status and turn steps must FAIL. The frame and
+# out, so the doctor steps for plan and ship and for the unset key, the plan exit, its events, argv, file, status and turn steps must FAIL. The frame and
 # the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
@@ -80,6 +81,16 @@ check "doctor's ship line names opencode and the model" "no 'agent ship: opencod
 check "doctor notes there is no dollar cap" "no 'no dollar cap' note" grep -qi "no dollar cap" "$SCRATCH/ok.out"
 check "doctor does not say a read-only opencode turn reads outside its folder" "an unconfined-reads note names opencode" \
     bash -c '! grep -i "can read files outside" "$1" | grep -qi opencode' _ "$SCRATCH/ok.out"
+
+# The key's variable unset: doctor says so by name, before a turn would fail on it.
+config "$GATEWAY
+[agents.plan]
+provider = \"opencode\"
+model = \"$OC_MODEL\""
+( unset "$KEY_ENV"; wb "$T_WB" doctor --base origin/main >"$SCRATCH/nokey.out" 2>&1 ); RC=$?
+grep -E "gateway key|problem" "$SCRATCH/nokey.out" | head -3 | sed 's/^/    /'
+check "doctor says the gateway key variable is not set, by name" "no problem naming \$$KEY_ENV" \
+    bash -c 'grep -q "gateway key from \$$1, which is not set" "$2"' _ "$KEY_ENV" "$SCRATCH/nokey.out"
 
 # --- what is refused, by name ----------------------------------------------------------------------------
 

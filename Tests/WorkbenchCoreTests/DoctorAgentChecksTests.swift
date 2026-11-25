@@ -28,6 +28,37 @@ private func doctorGoal(model: String?) -> DoctorGoal {
     DoctorGoal(thread: "g-1-x", spend: .hardCap(1), turnTimeoutMin: 30, model: model, approvedFor: nil)
 }
 
+@Suite struct DoctorOpencodeKeyTests {
+    private let table = "[providers.opencode]\nbase_url = \"https://gw.example/v1\"\nexecutable = \"/bin/sh\"\n"
+    private let plan = "[agents.plan]\nprovider = \"opencode\"\nmodel = \"m\"\n"
+    private var gateway: String { table + plan }
+
+    @Test func aGatewayWhoseKeyIsNotSetIsAProblemNamingTheVariable() throws {
+        let cfg = try config(present + gateway)
+        let found = issues(Doctor.agents(cfg, searchPath: "/bin", environment: ["PATH": "/bin"]), .plan)
+        let missing = try #require(found.first { $0.kind == "missing_key" })
+        #expect(missing.severity == .problem && missing.message.contains("$LITELLM_API_KEY"), "\(missing.message)")
+        let empty = issues(Doctor.agents(cfg, searchPath: "/bin", environment: ["LITELLM_API_KEY": ""]), .plan)
+        #expect(empty.contains { $0.kind == "missing_key" }, "an empty key is not a key")
+    }
+
+    @Test func theKeyVariableTheConfigNamesIsTheOneChecked() throws {
+        let cfg = try config(present + table + "api_key_env = \"MY_KEY\"\n" + plan)
+        let set = issues(Doctor.agents(cfg, searchPath: "/bin", environment: ["MY_KEY": "k"]), .plan)
+        #expect(!set.contains { $0.kind == "missing_key" })
+        let wrong = issues(Doctor.agents(cfg, searchPath: "/bin", environment: ["LITELLM_API_KEY": "k"]), .plan)
+        #expect(wrong.contains { $0.kind == "missing_key" && $0.message.contains("$MY_KEY") })
+    }
+
+    @Test func aRoleNotOnOpencodeIsNeverToldAboutItsKeyAndAnUnknownEnvironmentChecksNothing() throws {
+        let cfg = try config(present + gateway)
+        let all = Doctor.agents(cfg, searchPath: "/bin", environment: [:])
+        #expect(!all.filter { $0.role != .plan }.flatMap(\.issues).contains { $0.kind == "missing_key" })
+        let unknown = Doctor.agents(cfg, searchPath: "/bin")
+        #expect(!unknown.flatMap(\.issues).contains { $0.kind == "missing_key" }, "no environment given, nothing to check")
+    }
+}
+
 @Suite struct DoctorAgentChecksTests {
     @Test func policyWithoutControls() throws {
         let cfg = try config(present)
