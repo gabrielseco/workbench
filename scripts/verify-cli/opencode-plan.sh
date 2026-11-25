@@ -145,7 +145,7 @@ start_thread verify-cli-opencode-plan "$GOAL_SRC"
 remove_on_pass branch "$BRANCH"
 PLANS="$THREAD_DIR/plans"
 
-wb "$T_RUN" plan "$ID" --model "$OC_MODEL" --budget "$BUDGET_USD" >"$SCRATCH/plan.out" 2>&1
+wb "$T_RUN" plan "$ID" --model "$OC_MODEL" >"$SCRATCH/plan.out" 2>&1
 plan_exit=$?
 head -12 "$SCRATCH/plan.out" | sed 's/^/    /'
 check "plan on opencode: exit 0" "workbench plan exited $plan_exit" test "$plan_exit" = 0
