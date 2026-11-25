@@ -82,6 +82,17 @@ One PR each, in this order. Task 1 is docs and a script, no product code.
    provider with its base URL from the project's `[providers.opencode]` table, the key as `{env:LITELLM_API_KEY}` (never written to
    disk), one model, and the permission rules for the request's policy. Pure function, tested for what it writes per policy, with the
    path and the model name validated before they reach it (`SafeNames`).
+2b. **The loopback forwarder. Built** (`LoopbackForwarder`, `ForwardPolicy`; not started by anything yet). The sandbox can only reach loopback
+   (seatbelt cannot allow a host), so a coding turn's model traffic goes through a local HTTP server that Workbench runs for the turn.
+   It binds `127.0.0.1` on an ephemeral port and forwards only to the one configured upstream, whose scheme, host and port never come from
+   a request: `GET` and `POST` on paths under the base path (`/v1/…`), no dot segments, no encoded dot or slash, no absolute-form target.
+   It adds the key and drops the client's `Authorization`, cookies and everything else not on a short allow-list, so the child gets a
+   placeholder and a shell printing `env` shows `forwarder`. It streams a successful answer as it arrives (the model's tokens are server-sent
+   events), buffers an error answer (bounded) and removes the key from it, and never follows a redirect (that would send the key to a host
+   nobody configured). One request per connection, a cap on live connections, read, write and idle timeouts, bounded head, body and error
+   sizes, and a client that leaves ends the upstream request. `stop()` ends everything, never waits, and is safe to call twice.
+   Proved on the real binary and gateway: a sandboxed coding turn through it wrote its worktree, could not write outside, had no network
+   and no commit, and printed the placeholder for the key. A coding turn can run only once task 5's `run` wiring starts and stops it.
 3. **The adapter and the decoder. Built** (`OpencodeProvider`, `OpencodeDecoder`; not selectable by a role until task 5). `AgentProviderID.opencode`, `OpencodeProvider` (argv, environment allow-list of `PATH`, `HOME`,
    `USER`, `LOGNAME`, `SHELL`, `LANG`, `LC_*`, `TERM` (the set Codex gets), `TMPDIR`, `LITELLM_API_KEY`, and nothing of the project's `env_pass` or another provider's key) and
    `OpencodeDecoder`. The decoder maps `text`, tool parts and `step_finish` to `AgentActivity`, `AgentUsage` and the session handle;
