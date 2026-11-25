@@ -4,7 +4,7 @@ Run 2026-11-25 against OpenCode **v2.4.0**, model `gateway/sonnet-claude` throug
 [`P28-probes/probe.py`](P28-probes/probe.py); raw JSONL of every turn and the result table:
 [`P28-probes/fixtures/`](P28-probes/fixtures/). Each probe is a real turn on a throwaway repo with a tracked, an ignored and a new
 path, a local commit ahead of a bare remote, a secret and a target directory under `$HOME` (not `$TMPDIR`). The outcome is read
-from the filesystem and the remote after the turn, not from what the model said. About 110 turns, about $6.5 (the gateway's Anthropic credit then ran out: `credit balance is too low`, so the last probe did not run).
+from the filesystem and the remote after the turn, not from what the model said. About 110 turns, about $6.5 (the gateway's Anthropic credit ran out once, `credit balance is too low`; after it was topped up the `info-env` probe and the toolchain tests ran).
 
 Every run used an **isolated environment**: `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME` pointed at an empty directory,
 `OPENCODE_CONFIG` pointed at a per-run file holding the provider, the model and the rules, `--standalone`, `--archived`, and an
@@ -93,13 +93,30 @@ What this shows, and what it does not:
    profile or the config. A sandboxed shell can still reach any *other* loopback port (a dev database), which is stated, not solved.
 3. **OpenCode needs `network-bind` on loopback** for its standalone server; without it the run dies with "Standalone server exited
    before reporting readiness" and no other message.
-4. **The shell tool did not use the `TMPDIR` the run was given.** `mktemp -d` and `swiftc` (which writes `xcrun_db-*` under the temp
-   directory) went to the user's real `/var/folders/…/T`, which the profile does not allow. Whether OpenCode's shell resets
-   `TMPDIR` (a login shell, a setting) was not settled: the gateway ran out of credit before the probe that prints the shell's
-   environment (`info-env`) could run. **Open.** The fallbacks, in order: set it where OpenCode reads it, allow writes to the real
-   per-user temp directory (it is shared with other processes, so it is the weaker choice; Codex's profile excludes it on purpose), or
-   wrap the shell command. A real toolchain also needs its caches writable (`~/Library/Caches`, `~/.swiftpm`, `node_modules/.cache`):
-   a list per project, not one profile, and the first Workbench-on-itself run will find the rest.
+4. **Temp directory and toolchain: settled for Swift, 2026-11-25.** The shell tool *does* pass the `TMPDIR` the run was given
+   (`info-env` printed it). What fails is macOS itself: `mktemp -d`, `xcrun` (which `swiftc` calls) and the Clang module cache use the
+   per-user directories from `confstr` (`getconf DARWIN_USER_TEMP_DIR` and `DARWIN_USER_CACHE_DIR`, under `/var/folders/xx/yyy/T` and
+   `/C`), whatever `TMPDIR` says, and Foundation's atomic file writes stage in `<T>/TemporaryItems`. Without these, `swift build` dies with
+   `encountered an I/O error while reading …/output-file-map.json`, which names none of them. With this and nothing wider in the profile
+   (paths computed at run time with `confstr`, never written by hand):
+
+   ```
+   (allow file-write* (regex #"^<T>/(xcrun_db|xcrun_db-|tmp\.)[^/]*") (subpath "<T>/TemporaryItems") (subpath "<C>/clang/ModuleCache"))
+   ```
+
+   the pinned Xcode 26.6 built this repo (`swift build --disable-sandbox`, 25 s), `swift test --disable-sandbox` built and ran a
+   suite (`ConfigRunTests`, 4 tests passed), `swiftc` produced a binary that ran, `mktemp -d` worked, and a write to any other file in
+   `<T>` was still refused. Needed beyond that, found on the way:
+   - `--disable-sandbox` on `swift build` and `swift test`: SwiftPM sandboxes manifest evaluation with `sandbox-exec` itself and a
+     nested one is refused. The project's check command and the agent's own `swift` calls need it; a prompt line and a note in the
+     goal, not something the profile can fix.
+   - SwiftPM's user-level caches (`~/Library/Caches/org.swift.swiftpm`, `~/Library/org.swift.swiftpm`, `~/.swiftpm`) stay read-only
+     and SwiftPM warns and carries on; it only matters for a package with dependencies.
+   - **No network inside the sandbox**, so dependencies must already be there: this repo has none; a project with `npm`/SwiftPM
+     dependencies needs its setup step (which Workbench runs outside the sandbox) to fetch them before the turn.
+   - Not run: a test suite that spawns processes and git (the Spawner and runner suites), and any non-Swift toolchain (node, python,
+     elixir). Each ecosystem gets its own list of cache directories; the first Workbench-on-another-repo run finds them.
+
 5. **macOS only.** `sandbox-exec` is deprecated by Apple but works on macOS 26.7 here. The library and CLI also build and pass on Linux, where
    there is no `sandbox-exec`; `bwrap` or Landlock would be a second backend. Until then `opencode` coding is refused on Linux with the
    sentence that says why.
@@ -111,10 +128,9 @@ What this shows, and what it does not:
   `capabilities`: `policies: [.readOnlyEvidence]`, `confinesReads: true`.
 - **Coding (`run`): allowed only under `sandbox-exec` with the forwarder**, on macOS. A request without the sandbox is refused with
   "OpenCode cannot confine a shell". `capabilities`: `policies` includes `.scopedCoding`, `confinesReads: false`. Needs, in order: the
-  profile writer (`OpencodeSandbox`), the forwarder, the temp-directory question above, and a per-project list of writable caches.
+  profile writer (`OpencodeSandbox`, with the `confstr` paths of finding 4), the forwarder, and a per-project list of writable caches.
 - **The verifier** drives the app with a shell and screen tools: it follows the coding rule.
-- **Before any of it ships:** re-run `probe.py --only sandbox` when the gateway has credit, to settle `info-env` and re-check the
-  matrix on the build that is shipped, and run it again after every OpenCode upgrade (the rules and the shell tool are its own).
+- **Before any of it ships:** re-run `probe.py --only sandbox` to re-check the matrix on the build that is shipped, and run it again after every OpenCode upgrade (the rules and the shell tool are its own).
 
 ## What the probes got wrong (and were fixed before these results)
 
