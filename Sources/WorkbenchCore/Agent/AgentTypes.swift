@@ -4,7 +4,7 @@ import Foundation
 /// Orchestration (run, judge, review, goal drafting) builds an `AgentRequest`; an `AgentProvider` turns it
 /// into one child process; `AgentRunner` runs that child over `ProcessRunner`. See docs/archive/P9-agent-providers.md.
 
-/// A provider's stable name: `claude`, `codex`. Built-in providers only, so it is checked like any name
+/// A provider's stable name: `claude`, `codex`, `opencode`. Built-in providers only, so it is checked like any name
 /// that reaches a path or a log.
 public struct AgentProviderID: Hashable, Sendable, Codable, CustomStringConvertible {
     public let rawValue: String
@@ -17,6 +17,7 @@ public struct AgentProviderID: Hashable, Sendable, Codable, CustomStringConverti
     public var description: String { rawValue }
     public static let claude = AgentProviderID("claude")!  // swiftlint:disable:this force_unwrapping
     public static let codex = AgentProviderID("codex")!  // swiftlint:disable:this force_unwrapping
+    public static let opencode = AgentProviderID("opencode")!  // swiftlint:disable:this force_unwrapping
 }
 
 /// What the agent may do. Orchestration picks one; the adapter translates it to the provider's own tested

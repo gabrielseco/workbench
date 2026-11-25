@@ -82,7 +82,7 @@ One PR each, in this order. Task 1 is docs and a script, no product code.
    provider with its base URL from the project's `[providers.opencode]` table, the key as `{env:LITELLM_API_KEY}` (never written to
    disk), one model, and the permission rules for the request's policy. Pure function, tested for what it writes per policy, with the
    path and the model name validated before they reach it (`SafeNames`).
-3. **The adapter and the decoder.** `AgentProviderID.opencode`, `OpencodeProvider` (argv, environment allow-list of `PATH`, `HOME`,
+3. **The adapter and the decoder. Built** (`OpencodeProvider`, `OpencodeDecoder`; not selectable by a role until task 5). `AgentProviderID.opencode`, `OpencodeProvider` (argv, environment allow-list of `PATH`, `HOME`,
    `USER`, `LANG`, `TMPDIR`, `LITELLM_API_KEY`, and nothing of the project's `env_pass` or another provider's key) and
    `OpencodeDecoder`. The decoder maps `text`, tool parts and `step_finish` to `AgentActivity`, `AgentUsage` and the session handle;
    it counts a turn as a success only when a final `step_finish` with reason `stop` was seen and the process ended on its own with
