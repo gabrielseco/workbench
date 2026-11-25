@@ -138,36 +138,35 @@ import Testing
             #expect(ended.data["cost_usd"] == .double(0.0123), "the gateway's cost is on turn.ended")
         }
 
+        /// True once nothing accepts connections on `port` any more (polled for up to five seconds).
+        private func refusesConnections(_ port: Int) async throws -> Bool {
+            for _ in 0..<100 {
+                let probe = socket(AF_INET, SOCK_STREAM, 0)
+                var address = sockaddr_in()
+                address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+                address.sin_family = sa_family_t(AF_INET)
+                address.sin_port = UInt16(port).bigEndian
+                address.sin_addr.s_addr = UInt32(0x7F00_0001).bigEndian
+                let connected = withUnsafePointer(to: &address) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        connect(probe, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    }
+                }
+                close(probe)
+                if connected != 0 { return true }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+            return false
+        }
+
         @Test func theForwarderIsStoppedWhenTheTurnEndsWhateverWayItEnds() async throws {
             for how in ["", "crash"] {
                 let r = try await opencodeRun()
                 defer { r.gateway.stop() }
                 if how == "crash" { try r.put("crash") }
                 _ = try await r.run()
-                let port = try r.forwarderPort()
-                var refused = false
-                for _ in 0..<100 {
-                    var probe: Int32 = -1
-                    probe = socket(AF_INET, SOCK_STREAM, 0)
-                    var address = sockaddr_in()
-                    address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-                    address.sin_family = sa_family_t(AF_INET)
-                    address.sin_port = UInt16(port).bigEndian
-                    address.sin_addr.s_addr = UInt32(0x7F00_0001).bigEndian
-                    let connected = withUnsafePointer(to: &address) {
-                        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                            connect(probe, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                        }
-                    }
-                    close(probe)
-                    if connected != 0 {
-                        refused = true
-                        break
-                    }
-                    try await Task.sleep(nanoseconds: 50_000_000)
-                }
                 let label = how.isEmpty ? "ok" : how
-                #expect(refused, "the forwarder's port still accepts connections after a turn that ended (\(label))")
+                #expect(try await refusesConnections(try r.forwarderPort()), "the forwarder still accepts connections (\(label))")
                 if how == "crash" { #expect(r.ended().first?.data["result"] != "succeeded") }
             }
         }
@@ -176,11 +175,17 @@ import Testing
             let r = try await opencodeRun()
             defer { r.gateway.stop() }
             try r.put("hang")
-            let report = try await r.run(timeout: 2)
-            #expect(report.result == .timedOut || report.result == .failed, "\(report.result)")
+            let report = try await r.run(timeout: 3)
+            // The fake reached its hang: it was started under the sandbox and printed its first event before it slept.
+            let steps = r.fx.transcript(r.id).filter { $0["type"]?.stringValue == "step_start" }
+            #expect(steps.count == 1, "the process ran and reached its hang, so the timeout is what ended it")
+            #expect(report.result == .timedOut, "\(report.result)")
+            let ended = try #require(r.ended().first)
+            #expect(r.ended().count == 1, "one turn.ended per turn.started")
+            #expect(ended.data["result"] == .string(RunResult.timedOut.rawValue), "and it says how it ended: \(ended.data)")
             let worktree = r.fx.project.worktreesDirectory.appendingPathComponent(r.id)
             #expect(OrphanSweeper.orphans(inside: worktree).isEmpty, "no process of the turn is left")
-            #expect(r.ended().count == 1, "one turn.ended per turn.started")
+            #expect(try await refusesConnections(try r.forwarderPort()), "and the forwarder is stopped")
         }
 
         @Test func aMissingOrShortKeyIsRefusedBeforeAWorktreeOrATurnExists() async throws {
