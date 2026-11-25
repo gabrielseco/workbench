@@ -39,6 +39,9 @@ private struct Fixture {
             *MODE-PAIDHANG*)
               ev '{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"tool-calls","cost":0.3,"tokens":{"input":50,"output":5}}}'
               exec sleep 30 ;;
+            *MODE-KEYERR*)
+              ev "{\\"type\\":\\"error\\",\\"sessionID\\":\\"ses_1\\",\\"error\\":{\\"type\\":\\"auth\\",\\"message\\":\\"Invalid API key: $LITELLM_API_KEY\\",\\"status\\":401}}"
+              exit 1 ;;
             *MODE-NOSTOP*)
               ev '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"half an answer"}}' ;;
             *MODE-HANG*)
@@ -54,7 +57,7 @@ private struct Fixture {
     func cleanUp() { try? FileManager.default.removeItem(at: root) }
 
     var environment: [String: String] {
-        ["PATH": "\(bin.path):/usr/bin:/bin", "HOME": "/h", "LITELLM_API_KEY": "the-key", "GITHUB_TOKEN": "gh-secret"]
+        ["PATH": "\(bin.path):/usr/bin:/bin", "HOME": "/h", "LITELLM_API_KEY": "the-secret-key-123", "GITHUB_TOKEN": "gh-secret"]
     }
 
     func agent(_ env: [String: String]? = nil) -> OpencodeReadOnlyAgent {
@@ -77,8 +80,8 @@ private struct Fixture {
         #expect(answer.failure == nil)
         let text = try #require(answer.text)
         #expect(text.contains("cwd=\(f.scratch.url.path)/empty"), "it cannot read the checkout: \(text)")
-        #expect(text.contains("key=the-key") && text.contains("gh="), "the key reaches it and nothing else does: \(text)")
-        #expect(!text.contains("gh-secret"))
+        #expect(text.contains("key=[key removed]") && text.contains("gh="), "the key reaches it, and nothing else does: \(text)")
+        #expect(!text.contains("gh-secret") && !text.contains("the-secret-key-123"), "and it is not handed back")
         #expect(text.contains("cfg=\(f.scratch.url.path)/opencode/opencode.json"), "it runs on the config Workbench wrote")
         #expect(answer.costUSD == 0.25, "the gateway's per-step cost is carried, not unknown")
         #expect(!FileManager.default.fileExists(atPath: f.scratch.url.path), "whatever it wrote goes with the turn")
@@ -112,6 +115,23 @@ private struct Fixture {
         #expect(timedOut.costUSD == 0.3, "and so is one before a timeout")
         let free = await f.agent().run(f.request("MODE-GATEWAY")) { _ in }
         #expect(free.costUSD == nil, "no step finished: unknown, never 0")
+    }
+
+    @Test func aGatewayErrorThatEchoesTheKeyDoesNotCarryItIntoTheFailure() async throws {
+        let f = try Fixture()
+        defer { f.cleanUp() }
+        let answer = await f.agent().run(f.request("MODE-KEYERR")) { _ in }
+        let why = try #require(answer.failure)
+        #expect(!why.contains("the-secret-key-123"), "the failure goes to the event log: \(why)")
+        #expect(why.contains("[key removed]") && why.contains("Invalid API key"), "the rest of the message is kept: \(why)")
+        let direct = f.agent().redacted("a \(f.environment["LITELLM_API_KEY"]!) b")
+        #expect(direct == "a [key removed] b")
+        var short = f.environment
+        short["LITELLM_API_KEY"] = "abc"
+        #expect(f.agent(short).redacted("an abc of things") == "an abc of things", "a key too short to be one is not replaced")
+        var none = f.environment
+        none["LITELLM_API_KEY"] = nil
+        #expect(f.agent(none).redacted("text") == "text")
     }
 
     @Test func aStreamThatNeverEndedItsTurnIsNotAnAnswer() async throws {

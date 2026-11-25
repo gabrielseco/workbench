@@ -15,6 +15,14 @@ public struct OpencodeReadOnlyAgent: ReadOnlyAgent {
         self.environment = environment
     }
 
+    /// Anything this agent hands back may end up in the event log (a failure becomes `plan.ended.reason`), and a gateway can echo the key
+    /// it was given in an authentication error. The exact configured value is removed; a key too short to be one is left alone, as
+    /// removing it would only damage ordinary words.
+    func redacted(_ text: String) -> String {
+        guard let key = environment[gateway.apiKeyVariable], key.count >= 8 else { return text }
+        return text.replacingOccurrences(of: key, with: "[key removed]")
+    }
+
     private var provider: OpencodeProvider { OpencodeProvider(executable: executable, gateway: gateway) }
 
     public func unavailable() -> String? {
@@ -40,7 +48,7 @@ public struct OpencodeReadOnlyAgent: ReadOnlyAgent {
     public func run(_ request: ReadOnlyRequest, attach: @Sendable (ProcessRun) -> Void) async -> ReadOnlyAnswer {
         // What the gateway charged before a turn failed is still spent: it goes with the failure, so the log shows it.
         func failed(_ why: String, cost: Double? = nil) -> ReadOnlyAnswer {
-            ReadOnlyAnswer(text: nil, costUSD: cost, failure: why)
+            ReadOnlyAnswer(text: nil, costUSD: cost, failure: redacted(why))
         }
         guard let scratch = request.scratch, let agentRequest = agentRequest(for: request) else {
             return failed("opencode has no folder to keep its run in")
@@ -83,6 +91,6 @@ public struct OpencodeReadOnlyAgent: ReadOnlyAgent {
         guard result.outcome == .succeeded, case .text(let text)? = result.answer, !text.isEmpty else {
             return failed("opencode left no answer", cost: spent)
         }
-        return ReadOnlyAnswer(text: text, costUSD: result.usage?.costUSD, failure: nil)
+        return ReadOnlyAnswer(text: redacted(text), costUSD: result.usage?.costUSD, failure: nil)
     }
 }
