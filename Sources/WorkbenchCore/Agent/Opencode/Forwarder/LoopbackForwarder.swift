@@ -91,13 +91,12 @@ public final class LoopbackForwarder: @unchecked Sendable {
         try lock.withLock {
             guard !started else { throw StartError("the forwarder is already started") }
             let (listener, port) = try Self.bindLoopback()
-            var pipes: [Int32] = [-1, -1]
-            guard pipe(&pipes) == 0 else {
+            guard let ends = ForwarderSocket.wakePair() else {
                 close(listener)
                 throw StartError("no wake-up pipe")
             }
             started = true
-            wakeWriter = pipes[1]
+            wakeWriter = ends.writer
             let config = URLSessionConfiguration.ephemeral
             config.timeoutIntervalForRequest = configuration.upstreamIdleTimeout
             config.timeoutIntervalForResource = configuration.maxRequestDuration
@@ -111,7 +110,7 @@ public final class LoopbackForwarder: @unchecked Sendable {
             // threads all blocked (a busy process, or a test run), every forwarder stalled behind them.
             queue.qualityOfService = .userInitiated
             session = URLSession(configuration: config, delegate: relay, delegateQueue: queue)
-            let reader = pipes[0]
+            let reader = ends.reader
             let thread = Thread { [self] in acceptLoop(listener: listener, wake: reader) }
             thread.name = "workbench.forwarder.accept"
             thread.start()
@@ -136,8 +135,7 @@ public final class LoopbackForwarder: @unchecked Sendable {
             return (wakeWriter, session)
         }
         if writer >= 0 {
-            var byte: UInt8 = 1
-            _ = write(writer, &byte, 1)
+            ForwarderSocket.wake(writer)
             close(writer)
         }
         active?.invalidateAndCancel()

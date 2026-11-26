@@ -164,6 +164,26 @@ import Testing
         #expect(rig.gateway.requests.count == 1)
     }
 
+    /// With a pipe this ended the process (SIGPIPE) instead of returning.
+    @Test func wakingAnAcceptLoopThatAlreadyClosedItsEndRaisesNoSignal() throws {
+        let ends = try #require(ForwarderSocket.wakePair())
+        defer { close(ends.writer) }
+        close(ends.reader)
+        ForwarderSocket.wake(ends.writer)
+        ForwarderSocket.wake(ends.writer)
+    }
+
+    @Test func sendingToAConnectionTheOtherSideClosedRaisesNoSignal() throws {
+        let rig = try Rig()
+        defer { rig.tearDown() }
+        let fd = try #require(Client.dial(rig.port))
+        defer { close(fd) }
+        // A refused request: answered and closed by the forwarder, after which the client goes on writing.
+        Client.say(fd, "DELETE /v1/models HTTP/1.1\r\nHost: h\r\n\r\n")
+        _ = Client.readAll(fd, seconds: 8)
+        for _ in 0..<3 { Client.say(fd, Client.get("/v1/models")) }
+    }
+
     /// A client that sends its request and then reads nothing, with an answer that never ends.
     private func stalledClient(_ rig: Rig, pauseMs: Int) throws -> Int32 {
         rig.gateway.reply = { _ in .flood(chunkKilobytes: 64, pauseMs: pauseMs) }
@@ -253,7 +273,9 @@ import Testing
         let rig = try Rig { $0.maxConnections = 2 }
         defer { rig.tearDown() }
         let held = try [#require(Client.dial(rig.port)), #require(Client.dial(rig.port))]
-        defer { held.forEach { close($0) } }
+        // `held[0]` is closed below, once: a second close would close whatever another test had opened under that number since (it
+        // did, to an event log: "Bad file descriptor" in an unrelated suite).
+        defer { close(held[1]) }
         // Both are admitted and waiting for a request, so a third is over the cap.
         Thread.sleep(forTimeInterval: 0.3)
         let third = try #require(Client.dial(rig.port))

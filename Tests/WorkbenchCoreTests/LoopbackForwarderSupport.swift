@@ -205,12 +205,17 @@ enum Client {
             close(fd)
             return nil
         }
+        #if canImport(Darwin)
+            var one: Int32 = 1
+            setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
+        #endif
         return fd
     }
 
     static func say(_ fd: Int32, _ text: String) {
         let bytes = Array(text.utf8)
-        _ = send(fd, bytes, bytes.count, 0)
+        // The forwarder may answer and close before this is sent (a refusal): that is an error here, never a signal that ends the tests.
+        _ = send(fd, bytes, bytes.count, noSignal)
     }
 
     /// Everything until the peer closes (or `seconds` pass), as the first `limit` bytes when given.
