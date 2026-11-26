@@ -39,6 +39,7 @@ bash scripts/verify-cli/criteria-tests.sh          # a test: proof backed by the
 bash scripts/verify-cli/doctor.sh                  # doctor after approve and during a live turn (stopped early, a few cents)
 bash scripts/verify-cli/verifier-config.sh         # [verifier] and doctor on a clone, no turn, costs nothing
 bash scripts/verify-cli/agents-config.sh           # [providers.*], [agents.*] and doctor on a clone, no turn, costs nothing
+scripts/verify-cli/from-branch.sh gateway-key-timer   # a tick with no gateway key in its environment gets it from the login shell (free; macOS)
 VERIFY_CLI_OPENCODE_BASE_URL=https://gateway.example/v1 scripts/verify-cli/from-branch.sh opencode-read-also   # an OpenCode coding turn reads a read_also checkout and leaves it unchanged (a few cents)
 scripts/verify-cli/from-branch.sh opencode-links   # a read-only OpenCode turn refuses a checkout that links outside itself (free: a stand-in opencode)
 VERIFY_CLI_OPENCODE_BASE_URL=https://gateway.example/v1 scripts/verify-cli/from-branch.sh opencode-plan   # plan on OpenCode through a real gateway: doctor steps, then one read-only turn (about 10 cents)

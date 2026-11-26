@@ -439,7 +439,10 @@ did by hand:
   not collide. The agent runs the launcher every 15 minutes by default (`--every 5m` to `1h`); each task's own `at`/`days`/`every` decides what
   is due, and a run missed while the Mac slept happens once on wake. The launcher borrows the PATH of a login shell (launchd has none of your
   shell setup, so `node`, `python3`, `pnpm`, `gh`, `git` and `claude` are the ones a terminal finds), goes to the project and runs
-  `caffeinate -i workbench task tick`. The steps before the tick that could stall have deadlines (20 s for the login shell, 120 s for the
+  `caffeinate -i workbench task tick`. A project whose config reaches a model through an OpenCode gateway needs its key too: a tick with
+  something due, and with the config's `api_key_env` variable unset, asks the login shell for that one variable (interactive, so
+  `.zshrc` counts; 10 s deadline) and keeps it in its own process only; nothing is written to the launcher or a log. The app does the
+  same when it opens such a project. The timer runs its own copy of the binary, so it gets this with `task timer refresh` or `install`. The steps before the tick that could stall have deadlines (20 s for the login shell, 120 s for the
   pull; the command is ended, then killed), because launchd never starts a second copy of a job that is still running. `--pull-main` also fast-forwards `main` before each tick, but only when it is checked out and clean.
 - It prints the wake line, because a sleeping Mac runs nothing: `sudo pmset repeat wakeorpoweron MTWRF 03:55:00`, from the tasks' own times
   (the earliest `at` minus five minutes, on the days any task runs; a time just after midnight wakes the evening before; tasks with only
