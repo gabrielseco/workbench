@@ -27,16 +27,19 @@ extension ThreadRunner {
             if case .success = skill { verifierRuns = true }
         }
         let chosen = planForFirstPrompt(goal: goal, baseCommit: baseCommit, options: options)
-        // A Codex or OpenCode coding turn cannot be shown them yet (Codex takes images only as attachments and refuses them while
-        // coding; OpenCode takes none).
+        // A Codex or OpenCode coding turn cannot be shown screenshots yet (Codex takes images only as attachments and refuses them
+        // while coding; OpenCode takes none), and a Codex one is not given other checkouts.
         var shown = screenshots
         var others = try readDirectories(config, goal: goal)
         let codingAgent = config.resolvedRunAgent(goalModel: goal.model).provider
         if codingAgent != .claude {
             let name = AgentSetup.name(codingAgent)
             if !shown.isEmpty { notify(.advisory("this goal has screenshots, which a \(name) coding turn is not given yet")) }
-            if !others.isEmpty { notify(.advisory("read_also is not used by a \(name) coding turn yet")) }
-            (shown, others) = ([], [])
+            shown = []
+            if codingAgent != .opencode, !others.isEmpty {
+                notify(.advisory("read_also is not used by a \(name) coding turn yet"))
+                others = []
+            }
         }
         let prompt = PromptBuilder.firstPrompt(
             goal: goal, checkCommand: config.checkCommand, instructions: loaded,

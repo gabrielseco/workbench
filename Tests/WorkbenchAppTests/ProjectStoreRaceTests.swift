@@ -358,3 +358,31 @@ private final class Once: @unchecked Sendable {
         return !used
     }
 }
+
+/// A project waits for its gateway key before the window shows it.
+@MainActor @Suite struct ProjectStoreGatewayKeyTests {
+    @MainActor private final class Held {
+        var waiting: CheckedContinuation<Void, Never>?
+    }
+
+    @Test func aProjectIsNotShownUntilItsKeyIsThereAndALaterOpenWins() async throws {
+        let (slow, quick) = (try await AppFixture(), try await AppFixture())
+        let store = ProjectStore(preferences: MemoryPreferences())
+        let held = Held()
+        let slowName = slow.root.resolvingSymlinksInPath().path
+        store.keyGate.fill = { project in
+            guard project.root.resolvingSymlinksInPath().path == slowName else { return }
+            await withCheckedContinuation { held.waiting = $0 }
+        }
+        let first = Task { await store.open(slow.root) }
+        while held.waiting == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(store.project == nil, "nothing is shown, so nothing can be started without the key")
+
+        #expect(await store.open(quick.root))
+        let shown = try #require(store.project).root
+        #expect(shown.resolvingSymlinksInPath().path == quick.root.resolvingSymlinksInPath().path)
+        held.waiting?.resume()
+        #expect(await first.value == false, "the one asked for later wins")
+        #expect(store.project?.root == shown)
+    }
+}

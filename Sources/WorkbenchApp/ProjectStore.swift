@@ -129,6 +129,7 @@ import WorkbenchCore
     /// Bumped each time another project is opened: an answer for an earlier one (a reload or a doctor run that was still
     /// in flight) is dropped, never shown under the new project.
     @ObservationIgnored var generation = 0
+    @ObservationIgnored let keyGate = GatewayKeyGate()
     /// Seams for tests that need to hold a read or a doctor run half way; the app uses the real ones.
     @ObservationIgnored private let loader: @Sendable (Project, String?) -> ProjectLoader.Loaded
     @ObservationIgnored private let doctorRunner: @Sendable (Project, String?) async -> DoctorChip
@@ -214,6 +215,7 @@ import WorkbenchCore
             screen = .notAGitRepository(path: url.path)
             return false
         }
+        guard await keyGate.ready(located, generation: { generation }) else { return false }
         // Leaving a project: its tile keeps what the window last read of it, not what the poll read before.
         if located.root != project?.root { captureLiveCounts() }
         preferences.projectPath = located.root.path
@@ -236,8 +238,6 @@ import WorkbenchCore
         (current.goal, current.review) = (nil, nil)
         screen = .opening(path: located.root.path)
         await reload()
-        // The gateway key a Dock-started window lacks. Last: no other open may interleave with a half-switched window.
-        await LoginShellVariable.fillGatewayKey(project: located)
         return true
     }
 

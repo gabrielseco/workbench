@@ -65,8 +65,9 @@ private struct Shell {
             then: "/bin/sh -c \"$2\"; trap '' TERM; sleep 30 & echo $! >\"$HOME/child\"; wait")
         defer { shell.cleanUp() }
         let started = Date()
-        #expect(await shell.resolve("GATEWAY_KEY", timeout: 1) == nil)
-        #expect(Date().timeIntervalSince(started) < 20, "the deadline ended it")
+        // Long enough for a loaded machine to reach the child before the deadline ends the shell.
+        #expect(await shell.resolve("GATEWAY_KEY", timeout: 8) == nil)
+        #expect(Date().timeIntervalSince(started) < 25, "the deadline ended it, not the 30 s sleep")
         let text = try String(contentsOf: shell.home.appendingPathComponent("child"), encoding: .utf8)
         let child = try #require(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
         #expect(await FakeClaude.waitUntilGone(child), "and its child is gone")
