@@ -79,11 +79,10 @@ import Testing
         #expect(ownProvider.isEmpty, "a stage on another provider keeps its effort: \(ownProvider)")
     }
 
-    @Test(arguments: ["goal"])
-    func aRoleNotYetProvenOnOpencodeIsRefusedAtLoadNotAtRunTime(role: String) {
-        let found = problems(Self.gateway + "[agents.\(role)]\nprovider = \"opencode\"")
-        #expect(found.count == 1 && found[0].contains("cannot use \"opencode\" yet"), "\(role): \(found)")
-        #expect(found[0].contains("\"claude\" or \"codex\""), "it says what the role does run on")
+    @Test func everyRoleCanRunOnOpencodeNow() {
+        for role in AgentRole.allCases { #expect(role.supportedProviders.contains(.opencode), "\(role)") }
+        let found = problems(Self.gateway + "[agents.goal]\nprovider = \"opencode\"\nmodel = \"opus-claude\"")
+        #expect(found.isEmpty, "\(found)")
     }
 
     @Test(arguments: [

@@ -7,8 +7,8 @@
 # URL in VERIFY_CLI_OPENCODE_BASE_URL; $VERIFY_CLI_OPENCODE_MODEL is the gateway's model name (default sonnet-claude). The project's
 # .workbench/config.toml gets [providers.opencode] and [agents.plan] while it runs and is put back when it ends.
 # Without a turn: doctor must accept `plan` and `ship` on OpenCode and name the provider, the model and the missing dollar cap on their
-# lines, with no "can read files outside" note (a read-only OpenCode turn cannot); and must refuse, naming the problem, a judge on
-# OpenCode (not yet proven), an agent naming OpenCode with no [providers.opencode], and a base_url that is not http(s); with the key's
+# lines, with no "can read files outside" note (a read-only OpenCode turn cannot); and must refuse, naming the problem, a reasoning_effort
+# on OpenCode, an agent naming OpenCode with no [providers.opencode], and a base_url that is not http(s); with the key's
 # variable unset doctor must name it. 
 # With one read-only plan turn (a few cents): `workbench plan` exits 0, the logged command names gateway/<model> and `--standalone`
 # and not `--auto` or the prompt, plan.ended is ok with a cost above 0 (OpenCode reports one), plans/plan-1.md is non-empty with no machine
@@ -95,13 +95,14 @@ check "doctor says the gateway key variable is not set, by name" "no problem nam
 # --- what is refused, by name ----------------------------------------------------------------------------
 
 config "$GATEWAY
-[agents.judge]
+[agents.plan]
 provider = \"opencode\"
-model = \"$OC_MODEL\""
-doctor judge
-check "a judge on opencode is refused" "workbench doctor exited $RC" test "$RC" != 0
-check "the refusal says it cannot use opencode yet and what the judge runs on" "see above" \
-    bash -c 'grep -q "cannot use \"opencode\" yet" "$1" && grep -q "\"claude\" or \"codex\"" "$1"' _ "$SCRATCH/judge.out"
+model = \"$OC_MODEL\"
+reasoning_effort = \"high\""
+doctor effort
+check "a reasoning_effort on opencode is refused" "workbench doctor exited $RC" test "$RC" != 0
+check "the refusal names reasoning_effort and opencode" "see above" \
+    bash -c 'grep -q "reasoning_effort" "$1" && grep -q "opencode" "$1"' _ "$SCRATCH/effort.out"
 
 config "[agents.plan]
 provider = \"opencode\"

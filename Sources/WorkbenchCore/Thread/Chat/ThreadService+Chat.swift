@@ -86,6 +86,10 @@ extension ThreadService {
             existing = id
         }
         if let refusal = Chat.refusal(history: history, message: text, costUSD: spent, newImages: images.count) { throw refusal }
+        // Before a thread is made or another one abandoned: a request that cannot be served must not cost the person their active thread.
+        if agent.provider == .opencode, !images.isEmpty {
+            throw ChatRefusal.unavailable("opencode cannot take images, and there is no text substitute for them")
+        }
         guard let provider = config.agentProvider(agent.provider) else {
             throw ChatRefusal.unavailable("there is no adapter for \(agent.provider)")
         }
@@ -234,7 +238,17 @@ extension ThreadService {
             usesShell: agent.provider == .codex)
         let limits = AgentLimits(timeout: timeout, maxLineBytes: 1 << 20)
         var request: AgentRequest
-        if agent.provider == .codex {
+        if agent.provider == .opencode {
+            // No images, and no session: the history is in the prompt. Its reads are confined to the folder, which holds the snapshot.
+            if !names.isEmpty {
+                try? FileManager.default.removeItem(at: scratch)
+                throw ChatRefusal.unavailable("opencode cannot take images, and there is no text substitute for them")
+            }
+            request = AgentRequest(
+                provider: .opencode, model: agent.model, prompt: prompt, workingDirectory: work, outputDirectory: output,
+                policy: .readOnlyEvidence, spend: spend, purpose: .goal, environment: environment, limits: limits,
+                reasoningEffort: agent.reasoningEffort)
+        } else if agent.provider == .codex {
             let answer = output.appendingPathComponent("answer.txt")
             request = AgentRequest(
                 provider: agent.provider, model: agent.model, prompt: prompt, images: sends ? shown : [], workingDirectory: work,
@@ -300,7 +314,14 @@ extension ThreadService {
 
         var result = ChatResult(id: id, reply: nil, end: "failed", provider: agent.provider, model: agent.model)
         let execution: AgentExecution?
-        do { execution = try AgentRunner.start(provider: prepared.provider, request: prepared.request) } catch {
+        var gateway: OpencodeGatewaySession?
+        defer { gateway?.stop() }
+        do {
+            let env = prepared.request.environment
+            let (runner, session) = try OpencodeGatewaySession.around(prepared.provider, environment: env)
+            gateway = session
+            execution = try AgentRunner.start(provider: runner, request: prepared.request)
+        } catch {
             execution = nil
             result.failure = Self.draftFailureText(error)
         }
@@ -316,6 +337,8 @@ extension ThreadService {
                 result.failure = why
             } else if let failure = completion.failure {
                 result.failure = failure.message
+            } else if let why = OpencodeGatewaySession.unfinished(completion, name: name) {
+                result.failure = why
             } else {
                 var written: String?
                 if case .file(let url)? = completion.answer { written = Self.readAnswer(url) }

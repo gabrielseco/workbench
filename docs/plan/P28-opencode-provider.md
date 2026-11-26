@@ -106,7 +106,7 @@ One PR each, in this order. Task 1 is docs and a script, no product code.
    stopped around each turn (a role not yet proven is refused when the config loads); judge, review, goal drafting, the chat and the
    verifier follow in their own PRs. **`judge`** runs on it too (read-only, an empty folder, behind a forwarder like every OpenCode turn; a
    judge with screenshots is refused by name: OpenCode takes no images), and so does **`pr-review`** (read-only in the round's folder, the
-   answer is its last message; a `proof` stage is refused by name). Left: goal drafting and the chat, the verifier.
+   answer is its last message; a `proof` stage is refused by name). **Goal drafting, the chat and the task editor** run on it too (the same read-only turn; no screenshots). Left: the verifier, task 4 (the fake and soak).
    Original text: **Roles stop knowing Codex.** `supportedProviders`, `knownProviders`, `defaultProvider` in `AgentsConfig.swift`, `ModelCatalog`,
    `AgentSetup`, `DoctorAgents`, `VerifierConfig`, `ReviewConfig` and the app's agent picker take the provider list from one place.
    `ThreadRunnerCodex.swift` and `ThreadService+PRReviewCodex.swift` become provider-generic code that asks `capabilities`, or are

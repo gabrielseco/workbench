@@ -198,7 +198,17 @@ extension ThreadService {
         }
         let limits = AgentLimits(timeout: timeout, maxLineBytes: 1 << 20)
         let agentRequest: AgentRequest
-        if agent.provider == .codex {
+        if agent.provider == .opencode {
+            // It takes no images and has no text substitute for them; its answer is its last message.
+            if !images.isEmpty {
+                scratch.map { try? FileManager.default.removeItem(at: $0) }
+                throw GoalDraftRefusal.unavailable("opencode cannot take images, and there is no text substitute for them")
+            }
+            agentRequest = AgentRequest(
+                provider: .opencode, model: agent.model, prompt: prompt, workingDirectory: work, outputDirectory: output,
+                policy: .readOnlyEvidence, spend: spend, purpose: .goal, environment: environment, limits: limits,
+                reasoningEffort: agent.reasoningEffort)
+        } else if agent.provider == .codex {
             let answer = output.appendingPathComponent("answer.txt")
             try? FileManager.default.removeItem(at: answer)
             var codex = AgentRequest(
@@ -276,7 +286,14 @@ extension ThreadService {
             _ = id
         }
         let execution: AgentExecution
-        do { execution = try AgentRunner.start(provider: prepared.provider, request: prepared.request) } catch {
+        var gateway: OpencodeGatewaySession?
+        defer { gateway?.stop() }
+        do {
+            let env = prepared.request.environment
+            let (runner, session) = try OpencodeGatewaySession.around(prepared.provider, environment: env)
+            gateway = session
+            execution = try AgentRunner.start(provider: runner, request: prepared.request)
+        } catch {
             run.failure = Self.draftFailureText(error)
             run.attemptReason = run.failure
             if let attempts, let attempt = run.attempt { try await attempts.end(attempt, "failed", reason: run.failure) }
@@ -293,6 +310,8 @@ extension ThreadService {
             run.failure = why
         } else if let failure = completion.failure {
             run.failure = failure.message
+        } else if let why = OpencodeGatewaySession.unfinished(completion, name: name) {
+            run.failure = why
         } else {
             var written: String?
             if case .file(let url)? = completion.answer { written = Self.readAnswer(url) }

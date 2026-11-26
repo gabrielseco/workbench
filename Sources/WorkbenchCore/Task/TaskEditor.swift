@@ -175,7 +175,12 @@ public struct TaskEditor: Sendable {
 
         let limits = AgentLimits(timeout: timeout, maxLineBytes: 1 << 20)
         var agentRequest: AgentRequest
-        if agent.provider == .codex {
+        if agent.provider == .opencode {
+            agentRequest = AgentRequest(
+                provider: .opencode, model: agent.model, prompt: prompt, workingDirectory: work, outputDirectory: output,
+                policy: .readOnlyEvidence, spend: spend, purpose: .goal, environment: environment, limits: limits,
+                reasoningEffort: agent.reasoningEffort)
+        } else if agent.provider == .codex {
             let answer = output.appendingPathComponent("answer.txt")
             agentRequest = AgentRequest(
                 provider: agent.provider, model: agent.model, prompt: prompt, workingDirectory: work, outputDirectory: output,
@@ -195,7 +200,13 @@ public struct TaskEditor: Sendable {
 
         var result = Answer(provider: agent.provider, model: agent.model, costUSD: nil, failure: nil, text: nil)
         let execution: AgentExecution
-        do { execution = try AgentRunner.start(provider: provider, request: agentRequest) } catch {
+        var gateway: OpencodeGatewaySession?
+        defer { gateway?.stop() }
+        do {
+            let (runner, session) = try OpencodeGatewaySession.around(provider, environment: agentRequest.environment)
+            gateway = session
+            execution = try AgentRunner.start(provider: runner, request: agentRequest)
+        } catch {
             result.failure = clean(ThreadService.draftFailureText(error))
             return result
         }
@@ -206,6 +217,8 @@ public struct TaskEditor: Sendable {
             result.failure = clean(why)
         } else if let failure = completion.failure {
             result.failure = clean(failure.message)
+        } else if let why = OpencodeGatewaySession.unfinished(completion, name: "\(agent.provider)") {
+            result.failure = clean(why)
         } else {
             var written: String?
             if case .file(let url)? = completion.answer { written = ThreadService.readAnswer(url) }
