@@ -18,6 +18,22 @@ enum ForwarderSocket {
         private static let sendFlags: Int32 = 0
     #endif
 
+    /// What wakes the accept loop out of `poll`: a socket pair and not a pipe, because the loop may already have closed its end when
+    /// `stop()` writes (it also returns on a new connection or an error), and a write to a pipe with no reader raises SIGPIPE, which would
+    /// end the runner.
+    static func wakePair() -> (reader: Int32, writer: Int32)? {
+        var ends: [Int32] = [-1, -1]
+        guard socketpair(AF_UNIX, streamSocketType, 0, &ends) == 0 else { return nil }
+        suppressSigpipe(ends[1])
+        return (ends[0], ends[1])
+    }
+
+    /// One byte to `wakePair`'s reader; nothing happens, and no signal is raised, when it is gone.
+    static func wake(_ writer: Int32) {
+        var byte: UInt8 = 1
+        _ = send(writer, &byte, 1, sendFlags)
+    }
+
     /// Non-blocking, so a `send` to a client that does not read returns at once and the loop in `deliver` can notice a stop (a
     /// per-call `MSG_DONTWAIT` was not honoured for a blocked write), and no SIGPIPE when the peer is gone: an error from `send` instead.
     static func configure(_ fd: Int32) {
