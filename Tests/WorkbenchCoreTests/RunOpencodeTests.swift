@@ -23,7 +23,7 @@ import Testing
         if [ -f "$D/hang" ]; then sleep 300 & echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; wait; fi
         if [ -f "$D/ignoreterm" ]; then trap '' TERM; sleep 300 & echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; wait; fi
         if [ -f "$D/error" ]; then
-          echo '{"type":"error","sessionID":"ses_1","error":{"type":"provider.internal","message":"Service Unavailable","status":503}}'; exit 1
+          echo '{"type":"error","sessionID":"ses_1","error":{"type":"provider.internal","message":"Service Unavailable","status":503}}'; exit 0
         fi
         if [ -f "$D/leftover" ]; then
           /usr/bin/perl -e 'setpgrp(0,0); exec "/bin/sleep", "300"' >/dev/null 2>&1 &
@@ -353,8 +353,9 @@ import Testing
             defer { r.gateway.stop() }
             try r.put("error")
             let report = try await r.run()
-            #expect(report.result == .failed, "\(report.result)")
+            #expect(report.result == .failed, "the event fails it: the fake exits 0 (\(report.result))")
             #expect(r.ended().count == 1)
+            #expect(r.ended().first?.data["exit_code"] == .int(0))
             let errors = r.fx.transcript(r.id).filter { $0["type"]?.stringValue == "error" }
             #expect(errors.first?["error"]?["message"]?.stringValue == "Service Unavailable", "\(errors)")
             #expect(Client.dial(try r.forwarderPort()) == nil)
@@ -376,7 +377,7 @@ import Testing
                 defer { r.gateway.stop() }
                 if !mode.isEmpty { try r.put(mode) }
                 let hangs = mode == "hang" || mode == "ignoreterm"
-                let report = try await r.run(timeout: hangs ? 2 : 30) { $0.killGrace = 1 }
+                let report = try await r.run(timeout: hangs ? 5 : 30) { $0.killGrace = 1 }
                 results[report.result.rawValue, default: 0] += 1
                 let label = "\(mode.isEmpty ? "ok" : mode) #\(i)"
                 let expected: RunResult = hangs ? .timedOut : (mode == "crash" || mode == "error" ? .failed : .succeeded)
@@ -385,7 +386,14 @@ import Testing
                 #expect(contents.isHealthy && contents.openTurn == nil, "\(label): \(contents.problems)")
                 #expect(r.ended().count == 1, "\(label): one turn.ended")
                 #expect(Client.dial(try r.forwarderPort()) == nil, "\(label): the forwarder is still listening")
-                if let child = r.childPID() { #expect(await FakeClaude.waitUntilGone(child), "\(label): a child is left") }
+                // A mode that ran out its time before the fake got to it proves nothing, so each must have left its mark.
+                if hangs || mode == "leftover" {
+                    let child = try #require(r.childPID(), "\(label): the fake never started its child")
+                    #expect(await FakeClaude.waitUntilGone(child), "\(label): a child is left")
+                }
+                if mode == "ignoreterm" {
+                    #expect(r.ended().first?.data["escalated_to_kill"] == .bool(true), "\(label): SIGTERM was never ignored")
+                }
                 try await r.fx.service.abandon(id: r.id, force: true)
             }
             let after = openDescriptorCount()
