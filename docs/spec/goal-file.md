@@ -709,7 +709,8 @@ coding on the second provider is enabled (P9 task 4). `goal` accepts either prov
 `"opencode"` (P28) is accepted for `run`, `judge`, `review` (and a review stage's `provider`), `plan`, `ship` and `goal` (drafting, the chat and task edits), but not the verifier, and only with `[providers.opencode]` holding a `base_url`: it takes the
 gateway's model name in `model` (`sonnet-claude`) and no `reasoning_effort`, and has no dollar cap, so a goal with `budget_usd` is refused by
 `goal approve` and `run` (as on Codex: change it to `spend_policy: timeout_only`) and the other evaluations follow the `allow_unpriced` rule
-above. `plan` and `ship` run with no shell and no edit tool. A **coding turn** (`run`) is one fresh process per turn, like Codex's, and runs
+above. `plan` and `ship` run with no shell and no edit tool. OpenCode follows a symlink wherever it points, so a read-only turn on it is refused, naming the link, when the folder it reads holds
+one that resolves outside it (a `pr-review` of a branch that adds such a link fails for that reason). A **coding turn** (`run`) is one fresh process per turn, like Codex's, and runs
 the whole `opencode` process under macOS's `sandbox-exec` (macOS only: elsewhere it is refused): writes only to the worktree and the turn's
 own scratch and state, none under `.git` (so the change is left uncommitted and `accept` commits it), and no network but a loopback forwarder
 that Workbench runs for the turn and stops when it ends. The forwarder holds the real key (`$LITELLM_API_KEY` by default, which `run` refuses

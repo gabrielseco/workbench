@@ -121,6 +121,15 @@ What this shows, and what it does not:
    there is no `sandbox-exec`; `bwrap` or Landlock would be a second backend. Until then `opencode` coding is refused on Linux with the
    sentence that says why.
 
+## Symlinks (found 2026-11-26, after the read-only roles shipped)
+
+The probes above never read through a link. With `external_directory` denied, OpenCode 2.4.0's `read` tool still follows a symlink inside
+the checkout to wherever it points: a file link, a directory link and a relative `../../` link each returned a file outside the checkout,
+while reading that file by its own path was refused. `grep` did not follow them. A pull request can commit such a link, so the read-only
+rules alone do **not** confine a turn. `OpencodeLinks` walks the folder before a read-only turn and refuses it, naming the link (never its
+target), when anything in it resolves outside; a coding turn is not checked, its reads are stated to be unconfined. Re-run this probe
+after every OpenCode upgrade.
+
 ## Decision for task 2 onwards
 
 - **Read-only roles (goal, plan, judge, review, ship): build now.** Rules as in `readonly`, no shell, `OPENCODE_DISABLE_PROJECT_CONFIG=1`,
