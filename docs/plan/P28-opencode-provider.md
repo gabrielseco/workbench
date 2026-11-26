@@ -99,14 +99,18 @@ One PR each, in this order. Task 1 is docs and a script, no product code.
    it counts a turn as a success only when a final `step_finish` with reason `stop` was seen and the process ended on its own with
    status 0 (the Codex rule); a gateway failure (auth, budget, capacity) becomes an `AgentFailure` with the right `retry`. Oversized
    lines, an unknown event type and a stream that stops short are tested the way `CodexCodingDecoder`'s are.
-4. **The fake.** `fake-claude` learns an OpenCode-shaped stream and the failure modes the soak needs (hang, crash, ignored SIGTERM,
-   leftover child, an error event). The reliability tests for a turn that always ends run for `opencode` as they do for the others.
+4. **The fake. Done, as a script.** The adapter passes the child only an allow-list of the environment, so `FAKE_CLAUDE` would not reach an
+   OpenCode-shaped `fake-claude`; the fake is a shell script the tests write (`RunOpencodeTests`), run for real under `sandbox-exec` behind
+   the forwarder. Covered: crash, a gateway error event, a hang ended by the timeout, SIGTERM ignored, a child left in its own process group
+   by a turn that succeeded, a SIGKILLed runner (the next run closes the turn and sweeps), `stop` from another process and before the
+   process starts, and an opt-in soak (`WORKBENCH_SOAK=1 swift test --filter OpencodeSoakTests`: one `turn.ended` each, nothing listening,
+   descriptors flat). All of it is macOS only, as a coding turn on OpenCode is: the Linux gate and its soak do not run it.
 5. **Roles stop knowing Codex. Started:** `[providers.opencode]` (`base_url`, `api_key_env`), the registries, doctor, and `plan` and `ship`
    run on it through `OpencodeReadOnlyAgent`, and **`run`** (the coding role) runs under `sandbox-exec` behind the forwarder, started and
    stopped around each turn (a role not yet proven is refused when the config loads); judge, review, goal drafting, the chat and the
    verifier follow in their own PRs. **`judge`** runs on it too (read-only, an empty folder, behind a forwarder like every OpenCode turn; a
    judge with screenshots is refused by name: OpenCode takes no images), and so does **`pr-review`** (read-only in the round's folder, the
-   answer is its last message; a `proof` stage is refused by name). **Goal drafting, the chat and the task editor** run on it too (the same read-only turn; no screenshots). Left: the verifier, task 4 (the fake and soak).
+   answer is its last message; a `proof` stage is refused by name). **Goal drafting, the chat and the task editor** run on it too (the same read-only turn; no screenshots). Left: the verifier.
    Original text: **Roles stop knowing Codex.** `supportedProviders`, `knownProviders`, `defaultProvider` in `AgentsConfig.swift`, `ModelCatalog`,
    `AgentSetup`, `DoctorAgents`, `VerifierConfig`, `ReviewConfig` and the app's agent picker take the provider list from one place.
    `ThreadRunnerCodex.swift` and `ThreadService+PRReviewCodex.swift` become provider-generic code that asks `capabilities`, or are
