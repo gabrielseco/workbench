@@ -252,7 +252,9 @@ enum AgentModelMenu {
 
     /// The warning for a model whose name belongs to the other provider, or nil.
     static func fitNote(provider: AgentProviderID?, model: String?) -> String? {
-        if provider == .opencode, model == nil { return "OpenCode needs a model: pick one, or name the gateway's with Other…." }
+        if provider == .opencode, model == nil {
+            return "OpenCode needs a model: pick one in the menu, or use Other… to name one."
+        }
         guard let provider, let model, let other = AgentSetup.modelFit(provider: provider, model: model) else { return nil }
         return "'\(model)' looks like a \(AgentSetup.name(other)) model, and this role runs on \(AgentSetup.name(provider))."
     }

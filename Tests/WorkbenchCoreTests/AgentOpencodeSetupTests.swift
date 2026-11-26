@@ -37,6 +37,16 @@ private func set(_ role: AgentRole, _ provider: String, in project: Project) thr
         #expect(AgentSetup.name(.opencode) == "OpenCode")
     }
 
+    @Test func draftingOffersOpenCodeOnlyWhenPickingItWouldAlsoSetAModel() throws {
+        func choices(_ extra: String) throws -> [AgentProviderID] {
+            AgentSetup.draftChoices(config: try Config.parse(tools() + extra))
+        }
+        #expect(try choices("") == [.claude, .codex])
+        #expect(try choices("\n" + gateway) == [.claude, .codex], "no model to set: the draft would be refused")
+        #expect(try choices("\n" + gateway + "models = []\n") == [.claude, .codex])
+        #expect(try choices("\n" + gateway + models) == [.claude, .codex, .opencode])
+    }
+
     @Test func itsMenuIsTheProjectsModelsAndTheOnesItsRolesUse() throws {
         let rows = try setup("\n" + gateway + models + "[agents.run]\nprovider = \"opencode\"\nmodel = \"other-model\"\n")
         #expect(rows.row(.run)?.modelOptions == ["gemini-4-neon", "sonnet-claude", "other-model"])

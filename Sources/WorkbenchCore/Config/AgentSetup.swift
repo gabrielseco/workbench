@@ -157,6 +157,13 @@ public struct AgentSetup: Sendable, Equatable {
         return always + [.opencode]
     }
 
+    /// Who a project with no goal agent can pick to draft at once. OpenCode only where `[providers.opencode] models` lists one:
+    /// picking it writes that model, and without one the draft it starts would be refused and the choice already made.
+    public static func draftChoices(config: Config) -> [AgentProviderID] {
+        let hasModel = config.agents.models[.opencode]?.isEmpty == false
+        return providers(for: .goal, config: config).filter { $0 != .opencode || hasModel }
+    }
+
     /// The provider a model name looks like it belongs to, when that is not `provider`: `opus` on Codex is a Claude name, `gpt-6.1` on
     /// Claude is an OpenAI one. A name that looks like neither is no mismatch: only a name it knows is flagged.
     public static func modelFit(provider: AgentProviderID, model: String) -> AgentProviderID? {
