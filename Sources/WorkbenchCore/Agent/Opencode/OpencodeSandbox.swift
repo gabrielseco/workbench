@@ -56,7 +56,7 @@ public enum OpencodeSandbox {
     /// The profile text. Every path must be absolute and already resolved: a path with a quote, a backslash or a control character is
     /// refused, because it would end the string in the profile.
     public static func profile(
-        worktree: URL, scratch: URL, state: URL, user: UserDirectories, denyReads: [URL] = []
+        worktree: URL, scratch: URL, state: URL, user: UserDirectories, denyReads: [URL] = [], denyWrites: [URL] = []
     ) throws -> String {
         let writable = try [worktree, scratch, state].map { "(subpath \(try quoted($0)))" }.joined(separator: " ")
         let temp = try plain(user.temp), cache = try plain(user.cache)
@@ -77,6 +77,8 @@ public enum OpencodeSandbox {
             "(allow network-bind (local ip \"localhost:*\"))",
             "(allow network-inbound (local ip \"localhost:*\"))",
         ]
+        // The checkouts a turn may only read. Last, because one that sits under an allowed name (a temp directory) stays unwritable.
+        for dir in denyWrites { lines.append("(deny file-write* (subpath \(try quoted(dir))))") }
         for dir in denyReads { lines.append("(deny file-read* (subpath \(try quoted(dir))))") }
         return lines.joined(separator: "\n") + "\n"
     }

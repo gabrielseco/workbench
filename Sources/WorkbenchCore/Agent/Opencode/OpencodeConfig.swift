@@ -31,8 +31,13 @@ public struct OpencodeConfig: Sendable, Equatable {
     public var baseURL: String
     /// The environment variable the key is read from. The key itself is never written to the file.
     public var apiKeyVariable: String
+    /// Other checkouts a coding turn's file tools may read (`read_also`), absolute. Only the sandbox keeps them unwritten.
+    public var readDirectories: [String]
 
-    public init(policy: Policy, providerName: String, modelName: String, baseURL: String, apiKeyVariable: String) throws {
+    public init(
+        policy: Policy, providerName: String, modelName: String, baseURL: String, apiKeyVariable: String,
+        readDirectories: [String] = []
+    ) throws {
         func refuse(_ why: String) -> OpencodeSetupError { OpencodeSetupError(why) }
         guard providerName.range(of: #"^[a-z][a-z0-9-]{0,31}\z"#, options: .regularExpression) != nil else {
             throw refuse("The provider name \"\(providerName)\" must be lower case letters, digits and dashes.")
@@ -49,6 +54,19 @@ public struct OpencodeConfig: Sendable, Equatable {
         else {
             throw refuse("The base URL must be an http or https URL with a host, and no credentials, query, fragment or spaces.")
         }
+        // A rule is a pattern, so a folder whose name holds pattern characters would open more than itself.
+        guard readDirectories.isEmpty || policy == .coding else {
+            throw refuse("Other checkouts are given to a coding turn only.")
+        }
+        for folder in readDirectories {
+            let pattern = "*?[]{}".unicodeScalars
+            let bad = folder.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x7F || pattern.contains($0) }
+            guard folder.hasPrefix("/"), folder != "/", !folder.hasSuffix("/"), !bad else {
+                throw refuse(
+                    "The folder \"\(folder)\" cannot be named in a permission rule: an absolute path without *, ?, [, ], { or }.")
+            }
+        }
+        self.readDirectories = readDirectories
         self.policy = policy
         self.providerName = providerName
         self.modelName = modelName
@@ -74,6 +92,14 @@ public struct OpencodeConfig: Sendable, Equatable {
             rules["edit"] = Self.denied
             rules["bash"] = ["*": Self.denied]
         case .coding:
+            // The last matching rule wins and the keys are written sorted, so `*` comes before every path.
+            if !readDirectories.isEmpty {
+                var outside = ["*": Self.denied]
+                for folder in readDirectories {
+                    for pattern in [folder, folder + "/*", folder + "/**"] { outside[pattern] = Self.allowed }
+                }
+                rules["external_directory"] = outside
+            }
             rules["edit"] = Self.allowed
             // The patterns only name what is refused with a clear message; the sandbox is what stops a wrapped command.
             rules["bash"] = [

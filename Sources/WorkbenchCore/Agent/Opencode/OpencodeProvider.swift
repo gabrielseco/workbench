@@ -92,8 +92,9 @@ public struct OpencodeProvider: AgentProvider {
         guard request.reasoningEffort == nil else {
             throw refuse("OpenCode takes no reasoning effort yet; remove it from the role.")
         }
-        guard request.mcp == nil, request.readDirectories.isEmpty else {
-            throw refuse("MCP tools and other readable checkouts are Claude's; OpenCode takes none.")
+        guard request.mcp == nil else { throw refuse("MCP tools are Claude's; OpenCode takes none.") }
+        guard request.readDirectories.isEmpty || request.policy == .scopedCoding else {
+            throw refuse("Only an OpenCode coding turn is given other checkouts to read.")
         }
         guard request.workingDirectory.path.hasPrefix("/") else {
             throw refuse("An OpenCode turn needs the checkout's absolute path.")
@@ -114,7 +115,8 @@ public struct OpencodeProvider: AgentProvider {
         do {
             config = try OpencodeConfig(
                 policy: coding ? .coding : .readOnly, providerName: gateway.providerName, modelName: model,
-                baseURL: forwarder?.baseURL ?? gateway.baseURL, apiKeyVariable: gateway.apiKeyVariable)
+                baseURL: forwarder?.baseURL ?? gateway.baseURL, apiKeyVariable: gateway.apiKeyVariable,
+                readDirectories: request.readDirectories.map(\.path))
         } catch {
             throw AgentFailure(.authOrConfig, "\(error)", retry: .afterFix)
         }
@@ -179,7 +181,8 @@ public struct OpencodeProvider: AgentProvider {
             func real(_ url: URL) -> URL { URL(fileURLWithPath: realpath(url.path, nil).map { String(cString: $0) } ?? url.path) }
             let profile = try OpencodeSandbox.profile(
                 worktree: real(request.workingDirectory), scratch: real(plan.layout.scratch), state: real(plan.layout.state),
-                user: userDirectories, denyReads: OpencodeSandbox.credentialDirectories(home: home))
+                user: userDirectories, denyReads: OpencodeSandbox.credentialDirectories(home: home),
+                denyWrites: request.readDirectories.map(real))
             try profile.write(to: plan.layout.profileFile, atomically: true, encoding: .utf8)
             let wrapped = ["-f", plan.layout.profileFile.path, plan.executable.path] + plan.arguments
             return AgentInvocation(

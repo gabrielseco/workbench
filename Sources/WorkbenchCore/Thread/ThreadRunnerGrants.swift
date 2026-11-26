@@ -32,11 +32,13 @@ extension ThreadRunner {
         let agent = config.resolvedRunAgent(goalModel: goal.model)
         if agent.provider != .claude {
             // One fresh process: no session, no tool patterns, and the rules are already at the top of the prompt.
-            return AgentRequest(
+            var request = AgentRequest(
                 provider: agent.provider, model: agent.model, prompt: prompt, workingDirectory: worktree,
                 outputDirectory: outputDirectory, policy: .scopedCoding, spend: spend(for: goal, options: options),
                 purpose: .coding,
                 environment: options.parentEnvironment, limits: limits, reasoningEffort: agent.reasoningEffort)
+            if agent.provider == .opencode { request.readDirectories = try readDirectories(config, goal: goal) }
+            return request
         }
         let session: AgentSessionIntent =
             resume

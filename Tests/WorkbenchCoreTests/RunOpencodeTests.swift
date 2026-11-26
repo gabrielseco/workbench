@@ -31,6 +31,10 @@ import Testing
           /usr/bin/perl -e 'setpgrp(0,0); exec "/bin/sleep", "300"' >/dev/null 2>&1 &
           echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; /bin/sleep 1
         fi
+        if [ -f "$D/ref" ]; then
+          r=$(cat "$D/ref"); got=$(cat "$r/note.txt"); echo x > "$r/escape.txt" 2>/dev/null; w=$?
+          echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"ref='$got' refwrite='$w'"}}'
+        fi
         echo "turn" >> a.txt
         if [ -f "$D/crash" ]; then echo boom >&2; exit 70; fi
         echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"key='$LITELLM_API_KEY' http='$code' escape='$esc' base='$base' cwd='$(pwd -P)'"}}'
@@ -86,7 +90,7 @@ import Testing
     }
 
     private func opencodeRun(
-        extraConfig: String = "", goalEdit: (String) -> String = { $0 }, approve: Bool = true
+        extraConfig: String = "", topLevel: String = "", goalEdit: (String) -> String = { $0 }, approve: Bool = true
     ) async throws -> OpencodeRun {
         let dir = Scratch.url("opencode-run", ext: "d")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -95,7 +99,7 @@ import Testing
         chmod(script.path, 0o755)
         let gateway = try FakeGateway()
         let fx = try await RunnerFixture(
-            extraConfig: "[providers.opencode]\nbase_url = \"http://127.0.0.1:\(gateway.port)/v1\"\n"
+            extraConfig: topLevel + "[providers.opencode]\nbase_url = \"http://127.0.0.1:\(gateway.port)/v1\"\n"
                 + "executable = \"\(script.path)\"\n[agents.run]\nprovider = \"opencode\"\n"
                 + "model = \"sonnet-claude\"\n" + extraConfig)
         let id = try await fx.service.newThread(name: "work", base: "main")
@@ -221,6 +225,35 @@ import Testing
             let worktree = r.fx.project.worktreesDirectory.appendingPathComponent(r.id)
             #expect(OrphanSweeper.orphans(inside: worktree).isEmpty, "no process of the turn is left")
             #expect(try await refusesConnections(try r.forwarderPort()), "and the forwarder is stopped")
+        }
+
+        @Test func aCodingTurnIsToldOfTheReadAlsoCheckoutsMayReadThemAndCannotWriteThem() async throws {
+            let name = "oc-ref-\(UUID().uuidString)"
+            let r = try await opencodeRun(topLevel: "read_also = [\"../\(name)\"]\n")
+            defer { r.gateway.stop() }
+            let other = r.fx.repo.deletingLastPathComponent().appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: other) }
+            _ = try await r.fx.git.run(["init", "-q"], in: other)
+            try "backend-note".write(to: other.appendingPathComponent("note.txt"), atomically: true, encoding: .utf8)
+            let real = OrphanSweeper.realPath(other)
+            try real.write(to: r.dir.appendingPathComponent("ref"), atomically: true, encoding: .utf8)
+
+            for turn in 1...2 {
+                let report = try await r.run { if turn > 1 { $0.feedback = "Add another line to a.txt." } }
+                #expect(report.result == .succeeded, "turn \(turn): \(report.result)")
+                let prompt = try String(contentsOf: r.fx.project.promptURL(r.id, turn: turn), encoding: .utf8)
+                // As the resolver spells it (macOS drops /private from temp paths), so only the end of the path is compared.
+                #expect(prompt.contains("/" + name), "turn \(turn) is given its path")
+            }
+            let config = try Data(
+                contentsOf: r.fx.project.threadDirectory(r.id).appendingPathComponent("prompts/opencode/opencode.json"))
+            let object = try #require(try JSONSerialization.jsonObject(with: config) as? [String: Any])
+            let outside = (object["permission"] as? [String: Any])?["external_directory"] as? [String: String]
+            #expect(outside?.keys.contains { $0.hasSuffix(name + "/**") } == true && outside?["*"] == "deny", "\(outside ?? [:])")
+            #expect(r.said().contains("ref=backend-note"), "it reads it: \(r.said())")
+            #expect(!r.said().contains("refwrite=0"), "and the sandbox refuses the write: \(r.said())")
+            #expect(!FileManager.default.fileExists(atPath: other.appendingPathComponent("escape.txt").path))
         }
 
         @Test func aMissingOrShortKeyIsRefusedBeforeAWorktreeOrATurnExists() async throws {
