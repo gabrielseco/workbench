@@ -21,11 +21,10 @@ enum OpencodeLinks {
         }
     }
 
-    /// The first reason `folder` does not confine a reader, nil when it does. `skipping` (the run's own state) is not looked at. A
-    /// link whose target does not resolve (it dangles, or it loops) leads nowhere that can be read.
-    static func problem(in folder: URL, skipping: URL? = nil, limit: Int = entryLimit) -> Problem? {
+    /// The first reason `folder` does not confine a reader, nil when it does. Nothing in it is exempt, the run's own state included
+    /// (OpenCode makes no links there). A link whose target does not resolve (it dangles, or it loops) leads nowhere that can be read.
+    static func problem(in folder: URL, limit: Int = entryLimit) -> Problem? {
         let root = OrphanSweeper.realPath(folder)
-        let skipped = skipping.map { OrphanSweeper.realPath($0) }
         var unreadable: String?
         let walker = FileManager.default.enumerator(
             at: URL(fileURLWithPath: root, isDirectory: true), includingPropertiesForKeys: [.isSymbolicLinkKey], options: [],
@@ -38,10 +37,6 @@ enum OpencodeLinks {
         for case let url as URL in walker {
             seen += 1
             if seen > limit { return .unchecked("it holds more than \(limit) entries") }
-            if let skipped, OrphanSweeper.realPath(url) == skipped {
-                walker.skipDescendants()
-                continue
-            }
             guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true,
                 let resolved = realpath(url.path, nil)
             else { continue }

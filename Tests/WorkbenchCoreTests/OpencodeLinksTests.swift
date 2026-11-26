@@ -75,14 +75,39 @@ private struct Linked {
         #expect(message.contains("evil") && !message.contains("secret") && !message.contains(f.root.path), "\(message)")
     }
 
-    @Test func theRunsOwnStateIsNotWalked() throws {
+    @Test(arguments: ["insideTheState", "pointingAtTheStateOutside"])
+    func theRunsOwnStateIsNoExemption(kind: String) throws {
         let f = try Linked()
         defer { f.cleanUp() }
-        let state = f.folder.appendingPathComponent("opencode")
-        try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
-        try f.link("opencode/cache", to: f.secret.path)
-        #expect(OpencodeLinks.problem(in: f.folder, skipping: state) == nil)
-        #expect(OpencodeLinks.problem(in: f.folder) != nil, "without the exemption it is a link like any other")
+        var name = "opencode/cache"
+        if kind == "insideTheState" {
+            let state = f.folder.appendingPathComponent("opencode")
+            try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
+            try f.link(name, to: f.secret.path)
+        } else {
+            let state = f.root.appendingPathComponent("out/opencode")
+            try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
+            name = "to-state"
+            try f.link(name, to: state.path)
+        }
+        #expect(OpencodeLinks.problem(in: f.folder) == .outward(name))
+    }
+
+    @Test func aFolderThatCannotBeListedIsRefusedNotPassed() throws {
+        // Root can list anything, so there is nothing to refuse.
+        guard getuid() != 0 else { return }
+        let f = try Linked()
+        let closed = f.folder.appendingPathComponent("src/deep")
+        defer {
+            chmod(closed.path, 0o755)
+            f.cleanUp()
+        }
+        #expect(chmod(closed.path, 0o000) == 0)
+        guard case .unchecked(let why)? = OpencodeLinks.problem(in: f.folder) else {
+            Issue.record("\(String(describing: OpencodeLinks.problem(in: f.folder)))")
+            return
+        }
+        #expect(why.contains("deep cannot be read"), "\(why)")
     }
 
     @Test func aFolderTooLargeToCheckIsRefusedNotPassed() throws {
