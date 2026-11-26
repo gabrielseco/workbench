@@ -163,7 +163,7 @@ struct NewThreadScreen: View {
                     "Drafting needs a goal agent, and this project's config names none. Pick who drafts: it adds "
                         + "[agents.goal] to .workbench/config.toml and drafts this goal.")
                 HStack {
-                    ForEach(store.goalDraftChoices, id: \.rawValue) { provider in
+                    ForEach(store.goalDraftChoices(screenshots: !staging.urls.isEmpty), id: \.rawValue) { provider in
                         Button("Draft with \(AgentSetup.name(provider))") {
                             Task { await store.draftNewThread(naming: provider, attachments: staging.urls) }
                         }

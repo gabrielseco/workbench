@@ -45,6 +45,8 @@ private func set(_ role: AgentRole, _ provider: String, in project: Project) thr
         #expect(try choices("\n" + gateway) == [.claude, .codex], "no model to set: the draft would be refused")
         #expect(try choices("\n" + gateway + "models = []\n") == [.claude, .codex])
         #expect(try choices("\n" + gateway + models) == [.claude, .codex, .opencode])
+        let config = try Config.parse(tools() + "\n" + gateway + models)
+        #expect(AgentSetup.draftChoices(config: config, screenshots: true) == [.claude, .codex], "it takes no screenshots")
     }
 
     @Test func itsMenuIsTheProjectsModelsAndTheOnesItsRolesUse() throws {

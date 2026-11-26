@@ -386,3 +386,18 @@ private final class Once: @unchecked Sendable {
         #expect(store.project?.root == shown)
     }
 }
+
+/// Who the new-thread screen offers to draft with, in a project that names no goal agent yet.
+@MainActor @Suite struct ProjectStoreDraftChoiceTests {
+    @Test func openCodeIsNotOfferedWhileScreenshotsAreAttached() async throws {
+        let fixture = try await AppFixture()
+        let config = "[tools]\navailable = [\"Read\"]\n\n[providers.opencode]\nbase_url = \"https://gw.example/v1\"\n"
+            + "api_key_env = \"WORKBENCH_TEST_NO_SUCH_KEY\"\nmodels = [\"gateway-model\"]\n"
+        try config.write(to: fixture.project.configURL, atomically: true, encoding: .utf8)
+        let store = ProjectStore(preferences: MemoryPreferences())
+        store.keyGate.fill = { _ in }
+        #expect(await store.open(fixture.root))
+        #expect(store.goalDraftChoices(screenshots: false) == [.claude, .codex, .opencode])
+        #expect(store.goalDraftChoices(screenshots: true) == [.claude, .codex])
+    }
+}

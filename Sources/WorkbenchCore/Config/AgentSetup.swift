@@ -158,10 +158,11 @@ public struct AgentSetup: Sendable, Equatable {
     }
 
     /// Who a project with no goal agent can pick to draft at once. OpenCode only where `[providers.opencode] models` lists one:
-    /// picking it writes that model, and without one the draft it starts would be refused and the choice already made.
-    public static func draftChoices(config: Config) -> [AgentProviderID] {
-        let hasModel = config.agents.models[.opencode]?.isEmpty == false
-        return providers(for: .goal, config: config).filter { $0 != .opencode || hasModel }
+    /// picking it writes that model, and without one, or with screenshots attached (it takes none), the draft it starts would be
+    /// refused and the choice already made.
+    public static func draftChoices(config: Config, screenshots: Bool = false) -> [AgentProviderID] {
+        let canDraft = config.agents.models[.opencode]?.isEmpty == false && !screenshots
+        return providers(for: .goal, config: config).filter { $0 != .opencode || canDraft }
     }
 
     /// The provider a model name looks like it belongs to, when that is not `provider`: `opus` on Codex is a Claude name, `gpt-6.1` on
