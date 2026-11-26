@@ -6,8 +6,8 @@
 # VERIFY_CLI_OPENCODE_BASE_URL; $VERIFY_CLI_OPENCODE_MODEL is the gateway's model name (default sonnet-claude). One real draft (read-only,
 # no dollar cap, a few cents): it must exit 0, say it drafted, and leave a draft thread (never approved, Workbench's own front matter, a
 # title and at least one criterion, the log with a goal.draft pair on opencode with a cost, and no coding turn); its logged command names
-# gateway/<model> and not --auto; the gateway key is in no file of the thread. (A draft with a screenshot is refused by name; that is the app's, and
-# tested in GoalOpencodeTests.) Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 leaves
+# gateway/<model> and not --auto; the gateway key is in no file of the thread. Then, with the key unset, `chat --abandon-active` is refused (exit 6) naming the variable, the draft is not abandoned and no chat
+# thread is made. (A draft with a screenshot is refused by name; that is the app's, and tested in GoalOpencodeTests.) Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start. VERIFY_CLI_SABOTAGE=1 leaves
 # [providers.opencode] out of the clone's config, so the steps that expect a draft must FAIL. The frame and the other switches are in
 # lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -44,7 +44,8 @@ cfg="$P/.workbench/config.toml"
 wbp "$SCRATCH/init.out" "$T_WB" init
 check "init writes a config in the clone" "workbench init exited $RC" test "$RC" = 0
 grep -v -e '^model = ' "$cfg" >"$SCRATCH/config.rest"
-{ cat "$SCRATCH/config.rest"
+{ echo "max_active_threads = 1"
+  grep -v -e "^max_active_threads" "$SCRATCH/config.rest"
   [ "$SABOTAGE" != 1 ] && printf '\n[providers.opencode]\nbase_url = "%s"\napi_key_env = "%s"\n' "$OC_URL" "$KEY_ENV"
   printf '\n[agents.goal]\nprovider = "opencode"\nmodel = "%s"\n' "$OC_MODEL"; } >"$cfg"
 
@@ -90,4 +91,18 @@ sys.exit(1 if hits else 0)
 PY
 }
 check "the gateway key is in no file of the thread" "see above" key_kept
+
+# --- a chat that cannot be served costs nothing, not even the active thread ------------------------------------
+
+# The draft is the one active thread (max_active_threads = 1), so a new chat would have to abandon it first. With the key unset it
+# must be refused before that. No turn is started, so this costs nothing.
+( unset "$KEY_ENV"; cd "$P" && with_timeout "$T_WB" "$WB" chat other --message "could uploads retry?" --abandon-active ) \
+    >"$SCRATCH/chat.out" 2>&1; RC=$?
+shown "$SCRATCH/chat.out" 3
+check "a chat with the key unset is refused, exit 6, naming it" "exit $RC" \
+    bash -c 'test "$1" = 6 && grep -q "$2" "$3"' _ "$RC" "$KEY_ENV" "$SCRATCH/chat.out"
+wbp "$SCRATCH/after.json" "$T_WB" status "$ID" --json
+check "the active draft was not abandoned" "status says it ended" \
+    bash -c 'py=$(python3 -I -c "import json,sys; print(json.load(open(sys.argv[1])).get(\"ended\") or \"\")" "$1") && test -z "$py"' _ "$SCRATCH/after.json"
+check "no chat thread was made" "threads: $(threads)" test "$(threads)" = "$((before + 1))"
 finish

@@ -87,9 +87,7 @@ extension ThreadService {
         }
         if let refusal = Chat.refusal(history: history, message: text, costUSD: spent, newImages: images.count) { throw refusal }
         // Before a thread is made or another one abandoned: a request that cannot be served must not cost the person their active thread.
-        if agent.provider == .opencode, !images.isEmpty {
-            throw ChatRefusal.unavailable("opencode cannot take images, and there is no text substitute for them")
-        }
+        if agent.provider == .opencode { try requireOpencodeChat(config: config, environment: environment, images: images.count) }
         guard let provider = config.agentProvider(agent.provider) else {
             throw ChatRefusal.unavailable("there is no adapter for \(agent.provider)")
         }
@@ -107,6 +105,14 @@ extension ThreadService {
                 target: target, existing: existing, said: Said(text: text, images: images), history: history, config: config,
                 agent: agent, provider: provider, spend: spend, abandonActive: abandonActive, environment: environment,
                 timeout: timeout, attach: attach)
+        }
+    }
+
+    /// What an OpenCode chat needs that is only noticed when its turn is prepared: no screenshots, a gateway and a usable key.
+    private func requireOpencodeChat(config: Config, environment: [String: String], images: Int) throws {
+        if images > 0 { throw ChatRefusal.unavailable("opencode cannot take images, and there is no text substitute for them") }
+        do { _ = try OpencodeGatewaySession.gateway(config: config, environment: environment) } catch {
+            throw ChatRefusal.unavailable("\(error)")
         }
     }
 

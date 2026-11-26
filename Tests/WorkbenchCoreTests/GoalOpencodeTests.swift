@@ -125,7 +125,27 @@ private func opencodeDrafting(answer: String = proposalJSON, stops: Bool = true)
         #expect(o.d.threads == [active], "and no chat thread was made: \(o.d.threads)")
     }
 
-    @Test func aChatTurnAndATaskEditRunOnOpencodeBehindTheForwarder() async throws {
+    @Test(arguments: [nil, "short"])
+    func aChatWithNoUsableKeyIsRefusedBeforeTheActiveThreadIsAbandoned(key: String?) async throws {
+        let o = try await opencodeDrafting()
+        let drafted = try await o.d.draft(environment: o.environment)
+        let active = try #require(drafted.id)
+        var env = o.environment
+        env["LITELLM_API_KEY"] = key
+        do {
+            _ = try await o.d.fx.service.chat(
+                target: .newThread(name: "idea"), message: "what about retries?", config: o.d.config, abandonActive: true,
+                environment: env)
+            Issue.record("a chat started with no usable key")
+        } catch let refusal as ChatRefusal {
+            #expect("\(refusal)".contains("LITELLM_API_KEY"), "\(refusal)")
+        }
+        #expect(ThreadStore(project: o.d.fx.project).state(of: active).decision == nil, "the active thread was not abandoned")
+        #expect(o.d.threads == [active], "and no chat thread was made: \(o.d.threads)")
+        #expect(o.runs == 1, "only the draft ran")
+    }
+
+    @Test func aChatTurnRunsOnOpencodeBehindTheForwarder() async throws {
         let o = try await opencodeDrafting(answer: "What should happen after the fifth try?")
         let chat = try await o.d.fx.service.chat(
             target: .newThread(name: "idea"), message: "what about retries?", config: o.d.config, environment: o.environment)
@@ -133,13 +153,17 @@ private func opencodeDrafting(answer: String = proposalJSON, stops: Bool = true)
         #expect(chat.reply == "What should happen after the fifth try?")
         let env = try #require(o.read("env_1"))
         #expect(env.contains("key=forwarder") && !env.contains(gatewayKey), "\(env)")
+    }
 
+    @Test func aTaskEditOnOpencodeProposesTheChange() async throws {
+        let edited = "---\nat: 04:00\ndays: weekdays\nfix: pr\nbudget: 3\n---\nBump the next countries.\n"
+        let o = try await opencodeDrafting(answer: edited)
         let task = try TaskFixture(in: o.d.fx.project)
         let edit = try await TaskEditor(project: task.project).propose(
             task: task.name, request: "allow three dollars", config: o.d.config, environment: o.environment, timeout: 30)
-        #expect(o.runs == 2, "both turns ran")
-        let env2 = try #require(o.read("env_2"))
-        #expect(env2.contains("key=forwarder") && !env2.contains(gatewayKey), "\(env2)")
-        _ = edit
+        #expect(edit.failure == nil, "\(String(describing: edit.failure))")
+        #expect(edit.proposal?.text == edited, "\(String(describing: edit.proposal?.text))")
+        let env = try #require(o.read("env_1"))
+        #expect(env.contains("key=forwarder") && !env.contains(gatewayKey), "\(env)")
     }
 }
