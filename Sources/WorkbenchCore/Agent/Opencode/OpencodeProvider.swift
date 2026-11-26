@@ -92,8 +92,9 @@ public struct OpencodeProvider: AgentProvider {
         guard request.reasoningEffort == nil else {
             throw refuse("OpenCode takes no reasoning effort yet; remove it from the role.")
         }
-        guard request.mcp == nil, request.readDirectories.isEmpty else {
-            throw refuse("MCP tools and other readable checkouts are Claude's; OpenCode takes none.")
+        guard request.mcp == nil else { throw refuse("MCP tools are Claude's; OpenCode takes none.") }
+        guard request.readDirectories.isEmpty || request.policy == .scopedCoding else {
+            throw refuse("Only an OpenCode coding turn is given other checkouts to read.")
         }
         guard request.workingDirectory.path.hasPrefix("/") else {
             throw refuse("An OpenCode turn needs the checkout's absolute path.")
@@ -114,7 +115,8 @@ public struct OpencodeProvider: AgentProvider {
         do {
             config = try OpencodeConfig(
                 policy: coding ? .coding : .readOnly, providerName: gateway.providerName, modelName: model,
-                baseURL: forwarder?.baseURL ?? gateway.baseURL, apiKeyVariable: gateway.apiKeyVariable)
+                baseURL: forwarder?.baseURL ?? gateway.baseURL, apiKeyVariable: gateway.apiKeyVariable,
+                readDirectories: request.readDirectories.map(\.path))
         } catch {
             throw AgentFailure(.authOrConfig, "\(error)", retry: .afterFix)
         }

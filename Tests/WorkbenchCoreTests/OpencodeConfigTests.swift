@@ -141,3 +141,45 @@ private func permission(_ config: OpencodeConfig) throws -> [String: Any] {
         #expect(!FileManager.default.fileExists(atPath: made.configFile.path), "the caller writes the file, after the layout")
     }
 }
+
+@Suite struct OpencodeConfigReadAlsoTests {
+    private func config(_ folders: [String], policy: OpencodeConfig.Policy = .coding) throws -> OpencodeConfig {
+        try OpencodeConfig(
+            policy: policy, providerName: "gateway", modelName: "sonnet-claude", baseURL: "http://127.0.0.1:1/v1",
+            apiKeyVariable: "LITELLM_API_KEY", readDirectories: folders)
+    }
+
+    @Test func aCodingRunMayReadTheNamedFoldersAndNothingElseOutside() throws {
+        let data = try config(["/repos/backend", "/repos/shared"]).json()
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let outside = try #require((object["permission"] as? [String: Any])?["external_directory"] as? [String: String])
+        var expected = ["*": "deny"]
+        for folder in ["/repos/backend", "/repos/shared"] {
+            for pattern in [folder, folder + "/*", folder + "/**"] { expected[pattern] = "allow" }
+        }
+        #expect(outside == expected, "\(outside)")
+        // OpenCode takes the last rule that matches: the catch-all deny has to be written first or it takes the allows back.
+        let text = String(decoding: data, as: UTF8.self)
+        let block = try #require(text.range(of: "\"external_directory\""))
+        let rest = text[block.upperBound...]
+        let deny = try #require(rest.range(of: "\"*\""))
+        let allow = try #require(rest.range(of: "\"/repos/backend\""))
+        #expect(deny.lowerBound < allow.lowerBound)
+    }
+
+    @Test func withNoneNamedEverythingOutsideStaysDenied() throws {
+        for policy in [OpencodeConfig.Policy.readOnly, .coding] {
+            let object = try JSONSerialization.jsonObject(with: try config([], policy: policy).json()) as? [String: Any]
+            #expect((object?["permission"] as? [String: Any])?["external_directory"] as? String == "deny")
+        }
+    }
+
+    @Test(arguments: ["relative", "/", "/a/b/", "/a/*", "/a/b?", "/a/[b]", "/a/{b,c}", "/a/\nb"])
+    func aFolderThatWouldOpenMoreThanItselfIsRefused(folder: String) {
+        #expect(throws: OpencodeSetupError.self) { try config([folder]) }
+    }
+
+    @Test func aReadOnlyRunIsGivenNone() {
+        #expect(throws: OpencodeSetupError.self) { try config(["/repos/backend"], policy: .readOnly) }
+    }
+}
