@@ -164,6 +164,10 @@ public struct OpencodeProvider: AgentProvider {
     public func invocation(for request: AgentRequest) throws -> AgentInvocation {
         let plan = try prepared(for: request)
         let shown = Self.shown(plan.arguments)
+        // Said before anything is written or started. A coding turn's reads are not confined at all, which is stated.
+        if !plan.coding, let problem = OpencodeLinks.problem(in: request.workingDirectory) {
+            throw AgentFailure(.unsupportedCapability, "OpenCode was not started: \(problem.message).", retry: .afterFix)
+        }
         do {
             try plan.layout.create()
             try plan.config.json().write(to: plan.layout.configFile, options: .atomic)
