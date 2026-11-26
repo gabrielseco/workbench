@@ -10,7 +10,7 @@ import Testing
     /// An `opencode` that runs where a real one would, under `sandbox-exec` and behind the forwarder, and says what it saw in the
     /// event stream (which the runner records verbatim): the key variable's value, the status of a request through the forwarder,
     /// whether it could write outside its worktree, and its config's address. It edits `a.txt` in the worktree it starts in.
-    /// `hang` and `crash` in its folder change what it does.
+    /// `hang`, `ignoreterm`, `leftover`, `error` and `crash` in its folder change what it does.
     private func fakeOpencodeScript(_ dir: URL) -> String {
         """
         #!/bin/sh
@@ -22,6 +22,13 @@ import Testing
         echo '{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}'
         if [ -f "$D/hang" ]; then sleep 300 & echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; wait; fi
         if [ -f "$D/ignoreterm" ]; then trap '' TERM; sleep 300 & echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; wait; fi
+        if [ -f "$D/error" ]; then
+          echo '{"type":"error","sessionID":"ses_1","error":{"type":"provider.internal","message":"Service Unavailable","status":503}}'; exit 1
+        fi
+        if [ -f "$D/leftover" ]; then
+          /usr/bin/perl -e 'setpgrp(0,0); exec "/bin/sleep", "300"' >/dev/null 2>&1 &
+          echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; /bin/sleep 1
+        fi
         echo "turn" >> a.txt
         if [ -f "$D/crash" ]; then echo boom >&2; exit 70; fi
         echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"key='$LITELLM_API_KEY' http='$code' escape='$esc' base='$base' cwd='$(pwd -P)'"}}'
@@ -254,6 +261,136 @@ import Testing
             let error = await #expect(throws: RunnerError.self) { _ = try await r.run() }
             #expect(error == .agentNotFound(provider: "opencode", name: "/nonexistent/opencode"), "\(error!)")
             #expect(!r.hasWorktree)
+        }
+    }
+
+    private let soakEnabled = ProcessInfo.processInfo.environment["WORKBENCH_SOAK"] == "1"
+    private let soakRuns = Int(ProcessInfo.processInfo.environment["WORKBENCH_OPENCODE_SOAK_RUNS"] ?? "") ?? 40
+
+    /// The ways an OpenCode turn is ended from outside, or leaves something behind (P28 task 4).
+    @Suite(.processGate) struct RunOpencodeRecoveryTests {
+        /// The real CLI as its own process running a hanging turn, watched by a runner that never tracks its descendants: it is there
+        /// to start and watch it, not to clean up after it. Returns once the fake has said which child it left running.
+        private func hangingCLI(_ r: OpencodeRun) async throws -> (cli: ProcessRun, child: Int32) {
+            try r.put("hang")
+            var spawn = SpawnRequest(
+                executable: WorkbenchBinary.executable, arguments: ["run"],
+                environment: [
+                    "PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "USER": NSUserName(), "LITELLM_API_KEY": gatewayKey,
+                ],
+                workingDirectory: r.fx.repo, timeout: 120)
+            spawn.killGrace = 30
+            spawn.snapshotInterval = 3600
+            let cli = try ProcessRunner.start(spawn)
+            #expect(await pollUntil { r.childPID() != nil }, "the fake never reached its hang")
+            return (cli, try #require(r.childPID()))
+        }
+
+        private func results(_ r: OpencodeRun) -> [String?] { r.ended().map { $0.data["result"]?.stringValue } }
+
+        @Test func aKilledRunnerLeavesAnOpenTurnThatTheNextRunClosesAndSweeps() async throws {
+            let r = try await opencodeRun()
+            defer { r.gateway.stop() }
+            let (cli, child) = try await hangingCLI(r)
+            defer { kill(child, SIGKILL) }
+            let port = try r.forwarderPort()
+            kill(cli.pid, SIGKILL)
+            for await event in cli.events { if case .exited = event { break } }
+            #expect(try r.fx.contents(r.id).openTurn == 1, "the turn is left open in the log")
+            #expect(FakeClaude.alive(child), "a tool child outlives its SIGKILLed runner")
+            #expect(Client.dial(port) == nil, "the forwarder lived in the runner, so it is gone with it")
+
+            try FileManager.default.removeItem(at: r.dir.appendingPathComponent("hang"))
+            let report = try await r.run()
+            #expect(report.result == .succeeded, "\(report.result)")
+            #expect(results(r) == ["interrupted", "succeeded"], "\(results(r))")
+            #expect(try r.fx.contents(r.id).isHealthy)
+            #expect(await FakeClaude.waitUntilGone(child), "what the dead runner left behind is swept")
+        }
+
+        @Test func aStopFromAnotherProcessEndsTheTurnAsStoppedAndLeavesNothing() async throws {
+            let r = try await opencodeRun()
+            defer { r.gateway.stop() }
+            let (cli, child) = try await hangingCLI(r)
+            defer { kill(child, SIGKILL) }
+            let port = try r.forwarderPort()
+            #expect(r.fx.service.requestStop(id: r.id) == .signalled(pid: cli.pid))
+            var exit: ProcessExit?
+            for await event in cli.events { if case .exited(let e) = event { exit = e } }
+            #expect(exit?.termination == .exited(3), "`run` exits 3 when stopped: \(String(describing: exit))")
+            #expect(results(r) == ["stopped"], "\(results(r))")
+            #expect(try r.fx.contents(r.id).isHealthy)
+            #expect(await FakeClaude.waitUntilGone(child), "the tool child went with the turn")
+            #expect(Client.dial(port) == nil)
+        }
+
+        @Test func aStopBeforeTheProcessStartsRecordsAStoppedTurnAndStartsNothing() async throws {
+            let r = try await opencodeRun()
+            defer { r.gateway.stop() }
+            let runner = r.fx.runner(r.id)
+            await runner.stop()
+            let report = try await runner.run(r.options())
+            #expect(report.result == .stopped, "\(report.result)")
+            #expect(results(r) == ["stopped"])
+            #expect(r.events.filter { $0.kind == .turnStarted }.count == 1, "and it was started on the record")
+            #expect(r.fx.transcript(r.id).isEmpty, "no process ran")
+            #expect(Client.dial(try r.forwarderPort()) == nil, "the forwarder made for it is stopped")
+        }
+
+        @Test func aChildLeftBehindByASuccessfulTurnIsGoneWhenTheTurnIs() async throws {
+            let r = try await opencodeRun()
+            defer { r.gateway.stop() }
+            try r.put("leftover")
+            let report = try await r.run()
+            #expect(report.result == .succeeded, "\(report.result)")
+            let child = try #require(r.childPID(), "the fake left a child in a process group of its own")
+            defer { kill(child, SIGKILL) }
+            #expect(await FakeClaude.waitUntilGone(child), "it outlived the turn")
+        }
+
+        @Test func aGatewayErrorEventFailsTheTurnAndItsMessageIsKept() async throws {
+            let r = try await opencodeRun()
+            defer { r.gateway.stop() }
+            try r.put("error")
+            let report = try await r.run()
+            #expect(report.result == .failed, "\(report.result)")
+            #expect(r.ended().count == 1)
+            let errors = r.fx.transcript(r.id).filter { $0["type"]?.stringValue == "error" }
+            #expect(errors.first?["error"]?["message"]?.stringValue == "Service Unavailable", "\(errors)")
+            #expect(Client.dial(try r.forwarderPort()) == nil)
+        }
+    }
+
+    /// Many OpenCode turns in one process, the way the app holds the runner: a forwarder that kept a socket or a thread would show as
+    /// descriptors that grow. Off by default, like the other soaks: `WORKBENCH_SOAK=1 swift test --filter OpencodeSoakTests`.
+    @Suite(.serialized, .processGate, .enabled(if: soakEnabled)) struct OpencodeSoakTests {
+        @Test func manyTurnsEndOnceEachAndNothingAccumulates() async throws {
+            await SoakExclusion.shared.acquire()
+            defer { Task { await SoakExclusion.shared.release() } }
+            let modes = ["", "crash", "error", "hang", "ignoreterm", "leftover"]
+            let before = openDescriptorCount()
+            var results: [String: Int] = [:]
+            for i in 0..<soakRuns {
+                let mode = modes[i % modes.count]
+                let r = try await opencodeRun()
+                defer { r.gateway.stop() }
+                if !mode.isEmpty { try r.put(mode) }
+                let hangs = mode == "hang" || mode == "ignoreterm"
+                let report = try await r.run(timeout: hangs ? 2 : 30) { $0.killGrace = 1 }
+                results[report.result.rawValue, default: 0] += 1
+                let label = "\(mode.isEmpty ? "ok" : mode) #\(i)"
+                let expected: RunResult = hangs ? .timedOut : (mode == "crash" || mode == "error" ? .failed : .succeeded)
+                #expect(report.result == expected, "\(label): \(report.result)")
+                let contents = try r.fx.contents(r.id)
+                #expect(contents.isHealthy && contents.openTurn == nil, "\(label): \(contents.problems)")
+                #expect(r.ended().count == 1, "\(label): one turn.ended")
+                #expect(Client.dial(try r.forwarderPort()) == nil, "\(label): the forwarder is still listening")
+                if let child = r.childPID() { #expect(await FakeClaude.waitUntilGone(child), "\(label): a child is left") }
+                try await r.fx.service.abandon(id: r.id, force: true)
+            }
+            let after = openDescriptorCount()
+            #expect(after - before <= 4, "descriptors grew from \(before) to \(after) over \(soakRuns) turns")
+            print("SOAK opencode runs=\(soakRuns) results=\(results.sorted { $0.key < $1.key }) fds \(before)->\(after)")
         }
     }
 #endif
