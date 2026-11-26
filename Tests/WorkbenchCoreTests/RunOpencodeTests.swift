@@ -23,6 +23,8 @@ import Testing
         if [ -f "$D/hang" ]; then sleep 300 & echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; wait; fi
         if [ -f "$D/ignoreterm" ]; then trap '' TERM; sleep 300 & echo '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"child='$!'"}}'; wait; fi
         if [ -f "$D/error" ]; then
+          # A finished step first, so that only the error that follows can make this turn fail.
+          echo '{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"stop","cost":0.001,"tokens":{"input":1,"output":1}}}'
           echo '{"type":"error","sessionID":"ses_1","error":{"type":"provider.internal","message":"Service Unavailable","status":503}}'; exit 0
         fi
         if [ -f "$D/leftover" ]; then
