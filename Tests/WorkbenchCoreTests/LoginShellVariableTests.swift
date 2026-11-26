@@ -12,11 +12,11 @@ private struct Shell {
     let home: URL
     var path: String { home.appendingPathComponent("shell").path }
 
-    init(exports: String) throws {
+    init(exports: String, then: String = "exec /bin/sh -c \"$2\"") throws {
         home = FileManager.default.temporaryDirectory.appendingPathComponent("login-var-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         let record = "echo \"$@\" >>\"\(home.path)/asked\""
-        let script = "#!/bin/sh\necho 'welcome to the shell'\n\(exports)\n\(record)\nexec /bin/sh -c \"$2\"\n"
+        let script = "#!/bin/sh\necho 'welcome to the shell'\n\(exports)\n\(record)\n\(then)\n"
         try script.write(toFile: home.appendingPathComponent("shell").path, atomically: true, encoding: .utf8)
         chmod(home.appendingPathComponent("shell").path, 0o755)
     }
@@ -24,8 +24,8 @@ private struct Shell {
     var asked: String? { try? String(contentsOf: home.appendingPathComponent("asked"), encoding: .utf8) }
     func cleanUp() { try? FileManager.default.removeItem(at: home) }
 
-    func resolve(_ name: String) async -> String? {
-        await LoginShellVariable.resolve(name, shell: path, home: home.path, path: "/usr/bin:/bin")
+    func resolve(_ name: String, timeout: TimeInterval = 10) async -> String? {
+        await LoginShellVariable.resolve(name, shell: path, home: home.path, path: "/usr/bin:/bin", timeout: timeout)
     }
 }
 
@@ -49,6 +49,46 @@ private struct Shell {
         defer { shell.cleanUp() }
         #expect(await shell.resolve(name) == nil)
         #expect(shell.asked == nil, "the shell was started for \(name)")
+    }
+
+    @Test(arguments: ["exit 3", "/bin/sh -c \"$2\"; exit 1"])
+    func aShellThatFailsIsNotBelievedWhateverItPrinted(ending: String) async throws {
+        let shell = try Shell(exports: "export GATEWAY_KEY=printed-before-failing", then: ending)
+        defer { shell.cleanUp() }
+        #expect(await shell.resolve("GATEWAY_KEY") == nil)
+    }
+
+    @Test func aShellThatHangsIsEndedAtTheDeadlineWithItsChild() async throws {
+        // Ignores SIGTERM and leaves a child holding the pipes, after printing the value.
+        let shell = try Shell(
+            exports: "export GATEWAY_KEY=printed-then-hung",
+            then: "/bin/sh -c \"$2\"; trap '' TERM; sleep 30 & echo $! >\"$HOME/child\"; wait")
+        defer { shell.cleanUp() }
+        let started = Date()
+        #expect(await shell.resolve("GATEWAY_KEY", timeout: 1) == nil)
+        #expect(Date().timeIntervalSince(started) < 20, "the deadline ended it")
+        let text = try String(contentsOf: shell.home.appendingPathComponent("child"), encoding: .utf8)
+        let child = try #require(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+        #expect(await FakeClaude.waitUntilGone(child), "and its child is gone")
+    }
+
+    @Test func theValueNeverPassesThroughAFile() async throws {
+        // While the shell is still running, no temporary file holds what it has already printed.
+        let secret = "on-disk-check-\(UUID().uuidString)"
+        let shell = try Shell(
+            exports: "export GATEWAY_KEY=\(secret)", then: "/bin/sh -c \"$2\"; touch \"$HOME/printed\"; sleep 2")
+        defer { shell.cleanUp() }
+        async let value = shell.resolve("GATEWAY_KEY")
+        let printed = shell.home.appendingPathComponent("printed").path
+        #expect(await pollUntil { FileManager.default.fileExists(atPath: printed) })
+        let temp = FileManager.default.temporaryDirectory
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: temp.path)) ?? []
+        for name in names where name.hasPrefix("wb-") {
+            let url = temp.appendingPathComponent(name)
+            guard let data = try? Data(contentsOf: url) else { continue }
+            #expect(data.range(of: Data(secret.utf8)) == nil, "the key is in \(name)")
+        }
+        #expect(await value == secret)
     }
 
     @Test func onlyACleanValueBetweenTheMarkersIsTaken() {

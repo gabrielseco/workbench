@@ -3,7 +3,8 @@ import Foundation
 /// The gateway key for a process that no terminal started: an app opened from the Dock, or a timer under launchd, has none of what the
 /// person's shell exports. As for `LoginShellPath`, the login shell is asked once, with a timeout, and only for the one variable the
 /// project's config names; a variable the process already has is never replaced, and anything that goes wrong leaves it unset, so the
-/// run is refused by name as it would be. The value is kept in this process's environment only: it is not logged or written.
+/// run is refused by name as it would be. The value is kept in this process's environment only: it is not logged, and the shell's
+/// output is read through a pipe, never through `GitRunner`'s temporary files (a killed process would leave the key on disk).
 public enum LoginShellVariable {
     static let startMarker = "__WORKBENCH_VALUE_START__"
     static let endMarker = "__WORKBENCH_VALUE_END__"
@@ -20,12 +21,27 @@ public enum LoginShellVariable {
         let program = shell?.isEmpty == false ? shell ?? "" : "/bin/zsh"
         guard program.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: program) else { return nil }
         let environment = ["HOME": home, "SHELL": program, "TERM": "dumb", "PATH": path]
-        let runner = GitRunner(executable: URL(fileURLWithPath: program), environment: environment, timeout: timeout)
-        let script = "printf '%s%s%s' '\(startMarker)' \"$\(name)\" '\(endMarker)'"
-        guard let result = try? await runner.run(["-ilc", script], in: URL(fileURLWithPath: home)), result.succeeded else {
-            return nil
+        let script = "printf '%s%s%s\\n' '\(startMarker)' \"$\(name)\" '\(endMarker)'"
+        var spawn = SpawnRequest(
+            executable: URL(fileURLWithPath: program), arguments: ["-ilc", script], environment: environment,
+            workingDirectory: URL(fileURLWithPath: home), timeout: timeout)
+        spawn.killGrace = 1
+        // Room for a talkative profile; the value's line is far shorter.
+        spawn.maxLineBytes = 64 * 1024
+        spawn.maxOutputBytes = 1 << 20
+        guard let run = try? ProcessRunner.start(spawn) else { return nil }
+        var found: String?
+        var exit: ProcessExit?
+        for await event in run.events {
+            switch event {
+            case .line(let line): found = parse(line) ?? found
+            case .exited(let ended): exit = ended
+            case .started, .oversizedLine: break
+            }
         }
-        return parse(result.stdout)
+        // A shell that failed or ran out of time is not believed, whatever it printed first.
+        guard let exit, exit.cause == .natural, exit.termination == .exited(0) else { return nil }
+        return found
     }
 
     /// The text between the markers, so what a profile prints around it is ignored; nil when it is empty, too long, or holds a control
