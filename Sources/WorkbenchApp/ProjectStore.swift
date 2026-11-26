@@ -236,6 +236,8 @@ import WorkbenchCore
         (current.goal, current.review) = (nil, nil)
         screen = .opening(path: located.root.path)
         await reload()
+        // The gateway key a Dock-started window lacks. Last: no other open may interleave with a half-switched window.
+        await LoginShellVariable.fillGatewayKey(project: located)
         return true
     }
 

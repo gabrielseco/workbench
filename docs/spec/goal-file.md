@@ -357,7 +357,8 @@ check_command = "scripts/check.sh"      # optional; written exactly as it will b
 # models = ["gpt-6.1-sol", "gpt-6-astra"]  # P25: names added to this provider's model menu in the app's Agents card (nothing else reads them)
 # [providers.opencode]                  # P28: OpenCode through one OpenAI-compatible gateway; `run`, `judge`, `plan` and `ship` so far
 # base_url = "https://gateway.example/v1"  # required: http or https, a host, no credentials; models are the gateway's names
-# api_key_env = "LITELLM_API_KEY"       # the environment variable the key is read from (the key is never in a config)
+# api_key_env = "LITELLM_API_KEY"       # the environment variable the key is read from (the key is never in a config); the app and
+#                                         `task tick`, which no terminal starts, ask the login shell for it when they lack it
 # [agents.run]                          # every model is chosen in an [agents.<role>] table: goal, run, judge,
 # model = "opus"                        # review, ship, plan. A goal's `model` wins for run; unset = provider default
 # [agents.judge]                        # provider, model, reasoning_effort, and allow_unpriced (not run)

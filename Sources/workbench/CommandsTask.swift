@@ -134,6 +134,8 @@ extension Commands {
             if plan.broken.isEmpty { out("no task is due") }
             return plan.broken.isEmpty ? 0 : 1
         }
+        // A timer's process has none of what the shell exports; a tick from a terminal already has it, and keeps it.
+        await LoginShellVariable.fillGatewayKey(project: ctx.project)
         let runner = taskRunner(ctx)
         stopped.use(runner.stop)
         var code: Int32 = plan.broken.isEmpty ? 0 : 1
