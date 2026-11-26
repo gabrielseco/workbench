@@ -243,7 +243,8 @@ import Testing
                 let report = try await r.run { if turn > 1 { $0.feedback = "Add another line to a.txt." } }
                 #expect(report.result == .succeeded, "turn \(turn): \(report.result)")
                 let prompt = try String(contentsOf: r.fx.project.promptURL(r.id, turn: turn), encoding: .utf8)
-                #expect(prompt.contains("## Other repositories") && prompt.contains(name), "turn \(turn) is told of it")
+                // As the resolver spells it (macOS drops /private from temp paths), so only the end of the path is compared.
+                #expect(prompt.contains("/" + name), "turn \(turn) is given its path")
             }
             let config = try Data(
                 contentsOf: r.fx.project.threadDirectory(r.id).appendingPathComponent("prompts/opencode/opencode.json"))

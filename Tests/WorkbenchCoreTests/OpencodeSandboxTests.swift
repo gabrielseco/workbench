@@ -55,6 +55,21 @@ private func profile(
         #expect(!text.contains("(subpath \"/private/var/folders/ab/cd.e+f/C\")"))
     }
 
+    @Test func aCheckoutThatMayOnlyBeReadIsDeniedForWritingAfterEveryAllow() throws {
+        let text = try OpencodeSandbox.profile(
+            worktree: URL(fileURLWithPath: "/w/wt"), scratch: URL(fileURLWithPath: "/o/scratch"),
+            state: URL(fileURLWithPath: "/o/state"), user: user, denyWrites: [URL(fileURLWithPath: "/repos/backend")])
+        let lines = text.split(separator: "\n").map(String.init)
+        let deny = try #require(lines.firstIndex(of: "(deny file-write* (subpath \"/repos/backend\"))"))
+        let lastAllow = try #require(lines.lastIndex { $0.hasPrefix("(allow file-write*") })
+        #expect(deny > lastAllow, "the last matching rule wins")
+        #expect(throws: OpencodeSetupError.self) {
+            try OpencodeSandbox.profile(
+                worktree: URL(fileURLWithPath: "/w"), scratch: URL(fileURLWithPath: "/s"), state: URL(fileURLWithPath: "/t"),
+                user: user, denyWrites: [URL(fileURLWithPath: "/r\"x")])
+        }
+    }
+
     @Test func credentialDirectoriesAreDeniedForReadingWhenNamed() throws {
         let text = try profile(denyReads: ["/h/.ssh", "/h/.local/share/opencode"])
         #expect(text.contains("(deny file-read* (subpath \"/h/.ssh\"))"))
@@ -127,10 +142,10 @@ private func profile(
             func cleanUp() { try? FileManager.default.removeItem(at: root) }
 
             /// Runs `script` under the profile, with its working directory in the worktree, and says whether it exited 0.
-            func run(_ script: String, deny: [URL] = []) throws -> Bool {
+            func run(_ script: String, deny: [URL] = [], denyWrites: [URL] = []) throws -> Bool {
                 let dirs = try #require(OpencodeSandbox.userDirectories())
                 let text = try OpencodeSandbox.profile(
-                    worktree: worktree, scratch: scratch, state: state, user: dirs, denyReads: deny)
+                    worktree: worktree, scratch: scratch, state: state, user: dirs, denyReads: deny, denyWrites: denyWrites)
                 let file = root.appendingPathComponent("p.sb")
                 try text.write(to: file, atomically: true, encoding: .utf8)
                 let null = open("/dev/null", O_WRONLY)
@@ -194,6 +209,20 @@ private func profile(
             #expect(try !f.run("echo x > \(stray.path)"))
             #expect(!FileManager.default.fileExists(atPath: stray.path))
             #expect(try f.run("d=$(mktemp -d) && rmdir \"$d\""), "mktemp -d uses confstr, not TMPDIR, and needs its tmp.* names")
+        }
+
+        @Test func aReadOnlyCheckoutUnderAnAllowedTempNameStillCannotBeWritten() throws {
+            let f = try Fixture()
+            defer { f.cleanUp() }
+            let dirs = try #require(OpencodeSandbox.userDirectories())
+            // `mktemp -d`'s names are writable in the shared temp directory; a checkout that happens to sit under one must not be.
+            let checkout = dirs.temp.appendingPathComponent("tmp.backend-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: checkout, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: checkout) }
+            #expect(try f.run("echo x > \(checkout.path)/before.txt"), "the name alone is writable")
+            #expect(try !f.run("echo x > \(checkout.path)/after.txt", denyWrites: [checkout]))
+            #expect(!FileManager.default.fileExists(atPath: checkout.appendingPathComponent("after.txt").path))
+            #expect(try f.run("cat \(checkout.path)/before.txt", denyWrites: [checkout]), "and it is still readable")
         }
 
         @Test func aNamedCredentialDirectoryCannotBeRead() throws {

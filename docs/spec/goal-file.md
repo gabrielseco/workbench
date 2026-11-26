@@ -463,7 +463,7 @@ Notes:
   call. The goal's own `read_also` line adds to the list. The first prompt lists the folders as readable and not to be changed; the goal screen shows them. A run whose
   list cannot be honoured is refused before any turn (`read_also entry '…': …`). An OpenCode coding turn gets them as
   `external_directory` allow rules for exactly those folders (everything else outside the worktree stays denied to its file tools), and
-  the sandbox refuses writes to them as it does anywhere outside the worktree; its shell's reads are not confined at all (above). A Codex
+  the sandbox denies writes to each by name, wherever it sits (a temp directory it otherwise allows names in included); its shell's reads are not confined at all (above). A Codex
   coding turn does not use it yet and says so as a note. Bash is not opened to them: only what `[tools] allowed` already permits runs, in the worktree.
 - **`copy` brings the ignored files a checkout needs into each new worktree.** Repo-relative paths or globs
   (`*` and `?` within one path component, no `**`), copied from the main checkout right after the worktree is

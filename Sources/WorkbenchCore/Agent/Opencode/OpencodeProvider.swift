@@ -181,7 +181,8 @@ public struct OpencodeProvider: AgentProvider {
             func real(_ url: URL) -> URL { URL(fileURLWithPath: realpath(url.path, nil).map { String(cString: $0) } ?? url.path) }
             let profile = try OpencodeSandbox.profile(
                 worktree: real(request.workingDirectory), scratch: real(plan.layout.scratch), state: real(plan.layout.state),
-                user: userDirectories, denyReads: OpencodeSandbox.credentialDirectories(home: home))
+                user: userDirectories, denyReads: OpencodeSandbox.credentialDirectories(home: home),
+                denyWrites: request.readDirectories.map(real))
             try profile.write(to: plan.layout.profileFile, atomically: true, encoding: .utf8)
             let wrapped = ["-f", plan.layout.profileFile.path, plan.executable.path] + plan.arguments
             return AgentInvocation(
