@@ -44,6 +44,8 @@ public struct AgentSetup: Sendable, Equatable {
         public var lockedFields: Set<ConfigEdit.Field> = []
         /// The models this role's provider offers in a menu (`AgentSetup.modelOptions`); empty when the role is off.
         public var modelOptions: [String] = []
+        /// The providers this role can be set to (`AgentSetup.providers(for:config:)`).
+        public var providerOptions: [AgentProviderID] = []
         public var id: String { role.id }
 
         /// "Codex · gpt-6.1-terra", "Claude · default model", or nil when the role is off.
@@ -59,13 +61,14 @@ public struct AgentSetup: Sendable, Equatable {
 
     /// "Codex" for a provider id, as a person says it.
     public static func name(_ provider: AgentProviderID) -> String {
-        provider.rawValue.prefix(1).uppercased() + provider.rawValue.dropFirst()
+        provider == .opencode ? "OpenCode" : provider.rawValue.prefix(1).uppercased() + provider.rawValue.dropFirst()
     }
 
     public init(config: Config) {
         var rows = Role.allCases.map { Self.row($0, config) }
         let used = Self.usedModels(rows, config)
         for index in rows.indices {
+            rows[index].providerOptions = Self.providers(for: rows[index].role, config: config)
             guard let provider = rows[index].provider else { continue }
             rows[index].modelOptions = Self.modelOptions(provider: provider, config: config, used: used[provider] ?? [])
         }
@@ -141,14 +144,33 @@ public struct AgentSetup: Sendable, Equatable {
 
     public static func chatAgent(for setup: AgentSetup) -> String? { setup.row(.goal)?.label }
 
-    /// The providers a role can be set to, and the efforts `reasoning_effort` takes, for a picker.
-    public static let providers: [AgentProviderID] = [.claude, .codex]
+    /// The efforts `reasoning_effort` takes, for a picker. OpenCode takes none.
     public static let efforts = AgentsConfig.efforts
+
+    /// The providers `role` can be set to in a project with `config`: Claude and Codex, and OpenCode when the project names its
+    /// gateway (`[providers.opencode]`) and the role runs on it. The verifier does not.
+    public static func providers(for role: Role, config: Config) -> [AgentProviderID] {
+        let always: [AgentProviderID] = [.claude, .codex]
+        guard config.agents.opencode != nil, let agentRole = AgentRole(rawValue: role.rawValue),
+            agentRole.supportedProviders.contains(.opencode)
+        else { return always }
+        return always + [.opencode]
+    }
+
+    /// Who a project with no goal agent can pick to draft at once. OpenCode only where `[providers.opencode] models` lists one:
+    /// picking it writes that model, and without one, or with screenshots attached (it takes none), the draft it starts would be
+    /// refused and the choice already made.
+    public static func draftChoices(config: Config, screenshots: Bool = false) -> [AgentProviderID] {
+        let canDraft = config.agents.models[.opencode]?.isEmpty == false && !screenshots
+        return providers(for: .goal, config: config).filter { $0 != .opencode || canDraft }
+    }
 
     /// The provider a model name looks like it belongs to, when that is not `provider`: `opus` on Codex is a Claude name, `gpt-6.1` on
     /// Claude is an OpenAI one. A name that looks like neither is no mismatch: only a name it knows is flagged.
     public static func modelFit(provider: AgentProviderID, model: String) -> AgentProviderID? {
         let name = model.lowercased()
+        // A gateway names its models as it likes (`claude-sonnet-5`, `gpt-6-sol`); only Claude Code's own aliases cannot be one.
+        if provider == .opencode { return ["opus", "sonnet", "haiku"].contains(name) ? .claude : nil }
         let claude = ["opus", "sonnet", "haiku"].contains { name == $0 || name.hasPrefix($0 + "[") } || name.hasPrefix("claude-")
         let openAI = name.hasPrefix("gpt-") || name.range(of: #"^o[0-9]"#, options: .regularExpression) != nil
         if claude, provider != .claude { return .claude }

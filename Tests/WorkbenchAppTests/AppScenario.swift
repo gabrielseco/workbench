@@ -37,6 +37,7 @@ enum AppScenario: String, CaseIterable {  // swiftlint:disable:this type_body_le
     case chatGoal = "chat-goal"
     /// `new-project`: a git repository with no `.workbench/` at all (a `no-workbench` file tells `verify-app.sh` to leave it out).
     case chatReplying = "chat-replying", newProject = "new-project"
+    case agentsOpencode = "agents-opencode"
 
     static let title = "Paginate the contractor invoice list"
 
@@ -66,6 +67,14 @@ enum AppScenario: String, CaseIterable {  // swiftlint:disable:this type_body_le
         case .draftGoal:
             // The goal agent is the real Codex: this is the scenario that drafts a goal for real, from a request and screenshots.
             "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n[agents.goal]\nprovider = \"codex\"\n"
+        case .agentsOpencode:
+            // Two roles on OpenCode, one without a model: the Agents card's pickers and its note. The key's variable is a made-up
+            // name, so the window reads nothing real from the login shell.
+            "[tools]\navailable = [\"Read\"]\nallowed = [\"Read\"]\n\n"
+                + "[providers.opencode]\nbase_url = \"https://gateway.example/v1\"\napi_key_env = \"VERIFY_FIXTURE_KEY\"\n"
+                + "models = [\"gemini-4-neon\", \"sonnet-claude\"]\n\n"
+                + "[agents.run]\nprovider = \"opencode\"\nmodel = \"gemini-4-neon\"\n\n"
+                + "[agents.judge]\nprovider = \"opencode\"\n"
         default: nil
         }
     }
@@ -204,7 +213,7 @@ enum AppScenario: String, CaseIterable {  // swiftlint:disable:this type_body_le
         case .corrupt:
             try await fixture.addThread(id, approved: true, title: Self.title)
             try fixture.overwriteLog(id, with: "not json\n{broken\n")
-        case .noThread, .draftGoal, .tasksEmpty, .newProject: break
+        case .noThread, .draftGoal, .tasksEmpty, .newProject, .agentsOpencode: break
         case .chat, .chatGoal, .chatReplying:
             try writeChat(in: fixture, withGoal: self == .chatGoal, replying: self == .chatReplying)
         case .manyThreads: try await buildManyThreads(in: fixture)

@@ -3,6 +3,12 @@ import WorkbenchCore
 
 /// The new-thread screen's work: a quick goal written from what the person wrote, or one the goal agent drafts from it.
 extension ProjectStore {
+    /// Who a project with no goal agent can pick to draft (`AgentSetup.draftChoices`).
+    func goalDraftChoices(screenshots: Bool) -> [AgentProviderID] {
+        let config = project.flatMap { try? Config.load(from: $0.configURL) }
+        return config.map { AgentSetup.draftChoices(config: $0, screenshots: screenshots) } ?? [.claude, .codex]
+    }
+
     /// Writes a quick goal from the request as typed and opens the new thread on it. Nothing is drafted or spent; a refusal leaves
     /// the project as it was, so the card keeps the text.
     @discardableResult func quickGoal(request raw: String, attachments: [URL] = []) async -> Bool {

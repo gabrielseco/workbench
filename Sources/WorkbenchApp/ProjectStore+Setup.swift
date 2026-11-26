@@ -14,7 +14,9 @@ struct ProjectSetupState: Equatable {
     var done: String?
 
     /// The choices the screen offers for the goal agent: the providers that can draft, and none.
-    static let goalAgentChoices: [AgentProviderID?] = AgentRole.goal.supportedProviders.map { $0 } + [nil]
+    /// A project being set up has no `[providers.opencode]` yet, so naming OpenCode would write a config that does not load.
+    static let goalAgentChoices: [AgentProviderID?] =
+        AgentRole.goal.supportedProviders.filter { $0 != .opencode }.map { $0 } + [nil]
 }
 
 extension ProjectStore {

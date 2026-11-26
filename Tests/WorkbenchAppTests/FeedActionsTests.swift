@@ -237,7 +237,7 @@ import Testing
 
     @Test func everyStateHasAtMostOnePrimaryAndNoButtonTwice() throws {
         // The scenarios that open to a thread; the others (no project, no thread, a corrupt log) have no card to decide.
-        let threadless: Set<AppScenario> = [.noThread, .corrupt, .tasks, .tasksEmpty, .draftGoal, .newProject]
+        let threadless: Set<AppScenario> = [.noThread, .corrupt, .tasks, .tasksEmpty, .draftGoal, .newProject, .agentsOpencode]
         var checked = 0
         defer { #expect(checked >= 8, "only \(checked) scenarios were checked") }
         for scenario in AppScenario.allCases where !threadless.contains(scenario) {

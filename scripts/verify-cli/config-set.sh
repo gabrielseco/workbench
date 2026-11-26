@@ -10,9 +10,11 @@
 # `set agents.run.model` still works and says the approval may need binding again; `config --help` names `config set`.
 # The verifier: doctor says claude when `[verifier]` names no provider; `set verifier.provider codex` and `verifier.model` write a
 # `[verifier]` table doctor reads back; a provider with no verifier adapter is refused with the file untouched; unset takes it out.
+# OpenCode: setting a role to it replaces the old model with the first of `[providers.opencode] models` and drops the effort in the
+# same write, keeping comments; setting it back to claude drops the gateway's model name.
 # Exit 0 only when every step passed, 1 when one failed, 2 when it refused to start (nothing changed).
 # VERIFY_CLI_SABOTAGE=1 sends a provider that exists and a key that is an agent key to the two refusals, and claude to the
-# verifier's refusal, so the two "refused" steps, the "file untouched" step and the verifier's "refused" step must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
+# verifier's refusal, so the two "refused" steps, the "file untouched" step and the verifier's "refused" step must FAIL, and the switch to opencode is sent codex instead, so the step on the model and effort must FAIL. The frame and the other switches are in lib.sh. Run by hand, not by CI.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 preflight
 
@@ -137,5 +139,32 @@ check "set with a thread active: exits 0 and says the approval may need binding 
 wbp "$SCRATCH/h1.out" config --help
 check "config --help names config set and config unset" "no 'config set' and 'config unset' in the help" \
     bash -c 'grep -q "config set <key> <value>" "$1" && grep -q "config unset <key>" "$1"' _ "$SCRATCH/h1.out"
+
+
+# --- OpenCode: switching a role to it, and away, leaves a config that loads -------------------------------
+
+cat >"$CFG" <<'TOML'
+[tools]
+available = ["Read"]
+allowed = ["Read"]
+
+[providers.opencode]
+base_url = "http://127.0.0.1:9/v1"
+models = ["gateway-first", "gateway-second"]
+
+[agents.run] # coding
+provider = "claude"
+model = "opus"
+reasoning_effort = "high"
+TOML
+OC=opencode; [ "$SABOTAGE" = 1 ] && OC=codex
+wbp "$SCRATCH/oc.out" config set agents.run.provider "$OC"
+shown "$SCRATCH/oc.out"
+check "set to opencode: exit 0" "workbench config set exited $RC: $(head -c 200 "$SCRATCH/oc.out")" test "$RC" = 0
+check "the model is the gateway's first and the effort is gone, the comment kept" "got: $(tr '\n' '|' <"$CFG" | tail -c 160)" \
+    bash -c 'grep -qx "model = \"gateway-first\"" "$1" && ! grep -q "reasoning_effort" "$1" && grep -q "^\[agents.run\] # coding" "$1"' _ "$CFG"
+wbp "$SCRATCH/oc-back.out" config set agents.run.provider claude
+check "set back to claude: exit 0 and the gateway's model name is gone" "exit $RC: $(tr '\n' '|' <"$CFG" | tail -c 120)" \
+    bash -c 'test "$1" = 0 && ! grep -q "gateway-first\"$" <(grep "^model" "$2")' _ "$RC" "$CFG"
 
 finish
