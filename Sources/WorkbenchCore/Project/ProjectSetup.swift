@@ -47,7 +47,8 @@ public enum ProjectSetup {
     public static func initialize(
         _ project: Project, goalAgent: AgentProviderID?, git: GitRunner, config text: String = Config.exampleTOML
     ) async throws -> Report {
-        if let goalAgent, !AgentRole.goal.supportedProviders.contains(goalAgent) {
+        // OpenCode needs `[providers.opencode]`, which a project being set up does not have: the config would not load.
+        if let goalAgent, goalAgent == .opencode || !AgentRole.goal.supportedProviders.contains(goalAgent) {
             throw Failure.unsupported(goalAgent.rawValue)
         }
         let fm = FileManager.default

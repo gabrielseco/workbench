@@ -709,6 +709,9 @@ no effort key. The model and effort are part of what `goal approve` binds, so ch
 goal drafting stays manual. The pair a role may use is limited to what an adapter exists for: `judge`, `review` and
 `goal` on `claude` or `codex`, `run` on `claude` only; anything else is refused when the config loads, not ignored, until
 coding on the second provider is enabled (P9 task 4). `goal` accepts either provider but nothing drafts yet, and it needs `provider`.
+Setting a role's `provider` to or from `opencode` with `config set` or the app's Agents card also replaces the model (the first of
+`[providers.opencode] models` going to it, none coming from it) and, going to it, removes `reasoning_effort`, in the same write; between
+`claude` and `codex` nothing else changes.
 `"opencode"` (P28) is accepted for `run`, `judge`, `review` (and a review stage's `provider`), `plan`, `ship` and `goal` (drafting, the chat and task edits), but not the verifier, and only with `[providers.opencode]` holding a `base_url`: it takes the
 gateway's model name in `model` (`sonnet-claude`) and no `reasoning_effort`, and has no dollar cap, so a goal with `budget_usd` is refused by
 `goal approve` and `run` (as on Codex: change it to `spend_policy: timeout_only`) and the other evaluations follow the `allow_unpriced` rule

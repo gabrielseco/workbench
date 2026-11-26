@@ -57,9 +57,10 @@ struct TaskCardInfo: Equatable {
         // A report is one read-only turn: no coding turns and no pull request to describe.
         if task.fix == .report {
             // Codex reports no dollar figure: its turn is held by the time limit alone, so no cap in money can be promised.
-            if config?.resolvedPlanAgent().provider == .codex {
+            if let provider = config?.resolvedPlanAgent().provider, provider != .claude {
                 let minutes = task.timeoutMin ?? TaskRunner.defaultReportTimeoutMinutes
-                return "no dollar cap: the report agent is Codex, held only by its \(minutes)-minute timeout"
+                let name = AgentSetup.name(provider)
+                return "no dollar cap: the report agent is \(name), held only by its \(minutes)-minute timeout"
             }
             return "up to $\(money(budget)) for the report\(source)"
         }

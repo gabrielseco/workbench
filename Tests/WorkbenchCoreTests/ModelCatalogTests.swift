@@ -7,7 +7,7 @@ import Testing
     @Test func everyNameIsOneConfigEditAcceptsAndFitsItsOwnProvider() throws {
         #expect(ModelCatalog.names(for: .claude) == ["opus", "sonnet", "haiku"])
         #expect(!ModelCatalog.names(for: .codex).isEmpty)
-        for provider in AgentSetup.providers {
+        for provider in [AgentProviderID.claude, .codex] {
             let names = ModelCatalog.names(for: provider)
             #expect(Set(names).count == names.count, "no repeats in \(provider)")
             for name in names {

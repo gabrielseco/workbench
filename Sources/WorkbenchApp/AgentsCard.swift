@@ -92,7 +92,11 @@ struct AgentRow: View {
             if let note = fitNote, let edit {
                 HStack(spacing: Space.s) {
                     Text(note).role(.warning).fixedSize(horizontal: false, vertical: true)
-                    Button("Use default model") { Task { _ = await edit.set(row.role, .model, nil) } }.plainButton(size: .small)
+                    // With no model set there is no default to go back to.
+                    if row.model != nil {
+                        Button("Use default model") { Task { _ = await edit.set(row.role, .model, nil) } }
+                            .plainButton(size: .small)
+                    }
                 }
             }
         }
@@ -117,7 +121,7 @@ struct AgentRow: View {
         HStack(spacing: Space.s) {
             Picker("Provider", selection: providerChoice) {
                 if row.role == .goal { Text("Off").tag(Self.off) }
-                ForEach(AgentSetup.providers, id: \.rawValue) { Text(AgentSetup.name($0)).tag($0.rawValue) }
+                ForEach(row.providerOptions, id: \.rawValue) { Text(AgentSetup.name($0)).tag($0.rawValue) }
             }
             .labelsHidden().fixedSize().accessibilityLabel("\(row.role.rawValue.capitalized) provider")
             .disabled(row.lockedFields.contains(.provider))
@@ -126,7 +130,7 @@ struct AgentRow: View {
                 ForEach(AgentSetup.efforts, id: \.self) { Text($0).tag($0) }
             }
             .labelsHidden().fixedSize().accessibilityLabel("\(row.role.rawValue.capitalized) effort")
-            .disabled(row.provider == nil || row.lockedFields.contains(.reasoningEffort))
+            .disabled(row.provider == nil || row.provider == .opencode || row.lockedFields.contains(.reasoningEffort))
         }
     }
 
@@ -248,6 +252,7 @@ enum AgentModelMenu {
 
     /// The warning for a model whose name belongs to the other provider, or nil.
     static func fitNote(provider: AgentProviderID?, model: String?) -> String? {
+        if provider == .opencode, model == nil { return "OpenCode needs a model: pick one, or name the gateway's with Other…." }
         guard let provider, let model, let other = AgentSetup.modelFit(provider: provider, model: model) else { return nil }
         return "'\(model)' looks like a \(AgentSetup.name(other)) model, and this role runs on \(AgentSetup.name(provider))."
     }

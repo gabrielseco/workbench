@@ -1,0 +1,15 @@
+[tools]
+available = ["Read"]
+allowed = ["Read"]
+
+[providers.opencode]
+base_url = "https://gateway.example/v1"
+api_key_env = "VERIFY_FIXTURE_KEY"
+models = ["gemini-4-neon", "sonnet-claude"]
+
+[agents.run]
+provider = "opencode"
+model = "gemini-4-neon"
+
+[agents.judge]
+provider = "opencode"

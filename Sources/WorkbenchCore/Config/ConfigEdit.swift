@@ -98,9 +98,47 @@ public enum ConfigEdit {
         }
     }
 
+    /// Setting a role's provider to or from `opencode` also settles what cannot carry across, in the same write: the model, which is
+    /// the old provider's name (OpenCode takes the first of `[providers.opencode] models`, else none), and, going to OpenCode, the
+    /// effort, which it refuses. Between Claude and Codex the other keys are left as they are.
     public static func set(_ key: Key, to value: String, in project: Project) throws -> Change {
         try checkValue(value, for: key)
+        if key.field == .provider, let role = key.role, let switched = try switchOpencode(role, to: value, in: project) {
+            return switched
+        }
         return try edit(key, value: value, in: project, beforeWrite: {})
+    }
+
+    /// Nil when this is no change to or from OpenCode, so the ordinary edit applies.
+    private static func switchOpencode(_ role: AgentRole, to value: String, in project: Project) throws -> Change? {
+        try transact(in: project, beforeWrite: {}, body: { original, before -> (String?, Change?) in
+            let key = Key(role: role, field: .provider)
+            let old = stringValue(before, key)
+            let opencode = AgentProviderID.opencode.rawValue
+            guard old != value, old == opencode || value == opencode else { return (nil, nil) }
+            let models = try Config.parse(original).agents.models[.opencode]
+            var edits: [(Key, String?)] = []
+            if value == opencode { edits.append((Key(role: role, field: .reasoningEffort), nil)) }
+            edits.append((Key(role: role, field: .model), value == opencode ? models?.first : nil))
+            edits.append((key, value))
+            var text = original
+            for (target, new) in edits {
+                let document = TOMLSubset.parse(text).document
+                if new == stringValue(document, target) { continue }
+                text = try rewritten(text, key: target, value: new, document: document)
+            }
+            do {
+                let config = try Config.parse(text)
+                guard config.agents.selection(role).provider?.rawValue == value else {
+                    throw Failure.invalid("the provider was not read back")
+                }
+            } catch let failure as Failure {
+                throw failure
+            } catch {
+                throw Failure.invalid("\(error)")
+            }
+            return (text, Change(key: key, old: old, new: value))
+        })
     }
 
     public static func unset(_ key: Key, in project: Project) throws -> Change {
